@@ -51,24 +51,25 @@ def parse_args():
 
 args = parse_args()
 cfg = set_cfg_from_file(args.config)
+cfg_a2d2 = set_cfg_from_file('configs/bisenetv2_a2d2.py')
+cfg_city = set_cfg_from_file('configs/bisenetv2_city.py')
 
 
-
-def set_model():
+def set_model(config_file):
     logger = logging.getLogger()
-    net = model_factory[cfg.model_type](cfg.n_cats)
+    net = model_factory[config_file.model_type](config_file.n_cats)
     if not args.finetune_from is None:
         logger.info(f'load pretrained weights from {args.finetune_from}')
         net.load_state_dict(torch.load(args.finetune_from, map_location='cpu'))
-    if cfg.use_sync_bn: net = nn.SyncBatchNorm.convert_sync_batchnorm(net)
+    if config_file.use_sync_bn: net = nn.SyncBatchNorm.convert_sync_batchnorm(net)
     net.cuda()
     net.train()
     criteria_pre = OhemCELoss(0.7)
-    criteria_aux = [OhemCELoss(0.7) for _ in range(cfg.num_aux_heads)]
+    criteria_aux = [OhemCELoss(0.7) for _ in range(config_file.num_aux_heads)]
     return net, criteria_pre, criteria_aux
 
 
-def set_optimizer(model):
+def set_optimizer(model, config_file):
     if hasattr(model, 'get_params'):
         wd_params, nowd_params, lr_mul_wd_params, lr_mul_nowd_params = model.get_params()
         #  wd_val = cfg.weight_decay
@@ -76,8 +77,8 @@ def set_optimizer(model):
         params_list = [
             {'params': wd_params, },
             {'params': nowd_params, 'weight_decay': wd_val},
-            {'params': lr_mul_wd_params, 'lr': cfg.lr_start * 10},
-            {'params': lr_mul_nowd_params, 'weight_decay': wd_val, 'lr': cfg.lr_start * 10},
+            {'params': lr_mul_wd_params, 'lr': config_file.lr_start * 10},
+            {'params': lr_mul_nowd_params, 'weight_decay': wd_val, 'lr': config_file.lr_start * 10},
         ]
     else:
         wd_params, non_wd_params = [], []
@@ -92,9 +93,9 @@ def set_optimizer(model):
         ]
     optim = torch.optim.SGD(
         params_list,
-        lr=cfg.lr_start,
+        lr=config_file.lr_start,
         momentum=0.9,
-        weight_decay=cfg.weight_decay,
+        weight_decay=config_file.weight_decay,
     )
     return optim
 
@@ -110,12 +111,12 @@ def set_model_dist(net):
     return net
 
 
-def set_meters():
-    time_meter = TimeMeter(cfg.max_iter)
+def set_meters(config_file):
+    time_meter = TimeMeter(config_file.max_iter)
     loss_meter = AvgMeter('loss')
     loss_pre_meter = AvgMeter('loss_prem')
     loss_aux_meters = [AvgMeter('loss_aux{}'.format(i))
-            for i in range(cfg.num_aux_heads)]
+            for i in range(config_file.num_aux_heads)]
     return time_meter, loss_meter, loss_pre_meter, loss_aux_meters
 
 
@@ -125,13 +126,15 @@ def train():
     is_dist = dist.is_initialized()
 
     ## dataset
-    dl = get_data_loader(cfg, mode='train', distributed=is_dist)
+    # dl = get_data_loader(cfg, mode='train', distributed=is_dist)
+    dl_a2d2 = get_data_loader(cfg_a2d2, mode='train', distributed=is_dist)
+    dl_city = get_data_loader(cfg_city, mode='train', distributed=is_dist)
 
     ## model
-    net, criteria_pre, criteria_aux = set_model()
+    net, criteria_pre, criteria_aux = set_model(cfg)
 
     ## optimizer
-    optim = set_optimizer(net)
+    optim = set_optimizer(net, cfg)
 
     ## mixed precision training
     scaler = amp.GradScaler()
@@ -140,19 +143,34 @@ def train():
     net = set_model_dist(net)
 
     ## meters
-    time_meter, loss_meter, loss_pre_meter, loss_aux_meters = set_meters()
+    time_meter, loss_meter, loss_pre_meter, loss_aux_meters = set_meters(cfg)
 
     ## lr scheduler
     lr_schdr = WarmupPolyLrScheduler(optim, power=0.9,
         max_iter=cfg.max_iter, warmup_iter=cfg.warmup_iters,
         warmup_ratio=0.1, warmup='exp', last_epoch=-1,)
 
-    ## train loop
-    for it, (im, lb) in enumerate(dl):
-        im = im.cuda()
-        lb = lb.cuda()
+    # 两个数据集分别处理
+    a2d2_list = enumerate(dl_a2d2)
+    a2d2_len = len(a2d2_list)
+    city_list = enumerate(dl_city)
+    city_len = len(city_list)
 
-        lb = torch.squeeze(lb, 1)
+    ## train loop
+    # for it, (im, lb) in enumerate(dl):
+    for i in range(0, cfg.max_iter):
+        _, (im_a2d2, lb_a2d2) = a2d2_list[i % a2d2_len]
+        _, (im_city, lb_city) = city_list[i % city_len]
+
+        im_a2d2 = im_a2d2.cuda()
+        lb_a2d2 = lb_a2d2.cuda()
+
+        im_city = im_city.cuda()
+        lb_city = lb_city.cuda()
+
+
+        lb_a2d2 = torch.squeeze(lb_a2d2, 1)
+        lb_city = torch.squeeze(lb_city, 1)
 
         optim.zero_grad()
         with amp.autocast(enabled=cfg.use_fp16):
@@ -171,11 +189,11 @@ def train():
         _ = [mter.update(lss.item()) for mter, lss in zip(loss_aux_meters, loss_aux)]
 
         ## print training log message
-        if (it + 1) % 100 == 0:
+        if (i + 1) % 100 == 0:
             lr = lr_schdr.get_lr()
             lr = sum(lr) / len(lr)
             print_log_msg(
-                it, cfg.max_iter, lr, time_meter, loss_meter,
+                i, cfg.max_iter, lr, time_meter, loss_meter,
                 loss_pre_meter, loss_aux_meters)
         lr_schdr.step()
 
