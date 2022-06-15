@@ -429,9 +429,9 @@ class BGALayer(nn.Module):
 
 class SegmentHead(nn.Module):
 
-    def __init__(self, in_chan, mid_chan, n_classes, up_factor=8, aux=True, n_bn=1):
+    def __init__(self, in_chan, mid_chan, n_classes, up_factor=8, aux=True):
         super(SegmentHead, self).__init__()
-        self.conv = ConvBNReLU(in_chan, mid_chan, 3, stride=1, n_bn=n_bn)
+        self.conv = ConvBNReLU(in_chan, mid_chan, 3, stride=1)
         self.drop = nn.Dropout(0.1)
         self.up_factor = up_factor
 
@@ -450,7 +450,7 @@ class SegmentHead(nn.Module):
 
         self.aux = aux
         self.up_sample1 = nn.Upsample(scale_factor=2)
-        self.conv1 = ConvBNReLU(mid_chan, mid_chan2, 3, stride=1, n_bn=n_bn)
+        self.conv1 = ConvBNReLU(mid_chan, mid_chan2, 3, stride=1)
 
         self.conv2 = nn.Conv2d(mid_chan2, out_chan, 1, 1, 0, bias=True)
         self.up_sample2 = nn.Upsample(scale_factor=up_factor, mode='bilinear', align_corners=False)
@@ -481,23 +481,23 @@ class BiSeNetV2(nn.Module):
         self.bga = BGALayer(n_bn=n_bn)
 
         ## TODO: what is the number of mid chan ?
-        self.head = [SegmentHead(128, 1024, n_classes, up_factor=8, aux=False, n_bn=n_bn)]
+        self.head = [SegmentHead(128, 1024, n_classes, up_factor=8, aux=False)]
         if self.aux_mode == 'train':
-            self.aux2 = [SegmentHead(16, 128, n_classes, up_factor=4, n_bn=n_bn)]
-            self.aux3 = [SegmentHead(32, 128, n_classes, up_factor=8, n_bn=n_bn)]
-            self.aux4 = [SegmentHead(64, 128, n_classes, up_factor=16, n_bn=n_bn)]
-            self.aux5_4 = [SegmentHead(128, 128, n_classes, up_factor=32, n_bn=n_bn)]
+            self.aux2 = [SegmentHead(16, 128, n_classes, up_factor=4)]
+            self.aux3 = [SegmentHead(32, 128, n_classes, up_factor=8)]
+            self.aux4 = [SegmentHead(64, 128, n_classes, up_factor=16)]
+            self.aux5_4 = [SegmentHead(128, 128, n_classes, up_factor=32)]
 
         ## 多数据集的头
         # self.n_head = len(other_n_classes) + 1
         # if self.n_head > 1:
         for n in other_n_classes:
-            self.head.append(SegmentHead(128, 1024, n, up_factor=8, aux=False, n_bn=n_bn))
+            self.head.append(SegmentHead(128, 1024, n, up_factor=8, aux=False))
             if self.aux_mode == 'train':
-                self.aux2.append(SegmentHead(16, 128, n, up_factor=4, n_bn=n_bn))
-                self.aux3.append(SegmentHead(32, 128, n, up_factor=8, n_bn=n_bn))
-                self.aux4.append(SegmentHead(64, 128, n, up_factor=16, n_bn=n_bn))
-                self.aux5_4.append(SegmentHead(128, 128, n, up_factor=32, n_bn=n_bn))
+                self.aux2.append(SegmentHead(16, 128, n, up_factor=4))
+                self.aux3.append(SegmentHead(32, 128, n, up_factor=8))
+                self.aux4.append(SegmentHead(64, 128, n, up_factor=16))
+                self.aux5_4.append(SegmentHead(128, 128, n, up_factor=32))
 
         self.init_weights()
 
@@ -617,8 +617,9 @@ if __name__ == "__main__":
     #  print(feat.size())
     #
     import time
-    x = torch.randn(16, 3, 512, 1024) #.cuda()
-    model = BiSeNetV2(n_classes=19)
+    x1 = torch.randn(16, 3, 512, 1024) #.cuda()
+    x2 = torch.randn(16, 3, 512, 1024)
+    model = BiSeNetV2(19, 'train', 2, 38)
     # model.cuda()
     model.eval()
     # outs = model(x)
@@ -626,9 +627,9 @@ if __name__ == "__main__":
     #     t0 = time.time()
     #     outs = model(x)
     #     print((time.time() - t0) * 1000)
-    outs = model(x)
+    outs = model(x1, x2)
     # for out in outs:
-    #     print(out.size())
+    # print(outs)
     #  print(logits.size())
 
     #  for name, param in model.named_parameters():

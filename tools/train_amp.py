@@ -1,6 +1,7 @@
 #!/usr/bin/python
 # -*- encoding: utf-8 -*-
 
+from asyncio.windows_events import NULL
 import sys
 sys.path.insert(0, '.')
 import os
@@ -55,9 +56,15 @@ cfg_a2d2 = set_cfg_from_file('configs/bisenetv2_a2d2.py')
 cfg_city = set_cfg_from_file('configs/bisenetv2_city.py')
 
 
-def set_model(config_file):
+def set_model(config_file, *config_files):
     logger = logging.getLogger()
-    net = model_factory[config_file.model_type](config_file.n_cats)
+    net = NULL
+    if config_files is NULL:
+        net = model_factory[config_file.model_type](config_file.n_cats)
+    else:
+        n_classes = [cfg.n_cats for cfg in config_files]
+        net = model_factory[config_file.model_type](config_file.n_cats, 'train', 2, *n_classes)
+
     if not args.finetune_from is None:
         logger.info(f'load pretrained weights from {args.finetune_from}')
         net.load_state_dict(torch.load(args.finetune_from, map_location='cpu'))
@@ -122,6 +129,7 @@ def set_meters(config_file):
 
 
 def train():
+    n_dataset = 2
     logger = logging.getLogger()
     is_dist = dist.is_initialized()
 
@@ -131,7 +139,7 @@ def train():
     dl_city = get_data_loader(cfg_city, mode='train', distributed=is_dist)
 
     ## model
-    net, criteria_pre, criteria_aux = set_model(cfg)
+    net, criteria_pre, criteria_aux = set_model(cfg_a2d2, cfg_city)
 
     ## optimizer
     optim = set_optimizer(net, cfg)
@@ -168,16 +176,24 @@ def train():
         im_city = im_city.cuda()
         lb_city = lb_city.cuda()
 
-
         lb_a2d2 = torch.squeeze(lb_a2d2, 1)
         lb_city = torch.squeeze(lb_city, 1)
 
+        im = [im_a2d2, im_city]
+        lb = [lb_a2d2, lb_city]
+
         optim.zero_grad()
         with amp.autocast(enabled=cfg.use_fp16):
-            logits, *logits_aux = net(im)
-            loss_pre = criteria_pre(logits, lb)
-            loss_aux = [crit(lgt, lb) for crit, lgt in zip(criteria_aux, logits_aux)]
-            loss = loss_pre + sum(loss_aux)
+            ## 修改为多数据集模式
+            logits, *logits_aux = net(*im)
+            loss_pre = [criteria_pre(logits[i], lb[i]) for i in range(0, n_dataset)]
+            loss_aux = [[crit(lgt[i], lb[i]) for crit, lgt in zip(criteria_aux, logits_aux)] for i in range(0, n_dataset)]
+            loss_all = [loss_pre[i] + sum(loss_aux[i]) for i in range(0, n_dataset)]
+            # 不同数据集loss的权重
+            w1 = 1
+            w2 = 1
+            loss = w1 * loss_all[0] + w2 * loss_all[1]
+
         scaler.scale(loss).backward()
         scaler.step(optim)
         scaler.update()
@@ -185,8 +201,9 @@ def train():
 
         time_meter.update()
         loss_meter.update(loss.item())
-        loss_pre_meter.update(loss_pre.item())
-        _ = [mter.update(lss.item()) for mter, lss in zip(loss_aux_meters, loss_aux)]
+        # loss_pre_meter.update(loss_pre.item())
+        _ = [loss_pre_meter.update(loss_pre[i].item()) for i in range(0, n_dataset)]
+        _ = [[mter.update(lss.item()) for mter, lss in zip(loss_aux_meters, loss_aux[i])] for i in range(0, n_dataset)]
 
         ## print training log message
         if (i + 1) % 100 == 0:
