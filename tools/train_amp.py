@@ -1,7 +1,7 @@
 #!/usr/bin/python
 # -*- encoding: utf-8 -*-
 
-from asyncio.windows_events import NULL
+# from asyncio.windows_events import NULL # 有bug，去掉改为别的判定
 import sys
 sys.path.insert(0, '.')
 import os
@@ -19,6 +19,7 @@ import torch.distributed as dist
 from torch.utils.data import DataLoader
 import torch.cuda.amp as amp
 
+sys.path.append('/root/autodl-tmp/project/BiSeNet')  # 指定绝对路径防止出现无法import文件
 from lib.models import model_factory
 from configs import set_cfg_from_file
 from lib.get_dataloader import get_data_loader
@@ -38,28 +39,86 @@ from lib.logger import setup_logger, print_log_msg
 #  torch.backends.cudnn.benchmark = True
 #  torch.multiprocessing.set_sharing_strategy('file_system')
 
-
-
-
 def parse_args():
     parse = argparse.ArgumentParser()
     parse.add_argument('--local_rank', dest='local_rank', type=int, default=-1,)
-    parse.add_argument('--port', dest='port', type=int, default=44554,)
+    parse.add_argument('--port', dest='port', type=int, default=12345,)
     parse.add_argument('--config', dest='config', type=str,
-            default='configs/bisenetv2.py',)
-    parse.add_argument('--finetune-from', type=str, default=None,)
+            default='/root/autodl-tmp/project/BiSeNet/configs/bisenetv2.py',)
+    parse.add_argument('--finetune_from', type=str, default=None,)
     return parse.parse_args()
 
+# 使用绝对路径
 args = parse_args()
 cfg = set_cfg_from_file(args.config)
-cfg_a2d2 = set_cfg_from_file('configs/bisenetv2_a2d2.py')
-cfg_city = set_cfg_from_file('configs/bisenetv2_city.py')
+cfg_a2d2 = set_cfg_from_file('/root/autodl-tmp/project/BiSeNet/configs/bisenetv2_a2d2.py')
+cfg_city = set_cfg_from_file('/root/autodl-tmp/project/BiSeNet/configs/bisenetv2_city.py')
+
+
+def load_pretrained(net):
+    state = torch.load(args.finetune_from, map_location='cpu')
+
+    detail_state = {}
+    detail_state['S1_1.conv.weight'] = state['detail']['S1.0.conv.weight']
+    detail_state['S1_2.conv.weight'] = state['detail']['S1.1.conv.weight']
+    detail_state['S2_1.conv.weight'] = state['detail']['S2.0.conv.weight']
+    detail_state['S2_2.conv.weight'] = state['detail']['S2.1.conv.weight']
+    detail_state['S2_3.conv.weight'] = state['detail']['S2.2.conv.weight']
+    detail_state['S3_1.conv.weight'] = state['detail']['S3.0.conv.weight']
+    detail_state['S3_2.conv.weight'] = state['detail']['S3.1.conv.weight']
+    detail_state['S3_3.conv.weight'] = state['detail']['S3.2.conv.weight']
+
+    segment_state = {}
+    segment_state['S1S2.conv.conv.weight'] = state['segment']['S1S2.conv.conv.weight']
+    segment_state['S1S2.left_1.conv.weight'] = state['segment']['S1S2.left.0.conv.weight']
+    segment_state['S1S2.left_2.conv.weight'] = state['segment']['S1S2.left.1.conv.weight']
+    segment_state['S1S2.fuse.conv.weight'] = state['segment']['S1S2.fuse.conv.weight']
+
+    def loadGELayerS2(srcDict, src_name, targerdict, target_name):
+        targerdict[target_name + '.conv1.conv.weight'] = srcDict[src_name + '.conv1.conv.weight']
+        targerdict[target_name + '.dwconv1.conv.weight'] = srcDict[src_name + '.dwconv1.0.weight']
+        targerdict[target_name + '.dwconv2.conv.weight'] = srcDict[src_name + '.dwconv2.0.weight']
+        targerdict[target_name + '.conv2.conv.weight'] = srcDict[src_name + '.conv2.0.weight']
+        targerdict[target_name + '.shortcut_1.conv.weight'] = srcDict[src_name + '.shortcut.0.weight']
+        targerdict[target_name + '.shortcut_2.conv.weight'] = srcDict[src_name + '.shortcut.2.weight']
+
+    def loadGELayerS1(srcDict, src_name, targerdict, target_name):
+        targerdict[target_name + '.conv1.conv.weight'] = srcDict[src_name + '.conv1.conv.weight']
+        targerdict[target_name + '.dwconv.conv.weight'] = srcDict[src_name + '.dwconv.0.weight']
+        targerdict[target_name + '.conv2.conv.weight'] = srcDict[src_name + '.conv2.0.weight']
+
+    loadGELayerS2(state['segment'], 'S3.0', segment_state, 'S3_1')
+    loadGELayerS1(state['segment'], 'S3.1', segment_state, 'S3_2')
+    loadGELayerS2(state['segment'], 'S4.0', segment_state, 'S4_1')
+    loadGELayerS1(state['segment'], 'S4.1', segment_state, 'S4_2')
+    loadGELayerS2(state['segment'], 'S5_4.0', segment_state, 'S5_4_1')
+    loadGELayerS1(state['segment'], 'S5_4.1', segment_state, 'S5_4_2')
+    loadGELayerS1(state['segment'], 'S5_4.2', segment_state, 'S5_4_3')
+    loadGELayerS1(state['segment'], 'S5_4.3', segment_state, 'S5_4_4')
+    segment_state['S5_5.conv_gap.conv.weight'] = state['segment']['S5_5.conv_gap.conv.weight']
+    segment_state['S5_5.conv_last.conv.weight'] = state['segment']['S5_5.conv_last.conv.weight']
+
+    bga_state = {}
+    bga_state['left1_convbn.conv.weight'] = state['bga']['left1.0.weight']
+    bga_state['left1_conv.weight'] = state['bga']['left1.2.weight']
+    bga_state['left2_convbn.conv.weight'] = state['bga']['left2.0.weight']
+    bga_state['right1.conv.weight'] = state['bga']['right1.0.weight']
+    bga_state['right2_convbn.conv.weight'] = state['bga']['right2.0.weight']
+    bga_state['right2_conv.weight'] = state['bga']['right2.2.weight']
+    bga_state['conv.conv.weight'] = state['bga']['conv.0.weight']
+
+    net.detail.load_state_dict(detail_state, strict=True)
+    net.segment.load_state_dict(segment_state, strict=True)
+    net.bga.load_state_dict(bga_state, strict=True)
 
 
 def set_model(config_file, *config_files):
     logger = logging.getLogger()
-    net = NULL
-    if config_files is NULL:
+    # net = NULL
+    # if config_files is NULL:
+    #     net = model_factory[config_file.model_type](config_file.n_cats)
+    # 修改判定
+    if len(config_files) == 0:
         net = model_factory[config_file.model_type](config_file.n_cats)
     else:
         n_classes = [cfg.n_cats for cfg in config_files]
@@ -112,7 +171,7 @@ def set_model_dist(net):
     net = nn.parallel.DistributedDataParallel(
         net,
         device_ids=[local_rank, ],
-        #  find_unused_parameters=True,
+        find_unused_parameters=True,
         output_device=local_rank
         )
     return net
@@ -132,12 +191,10 @@ def train():
     n_dataset = 2
     logger = logging.getLogger()
     is_dist = dist.is_initialized()
-
     ## dataset
     # dl = get_data_loader(cfg, mode='train', distributed=is_dist)
     dl_a2d2 = get_data_loader(cfg_a2d2, mode='train', distributed=is_dist)
     dl_city = get_data_loader(cfg_city, mode='train', distributed=is_dist)
-
     ## model
     net, criteria_pre, criteria_aux = set_model(cfg_a2d2, cfg_city)
 
@@ -152,23 +209,34 @@ def train():
 
     ## meters
     time_meter, loss_meter, loss_pre_meter, loss_aux_meters = set_meters(cfg)
-
     ## lr scheduler
     lr_schdr = WarmupPolyLrScheduler(optim, power=0.9,
         max_iter=cfg.max_iter, warmup_iter=cfg.warmup_iters,
         warmup_ratio=0.1, warmup='exp', last_epoch=-1,)
-
     # 两个数据集分别处理
-    a2d2_list = enumerate(dl_a2d2)
-    a2d2_len = len(a2d2_list)
-    city_list = enumerate(dl_city)
-    city_len = len(city_list)
-
+    # 使用迭代器读取数据
+    city_iter = iter(dl_city)
+    a2d2_iter = iter(dl_a2d2)
     ## train loop
     # for it, (im, lb) in enumerate(dl):
-    for i in range(0, cfg.max_iter):
-        _, (im_a2d2, lb_a2d2) = a2d2_list[i % a2d2_len]
-        _, (im_city, lb_city) = city_list[i % city_len]
+    starti = 20000
+    for i in range(starti, cfg.max_iter + starti):
+        try:
+            im_a2d2, lb_a2d2 = next(a2d2_iter)
+            if not im_a2d2.size()[0] == cfg_a2d2.ims_per_gpu:
+                raise StopIteration
+        except StopIteration:
+            a2d2_iter = iter(dl_a2d2)
+            im_a2d2, lb_a2d2 = next(a2d2_iter)
+        a2d2_epoch = i * cfg_a2d2.ims_per_gpu / 37150
+        try:
+            im_city, lb_city = next(city_iter)
+            if not im_city.size()[0] == cfg_city.ims_per_gpu:
+                raise StopIteration
+        except StopIteration:
+            city_iter = iter(dl_city)
+            im_city, lb_city = next(city_iter)
+        city_epoch = i * cfg_city.ims_per_gpu / 2976
 
         im_a2d2 = im_a2d2.cuda()
         lb_a2d2 = lb_a2d2.cuda()
@@ -186,6 +254,7 @@ def train():
         with amp.autocast(enabled=cfg.use_fp16):
             ## 修改为多数据集模式
             logits, *logits_aux = net(*im)
+            # loss_pre = [criteria_pre(logits[i], lb[i]) for i in range(0, n_dataset)]  # logits[i]仍是一个len为1的元组
             loss_pre = [criteria_pre(logits[i], lb[i]) for i in range(0, n_dataset)]
             loss_aux = [[crit(lgt[i], lb[i]) for crit, lgt in zip(criteria_aux, logits_aux)] for i in range(0, n_dataset)]
             loss_all = [loss_pre[i] + sum(loss_aux[i]) for i in range(0, n_dataset)]
@@ -210,8 +279,15 @@ def train():
             lr = lr_schdr.get_lr()
             lr = sum(lr) / len(lr)
             print_log_msg(
-                i, cfg.max_iter, lr, time_meter, loss_meter,
+                i, a2d2_epoch, city_epoch, cfg.max_iter+starti, lr, time_meter, loss_meter,
                 loss_pre_meter, loss_aux_meters)
+
+        if (i + 1) % 1000 == 0:
+            save_pth = osp.join(cfg.respth, 'model_{}.pth'.format(i+1))
+            logger.info('\nsave models to {}'.format(save_pth))
+            state = net.module.state_dict()
+            if dist.get_rank() == 0: torch.save(state, save_pth)
+
         lr_schdr.step()
 
     ## dump the final model and evaluate the result
@@ -237,6 +313,7 @@ def main():
         rank=args.local_rank
     )
     if not osp.exists(cfg.respth): os.makedirs(cfg.respth)
+
     setup_logger(f'{cfg.model_type}-{cfg.dataset.lower()}-train', cfg.respth)
     train()
 

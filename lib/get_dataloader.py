@@ -6,6 +6,7 @@ import torch.distributed as dist
 import lib.transform_cv2 as T
 from lib.sampler import RepeatedDistSampler
 from lib.cityscapes_cv2 import CityScapes
+from lib.a2d2_lb_cv2 import A2D2Data
 from lib.coco import CocoStuff
 
 
@@ -79,3 +80,4 @@ def get_data_loader(cfg, mode='train', distributed=True):
             pin_memory=True,
         )
     return dl
+

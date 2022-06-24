@@ -5,8 +5,9 @@ import torch.nn.functional as F
 import torch.utils.model_zoo as modelzoo
 
 # backbone_url = 'https://github.com/CoinCheung/BiSeNet/releases/download/0.0.0/backbone_v2.pth'
-backbone_url = './pth/backbone_v2.pth'
-
+# backbone_url = '/root/autodl-tmp/project/BiSeNet/pth/backbone_v2.pth'
+backbone_url = '/root/autodl-tmp/project/BiSeNet/pth/backbone_v2.pth'
+# backbone_url = './res/model_3000.pth'
 
 class ConvBNReLU(nn.Module):
 
@@ -18,12 +19,14 @@ class ConvBNReLU(nn.Module):
                 in_chan, out_chan, kernel_size=ks, stride=stride,
                 padding=padding, dilation=dilation,
                 groups=groups, bias=bias)
-        self.bn = [nn.BatchNorm2d(out_chan) for i in range(0, n_bn)]
+        self.bn = nn.ModuleList([nn.BatchNorm2d(out_chan) for i in range(0, n_bn)])
+        # # 所有list的模型都需要手动.cuda()
+        # for i in range(0, n_bn):
+        #     self.bn[i].cuda()
         self.relu = nn.ReLU(inplace=True)
 
     def forward(self, x, *other_x):
         ## TODO 此处可以优化，不同数据集的图像过卷积层可以拼接到一起，过BN层再分离
-
         feat = self.conv(x)
         feat = self.bn[0](feat)
         feat = self.relu(feat)
@@ -48,8 +51,10 @@ class ConvBN(nn.Module):
                 in_chan, out_chan, kernel_size=ks, stride=stride,
                 padding=padding, dilation=dilation,
                 groups=groups, bias=bias)
-        self.bn = [nn.BatchNorm2d(out_chan) for i in range(0, n_bn)]
-        
+        self.bn = nn.ModuleList([nn.BatchNorm2d(out_chan) for i in range(0, n_bn)])
+        # # 所有list的模型都需要手动.cuda()
+        # for i in range(0, n_bn):
+        #     self.bn[i].cuda()
 
     def forward(self, x, *other_x):
         ## TODO 此处可以优化，不同数据集的图像过卷积层可以拼接到一起，过BN层再分离
@@ -178,7 +183,10 @@ class CEBlock(nn.Module):
         ## n_bn bn层数量，对应混合的数据集数量
 
         super(CEBlock, self).__init__()
-        self.bn = [nn.BatchNorm2d(128) for i in range(0, n_bn)]
+        self.bn = nn.ModuleList([nn.BatchNorm2d(128) for i in range(0, n_bn)])
+        # # 所有list的模型都需要手动.cuda()
+        # for i in range(0, n_bn):
+        #     self.bn[i].cuda()
         self.conv_gap = ConvBNReLU(128, 128, 1, stride=1, padding=0, n_bn=n_bn)
         #TODO: in paper here is naive conv2d, no bn-relu
         self.conv_last = ConvBNReLU(128, 128, 3, stride=1, n_bn=n_bn)
@@ -456,19 +464,23 @@ class SegmentHead(nn.Module):
         self.up_sample2 = nn.Upsample(scale_factor=up_factor, mode='bilinear', align_corners=False)
         
 
-    def forward(self, x, *other_x):
+    def forward(self, x):
         # print(x.size())
-        feats = self.conv(x, *other_x)
-        feats = [self.drop(feat) for feat in feats]
+        
+        # 采用多分割头，所以不应该返回list
+        feats = self.conv(x)
+        feat = self.drop(feats[0])
 
         if self.aux is True:
-            feats = [self.up_sample1(feat) for feat in feats]
-            feats = self.conv1(*feats)
+            feat = self.up_sample1(feat)
+            feats = self.conv1(feat)
+            feat = self.conv2(feats[0])
+        else:
+            feat = self.conv2(feat)
+            
+        feat = self.up_sample2(feat)
 
-        feats = [self.conv2(feat) for feat in feats]
-        feats = [self.up_sample2(feat) for feat in feats]
-
-        return feats
+        return feat
 
 
 class BiSeNetV2(nn.Module):
@@ -481,12 +493,12 @@ class BiSeNetV2(nn.Module):
         self.bga = BGALayer(n_bn=n_bn)
 
         ## TODO: what is the number of mid chan ?
-        self.head = [SegmentHead(128, 1024, n_classes, up_factor=8, aux=False)]
+        self.head = nn.ModuleList([SegmentHead(128, 1024, n_classes, up_factor=8, aux=False)])
         if self.aux_mode == 'train':
-            self.aux2 = [SegmentHead(16, 128, n_classes, up_factor=4)]
-            self.aux3 = [SegmentHead(32, 128, n_classes, up_factor=8)]
-            self.aux4 = [SegmentHead(64, 128, n_classes, up_factor=16)]
-            self.aux5_4 = [SegmentHead(128, 128, n_classes, up_factor=32)]
+            self.aux2 = nn.ModuleList([SegmentHead(16, 128, n_classes, up_factor=4)])
+            self.aux3 = nn.ModuleList([SegmentHead(32, 128, n_classes, up_factor=8)])
+            self.aux4 = nn.ModuleList([SegmentHead(64, 128, n_classes, up_factor=16)])
+            self.aux5_4 = nn.ModuleList([SegmentHead(128, 128, n_classes, up_factor=32)])
 
         ## 多数据集的头
         # self.n_head = len(other_n_classes) + 1
@@ -498,6 +510,14 @@ class BiSeNetV2(nn.Module):
                 self.aux3.append(SegmentHead(32, 128, n, up_factor=8))
                 self.aux4.append(SegmentHead(64, 128, n, up_factor=16))
                 self.aux5_4.append(SegmentHead(128, 128, n, up_factor=32))
+        # # 所有list的模型都需要手动.cuda()
+        # for i in range(0, n_bn):
+        #     self.head[i].cuda()
+        #     if self.aux_mode == 'train':
+        #         self.aux2[i].cuda()
+        #         self.aux3[i].cuda()
+        #         self.aux4[i].cuda()
+        #         self.aux5_4[i].cuda()
 
         self.init_weights()
 
@@ -545,15 +565,69 @@ class BiSeNetV2(nn.Module):
                 else:
                     nn.init.ones_(module.weight)
                 nn.init.zeros_(module.bias)
-        # self.load_pretrain()
+        self.load_pretrain()
 
 
     def load_pretrain(self):
         # state = modelzoo.load_url(backbone_url)
-        state = torch.load(backbone_url, map_location='cpu')
-        for name, child in self.named_children():
-            if name in state.keys():
-                child.load_state_dict(state[name], strict=True)
+        state = torch.load(backbone_url)
+        # self.load_state_dict(state, strict=True)
+        # print(state.)
+        # for name, child in self.named_children():
+        #     if name in state.keys():
+        #         child.load_state_dict(state[name], strict=True)
+        detail_state = {}
+        detail_state['S1_1.conv.weight'] = state['detail']['S1.0.conv.weight']
+        detail_state['S1_2.conv.weight'] = state['detail']['S1.1.conv.weight']
+        detail_state['S2_1.conv.weight'] = state['detail']['S2.0.conv.weight']
+        detail_state['S2_2.conv.weight'] = state['detail']['S2.1.conv.weight']
+        detail_state['S2_3.conv.weight'] = state['detail']['S2.2.conv.weight']
+        detail_state['S3_1.conv.weight'] = state['detail']['S3.0.conv.weight']
+        detail_state['S3_2.conv.weight'] = state['detail']['S3.1.conv.weight']
+        detail_state['S3_3.conv.weight'] = state['detail']['S3.2.conv.weight']
+
+        segment_state = {}
+        segment_state['S1S2.conv.conv.weight'] = state['segment']['S1S2.conv.conv.weight']
+        segment_state['S1S2.left_1.conv.weight'] = state['segment']['S1S2.left.0.conv.weight']
+        segment_state['S1S2.left_2.conv.weight'] = state['segment']['S1S2.left.1.conv.weight']
+        segment_state['S1S2.fuse.conv.weight'] = state['segment']['S1S2.fuse.conv.weight']
+
+        def loadGELayerS2(srcDict, src_name, targerdict, target_name):
+            targerdict[target_name+'.conv1.conv.weight'] = srcDict[src_name+'.conv1.conv.weight']
+            targerdict[target_name+'.dwconv1.conv.weight'] = srcDict[src_name+'.dwconv1.0.weight']
+            targerdict[target_name+'.dwconv2.conv.weight'] = srcDict[src_name+'.dwconv2.0.weight']
+            targerdict[target_name+'.conv2.conv.weight'] = srcDict[src_name+'.conv2.0.weight']
+            targerdict[target_name+'.shortcut_1.conv.weight'] = srcDict[src_name+'.shortcut.0.weight']
+            targerdict[target_name+'.shortcut_2.conv.weight'] = srcDict[src_name+'.shortcut.2.weight']
+
+        def loadGELayerS1(srcDict, src_name, targerdict, target_name):
+            targerdict[target_name+'.conv1.conv.weight'] = srcDict[src_name+'.conv1.conv.weight']
+            targerdict[target_name+'.dwconv.conv.weight'] = srcDict[src_name+'.dwconv.0.weight']
+            targerdict[target_name+'.conv2.conv.weight'] = srcDict[src_name+'.conv2.0.weight']
+            
+        loadGELayerS2(state['segment'], 'S3.0', segment_state, 'S3_1')
+        loadGELayerS1(state['segment'], 'S3.1', segment_state, 'S3_2')
+        loadGELayerS2(state['segment'], 'S4.0', segment_state, 'S4_1')
+        loadGELayerS1(state['segment'], 'S4.1', segment_state, 'S4_2')
+        loadGELayerS2(state['segment'], 'S5_4.0', segment_state, 'S5_4_1')
+        loadGELayerS1(state['segment'], 'S5_4.1', segment_state, 'S5_4_2')
+        loadGELayerS1(state['segment'], 'S5_4.2', segment_state, 'S5_4_3')
+        loadGELayerS1(state['segment'], 'S5_4.3', segment_state, 'S5_4_4')
+        segment_state['S5_5.conv_gap.conv.weight'] = state['segment']['S5_5.conv_gap.conv.weight']
+        segment_state['S5_5.conv_last.conv.weight'] = state['segment']['S5_5.conv_last.conv.weight']
+
+        bga_state = {}
+        bga_state['left1_convbn.conv.weight'] = state['bga']['left1.0.weight']
+        bga_state['left1_conv.weight'] = state['bga']['left1.2.weight']
+        bga_state['left2_convbn.conv.weight'] = state['bga']['left2.0.weight']
+        bga_state['right1.conv.weight'] = state['bga']['right1.0.weight']
+        bga_state['right2_convbn.conv.weight'] = state['bga']['right2.0.weight']
+        bga_state['right2_conv.weight'] = state['bga']['right2.2.weight']
+        bga_state['conv.conv.weight'] = state['bga']['conv.0.weight']
+        
+        self.detail.load_state_dict(detail_state, strict=False)
+        self.segment.load_state_dict(segment_state, strict=False)
+        self.bga.load_state_dict(bga_state, strict=False)
 
     def get_params(self):
         def add_param_to_list(mod, wd_params, nowd_params):
@@ -575,66 +649,20 @@ class BiSeNetV2(nn.Module):
 
 
 if __name__ == "__main__":
-    #  x = torch.randn(16, 3, 1024, 2048)
-    #  detail = DetailBranch()
-    #  feat = detail(x)
-    #  print('detail', feat.size())
-    #
-    #  x = torch.randn(16, 3, 1024, 2048)
-    #  stem = StemBlock()
-    #  feat = stem(x)
-    #  print('stem', feat.size())
-    #
-    #  x = torch.randn(16, 128, 16, 32)
-    #  ceb = CEBlock()
-    #  feat = ceb(x)
-    #  print(feat.size())
-    #
-    #  x = torch.randn(16, 32, 16, 32)
-    #  ge1 = GELayerS1(32, 32)
-    #  feat = ge1(x)
-    #  print(feat.size())
-    #
-    #  x = torch.randn(16, 16, 16, 32)
-    #  ge2 = GELayerS2(16, 32)
-    #  feat = ge2(x)
-    #  print(feat.size())
-    #
-    #  left = torch.randn(16, 128, 64, 128)
-    #  right = torch.randn(16, 128, 16, 32)
-    #  bga = BGALayer()
-    #  feat = bga(left, right)
-    #  print(feat.size())
-    #
-    #  x = torch.randn(16, 128, 64, 128)
-    #  head = SegmentHead(128, 128, 19)
-    #  logits = head(x)
-    #  print(logits.size())
-    #
-    #  x = torch.randn(16, 3, 1024, 2048)
-    #  segment = SegmentBranch()
-    #  feat = segment(x)[0]
-    #  print(feat.size())
-    #
-    import time
-    x1 = torch.randn(16, 3, 512, 1024) #.cuda()
-    x2 = torch.randn(16, 3, 512, 1024)
-    model = BiSeNetV2(19, 'train', 2, 38)
-    # model.cuda()
-    model.eval()
-    # outs = model(x)
-    # for i in range(50):
-    #     t0 = time.time()
-    #     outs = model(x)
-    #     print((time.time() - t0) * 1000)
-    outs = model(x1, x2)
-    # for out in outs:
-    # print(outs)
-    #  print(logits.size())
 
-    #  for name, param in model.named_parameters():
-    #      if len(param.size()) == 1:
-    #          print(name)
+    x1 = torch.randn(4, 3, 512, 1024).cuda()
+    x2 = torch.randn(4, 3, 1024, 1024).cuda()
+    model = BiSeNetV2(19, 'pred', 2, 38)
+    model.cuda()
+    model.eval()
+
+    outs = model(x1, x2)
+    for out in outs:
+        print(out[0][0].shape, out[1][1].shape)
+
+    for name, param in model.named_parameters():
+        if len(param.size()) == 1:
+            print(name)
     total = sum([param.nelement() for param in model.parameters()])
     print(total / 1e6)
     d_total = sum([param.nelement() for param in model.bga.parameters()])

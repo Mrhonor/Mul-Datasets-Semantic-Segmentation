@@ -42,5 +42,7 @@ class OhemCELoss(nn.Module):
 
 
 if __name__ == '__main__':
-    pass
-
+    logits = torch.randn((4, 19, 512, 1024)).cuda()
+    labels = torch.ones((4, 512, 1024)).long().cuda()
+    lossfunc = OhemCELoss(0.7)
+    print(lossfunc(logits, labels))
