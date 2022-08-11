@@ -116,8 +116,10 @@ class A2D2Data(Dataset):
         impth = self.img_paths[idx]
         lbpth = self.lb_paths[idx]
         img = cv2.imread(impth)[:, :, ::-1]
+        # img = cv2.resize(img, (1920, 1280))
         label = np.array(Image.open(lbpth).convert('RGB'))
-        label = self.convert_labels(label)
+        # label = np.array(Image.open(lbpth).convert('RGB').resize((1920, 1280),Image.ANTIALIAS))
+        label = self.convert_labels(label, impth)
         label = Image.fromarray(label)
 
         if not self.lb_map is None:
@@ -128,15 +130,22 @@ class A2D2Data(Dataset):
         im_lb = self.to_tensor(im_lb)
         img, label = im_lb['im'], im_lb['lb']
         return img.detach(), label.unsqueeze(0).detach()
+        # return img.detach()
 
     def __len__(self):
         return self.len
 
-    def convert_labels(self, label):
+    def convert_labels(self, label, impth):
         mask = np.full(label.shape[:2], 2, dtype=np.uint8)
         # mask = np.zeros(label.shape[:2])
         for k, v in self.color2id.items():
-            mask[cv2.inRange(label, np.array(k) - 20, np.array(k) + 20) == 255] = v
+            mask[cv2.inRange(label, np.array(k) - 1, np.array(k) + 1) == 255] = v
+            
+            
+            # if v == 30 and cv2.inRange(label, np.array(k) - 1, np.array(k) + 1).any() == True:
+            #     label[cv2.inRange(label, np.array(k) - 1, np.array(k) + 1) == 255] = [0, 0, 0]
+            #     cv2.imshow(impth, label)
+            #     cv2.waitKey(0)
         return mask
 
 if __name__ == "__main__":

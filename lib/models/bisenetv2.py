@@ -6,7 +6,7 @@ import torch.utils.model_zoo as modelzoo
 
 # backbone_url = 'https://github.com/CoinCheung/BiSeNet/releases/download/0.0.0/backbone_v2.pth'
 # backbone_url = '/root/autodl-tmp/project/BiSeNet/pth/backbone_v2.pth'
-backbone_url = '/root/autodl-tmp/project/BiSeNet/pth/backbone_v2.pth'
+backbone_url = './res/backbone_v2.pth'
 # backbone_url = './res/model_3000.pth'
 
 class ConvBNReLU(nn.Module):
@@ -19,25 +19,57 @@ class ConvBNReLU(nn.Module):
                 in_chan, out_chan, kernel_size=ks, stride=stride,
                 padding=padding, dilation=dilation,
                 groups=groups, bias=bias)
-        self.bn = nn.ModuleList([nn.BatchNorm2d(out_chan) for i in range(0, n_bn)])
-        # # 所有list的模型都需要手动.cuda()
-        # for i in range(0, n_bn):
-        #     self.bn[i].cuda()
+        self.bn = nn.ModuleList([nn.BatchNorm2d(out_chan, affine=False) for i in range(0, n_bn)])
+        ## 采用共享的affine parameter
+        self.affine_weight = nn.Parameter(torch.empty(out_chan))
+        self.affine_bias = nn.Parameter(torch.empty(out_chan))
+        
         self.relu = nn.ReLU(inplace=True)
 
-    def forward(self, x, *other_x):
+    def forward(self, dataset, x, *other_x):
         ## TODO 此处可以优化，不同数据集的图像过卷积层可以拼接到一起，过BN层再分离
-        feat = self.conv(x)
-        feat = self.bn[0](feat)
-        feat = self.relu(feat)
-
         ## 处理多数据集情况
-        feats = [feat]
-        for i, xs in enumerate(other_x):
-            feat = self.conv(xs)
-            feat = self.bn[i+1](feat)
+        
+        if len(other_x) != 0:
+            batch_size = [x.shape[0]]
+            for i in range(0, len(other_x)):
+                batch_size.append(other_x[i].shape[0])
+                x = torch.cat((x, other_x[i]), 0)
+            feat = self.conv(x)
+            feats = []
+            begin_index = 0
+            for i in range(0, len(other_x) + 1):
+                end_index = begin_index + batch_size[i]
+                feat_ = self.bn[i](feat[begin_index: end_index])
+                
+                ## affine param
+                feat_ = feat_ * self.affine_weight.reshape(1,-1,1,1) + self.affine_bias.reshape(1,-1,1,1)
+                
+                feat_ = self.relu(feat_)
+                feats.append(feat_)
+                begin_index = end_index
+            ## 在relu时再拼接后分离，测试发现fps反而有所下降
+            # feats_out = torch.cat((feats[0], feats[1]))
+            # for i in range(1, len(other_x)):
+            #     feats_out = torch.cat((feats_out, feats[i]), 0)
+            # feats_out = self.relu(feats_out)
+            # feats = []
+            # for i in range(0, len(other_x) + 1):
+            #     feats.append(feats_out[i * batch_size: (i + 1) * batch_size])
+        else:
+            feat = self.conv(x)
+            feat = self.bn[dataset](feat)
+            
+            ## affine param
+            feat = feat * self.affine_weight.reshape(1,-1,1,1) + self.affine_bias.reshape(1,-1,1,1)
+            
             feat = self.relu(feat)
-            feats.append(feat)
+            feats = [feat]
+        # for i, xs in enumerate(other_x):
+        #     feat = self.conv(xs)
+        #     feat = self.bn[i+1](feat)
+        #     feat = self.relu(feat)
+        #     feats.append(feat)
 
         return feats
 
@@ -51,30 +83,46 @@ class ConvBN(nn.Module):
                 in_chan, out_chan, kernel_size=ks, stride=stride,
                 padding=padding, dilation=dilation,
                 groups=groups, bias=bias)
-        self.bn = nn.ModuleList([nn.BatchNorm2d(out_chan) for i in range(0, n_bn)])
-        # # 所有list的模型都需要手动.cuda()
-        # for i in range(0, n_bn):
-        #     self.bn[i].cuda()
+        self.bn = nn.ModuleList([nn.BatchNorm2d(out_chan, affine=False) for i in range(0, n_bn)])
+        ## 采用共享的affine parameter
+        self.affine_weight = nn.Parameter(torch.empty(out_chan))
+        self.affine_bias = nn.Parameter(torch.empty(out_chan))
+        
 
-    def forward(self, x, *other_x):
+    def forward(self, dataset, x, *other_x):
         ## TODO 此处可以优化，不同数据集的图像过卷积层可以拼接到一起，过BN层再分离
-
-        feat = self.conv(x)
-        feat = self.bn[0](feat)  
-
-        ## 处理多数据集情况
-        feats = [feat]
-        for i, xs in enumerate(other_x):
-            feat = self.conv(xs)
-            feat = self.bn[i+1](feat)
+        if len(other_x) != 0:
+            batch_size = [x.shape[0]]
+            for i in range(0, len(other_x)):
+                batch_size.append(other_x[i].shape[0])
+                x = torch.cat((x, other_x[i]), 0)
+            feat = self.conv(x)
+            feats = []
+            begin_index = 0
+            for i in range(0, len(other_x) + 1):
+                end_index = begin_index + batch_size[i]
+                feat_ = self.bn[i](feat[begin_index: end_index])
+                
+                ## affine param
+                feat_ = feat_ * self.affine_weight.reshape(1,-1,1,1) + self.affine_bias.reshape(1,-1,1,1)
+                
+                feats.append(feat_)
+                begin_index = end_index
+        else:
+            feat = self.conv(x)
+            feat = self.bn[dataset](feat)
             
-            feats.append(feat)
-
+            ## affine param
+            feat = feat * self.affine_weight.reshape(1,-1,1,1) + self.affine_bias.reshape(1,-1,1,1)
+            
+            feats = [feat]
         return feats
 
     def SetLastBNAttr(self, attr):
-        for bn in self.bn:
-            bn.last_bn = attr
+        self.affine_weight.last_bn = attr
+        self.affine_bias.last_bn = attr
+        # for bn in self.bn:
+        #     bn.last_bn = attr
 
 
 
@@ -123,19 +171,20 @@ class DetailBranch(nn.Module):
         self.S3_3 = ConvBNReLU(128, 128, 3, stride=1, n_bn=n_bn)
         
 
-    def forward(self, x, *other_x):
+    def forward(self, x, dataset=0, *other_x):
         ## other_x 其他数据集的输入
         ## 拆分列表传参
-        feats = self.S1_1(x, *other_x)
-        feats = self.S1_2(*feats)
+        # x = x.cuda()
+        feats = self.S1_1(dataset, x, *other_x)
+        feats = self.S1_2(dataset, *feats)
 
-        feats = self.S2_1(*feats)
-        feats = self.S2_2(*feats)
-        feats = self.S2_3(*feats)
+        feats = self.S2_1(dataset, *feats)
+        feats = self.S2_2(dataset, *feats)
+        feats = self.S2_3(dataset, *feats)
 
-        feats = self.S3_1(*feats)
-        feats = self.S3_2(*feats)
-        feats = self.S3_3(*feats)
+        feats = self.S3_1(dataset, *feats)
+        feats = self.S3_2(dataset, *feats)
+        feats = self.S3_3(dataset, *feats)
 
         return feats
 
@@ -159,7 +208,7 @@ class StemBlock(nn.Module):
             kernel_size=3, stride=2, padding=1, ceil_mode=False)
         self.fuse = ConvBNReLU(32, 16, 3, stride=1, n_bn=n_bn)
 
-    def forward(self, x, *other_x):
+    def forward(self, dataset, x, *other_x):
         # feat = self.conv(x)
         # feat_left = self.left(feat)
         # feat_right = self.right(feat)
@@ -167,12 +216,12 @@ class StemBlock(nn.Module):
         # feat = self.fuse(feat)
 
         ## 修改为处理多数据集的情况
-        feats = self.conv(x, *other_x)
-        feat_lefts = self.left_1(*feats)
-        feat_lefts = self.left_2(*feat_lefts)
+        feats = self.conv(dataset, x, *other_x)
+        feat_lefts = self.left_1(dataset, *feats)
+        feat_lefts = self.left_2(dataset, *feat_lefts)
         feat_rights = [self.right(feat) for feat in feats] 
         feats = [torch.cat([feat_lefts[i], feat_rights[i]], dim=1) for i in range(0, len(feat_lefts))]
-        feats = self.fuse(*feats)
+        feats = self.fuse(dataset, *feats)
 
         return feats
 
@@ -191,7 +240,7 @@ class CEBlock(nn.Module):
         #TODO: in paper here is naive conv2d, no bn-relu
         self.conv_last = ConvBNReLU(128, 128, 3, stride=1, n_bn=n_bn)
 
-    def forward(self, x, *other_x):
+    def forward(self, dataset, x, *other_x):
         # feat = torch.mean(x, dim=(2, 3), keepdim=True)
         feat = x.view(x.shape[0], x.shape[1], -1)
         feat = feat.mean(2)
@@ -204,16 +253,18 @@ class CEBlock(nn.Module):
             feat = feat.mean(2)
             feat = feat.view(feat.shape[0], feat.shape[1], 1, 1)
             feats.append(feat)
-
-        feats_bn = [self.bn[i](feat) for i, feat in enumerate(feats)] 
-        feats_gap = self.conv_gap(*feats_bn)
+        if (len(other_x) == 0):
+            feats_bn = [self.bn[dataset](feats[0])]
+        else:
+            feats_bn = [self.bn[i](feat) for i, feat in enumerate(feats)] 
+        feats_gap = self.conv_gap(dataset, *feats_bn)
         # feat = feat + x
 
         feats = [F.interpolate(feats_gap[0], size=(x.shape[2], x.shape[3])) + x]
         for i, xs in enumerate(other_x):
             feats.append(F.interpolate(feats_gap[i+1], size=(xs.shape[2], xs.shape[3])) + xs)
 
-        feats = self.conv_last(*feats)
+        feats = self.conv_last(dataset, *feats)
         return feats
 
 
@@ -244,10 +295,10 @@ class GELayerS1(nn.Module):
         self.conv2.SetLastBNAttr(True)
         self.relu = nn.ReLU(inplace=True)
 
-    def forward(self, x, *other_x):
-        feats = self.conv1(x, *other_x)
-        feats = self.dwconv(*feats)
-        feats_conv = self.conv2(*feats)
+    def forward(self, dataset, x, *other_x):
+        feats = self.conv1(dataset, x, *other_x)
+        feats = self.dwconv(dataset, *feats)
+        feats_conv = self.conv2(dataset, *feats)
         feat = feats_conv[0] + x
         feats = [feat]
         
@@ -306,14 +357,14 @@ class GELayerS2(nn.Module):
 
         self.relu = nn.ReLU(inplace=True)
 
-    def forward(self, x, *other_x):
+    def forward(self, dataset, x, *other_x):
         ## 修改为多数据集模式
-        feats = self.conv1(x, *other_x)
-        feats = self.dwconv1(*feats)
-        feats = self.dwconv2(*feats)
-        feats = self.conv2(*feats)
-        shortcuts = self.shortcut_1(x, *other_x)
-        shortcuts = self.shortcut_2(*shortcuts)
+        feats = self.conv1(dataset, x, *other_x)
+        feats = self.dwconv1(dataset, *feats)
+        feats = self.dwconv2(dataset, *feats)
+        feats = self.conv2(dataset, *feats)
+        shortcuts = self.shortcut_1(dataset, x, *other_x)
+        shortcuts = self.shortcut_2(dataset, *shortcuts)
         feats = [feat + shortcuts[i] for i, feat in enumerate(feats)]
         feats = [self.relu(feat) for feat in feats]
         return feats
@@ -337,21 +388,22 @@ class SegmentBranch(nn.Module):
         
         self.S5_5 = CEBlock(n_bn=n_bn)
 
-    def forward(self, x, *other_x):
-        feat2 = self.S1S2(x, *other_x)
+    def forward(self, x, dataset=0, *other_x):
+        # x = x.cuda()
+        feat2 = self.S1S2(dataset, x, *other_x)
 
-        feat3 = self.S3_1(*feat2)
-        feat3 = self.S3_2(*feat3)
+        feat3 = self.S3_1(dataset, *feat2)
+        feat3 = self.S3_2(dataset, *feat3)
 
-        feat4 = self.S4_1(*feat3)
-        feat4 = self.S4_2(*feat4)
+        feat4 = self.S4_1(dataset, *feat3)
+        feat4 = self.S4_2(dataset, *feat4)
 
-        feat5_4 = self.S5_4_1(*feat4)
-        feat5_4 = self.S5_4_2(*feat5_4)
-        feat5_4 = self.S5_4_3(*feat5_4)
-        feat5_4 = self.S5_4_4(*feat5_4)
+        feat5_4 = self.S5_4_1(dataset, *feat4)
+        feat5_4 = self.S5_4_2(dataset, *feat5_4)
+        feat5_4 = self.S5_4_3(dataset, *feat5_4)
+        feat5_4 = self.S5_4_4(dataset, *feat5_4)
 
-        feat5_5 = self.S5_5(*feat5_4)
+        feat5_5 = self.S5_5(dataset, *feat5_4)
         return feat2, feat3, feat4, feat5_4, feat5_5
 
 
@@ -408,19 +460,22 @@ class BGALayer(nn.Module):
         self.conv = ConvBNReLU(128, 128, ks=3, n_bn=n_bn)
         
 
-    def forward(self, x_d, x_s):
+    def forward(self, x_d, x_s, dataset=0):
         ## x_d, x_s都是多数据集的list
         ## TODO 实现不定长参数版本
         # dsize = x_d.size()[2:]
-        left1 = self.left1_convbn(*x_d)
+        # x_d = [x.cuda() for x in x_d]
+        # x_s = [x.cuda() for x in x_s]
+
+        left1 = self.left1_convbn(dataset, *x_d)
         left1 = [self.left1_conv(x) for x in left1]
 
-        left2 = self.left2_convbn(*x_d)
+        left2 = self.left2_convbn(dataset, *x_d)
         left2 = [self.left2_pool(x) for x in left2]
 
-        right1 = self.right1(*x_s)
+        right1 = self.right1(dataset, *x_s)
 
-        right2 = self.right2_convbn(*x_s)
+        right2 = self.right2_convbn(dataset, *x_s)
         right2 = [self.right2_conv(x) for x in right2]
 
         right1 = [self.up1(x) for x in right1]
@@ -430,7 +485,7 @@ class BGALayer(nn.Module):
         right = [self.up2(x) for x in right]
 
         feats = [left[i] + right[i] for i, x in enumerate(left)]
-        out = self.conv(*feats)
+        out = self.conv(dataset, *feats)
         return out
 
 
@@ -468,12 +523,12 @@ class SegmentHead(nn.Module):
         # print(x.size())
         
         # 采用多分割头，所以不应该返回list
-        feats = self.conv(x)
+        feats = self.conv(0, x)
         feat = self.drop(feats[0])
 
         if self.aux is True:
             feat = self.up_sample1(feat)
-            feats = self.conv1(feat)
+            feats = self.conv1(0, feat)
             feat = self.conv2(feats[0])
         else:
             feat = self.conv2(feat)
@@ -521,89 +576,149 @@ class BiSeNetV2(nn.Module):
 
         self.init_weights()
 
-    def forward(self, x, *other_x):
+    def forward(self, x, dataset=0, *other_x):
+        # x = x.cuda()
         ## other_x 其他数据集的输入
-        size = x.size()[2:]
+        # size = x.size()[2:]
+
         
-        feat_d = self.detail(x, *other_x)
-        feat2, feat3, feat4, feat5_4, feat_s = self.segment(x, *other_x)
-        feat_head = self.bga(feat_d, feat_s)
+        feat_d = self.detail(x, dataset, *other_x)
+        feat2, feat3, feat4, feat5_4, feat_s = self.segment(x, dataset, *other_x)
+        feat_head = self.bga(feat_d, feat_s, dataset)
 
-
-        # logits = self.head(feat_head)
+        # logits = self.head[0](feat_head[0])
         ## 修改为多数据集模式，返回list
-        logits = [logit(feat_head[i]) for i, logit in enumerate(self.head)]
-        ## TODO 修改下面的多数据集模式
-        if self.aux_mode == 'train':
-            # logits_aux2 = self.aux2(feat2)
-            # logits_aux3 = self.aux3(feat3)
-            # logits_aux4 = self.aux4(feat4)
-            # logits_aux5_4 = self.aux5_4(feat5_4)
-            ## 多数据集模式
-            logits_aux2 = [aux2(feat2[i]) for i, aux2 in enumerate(self.aux2)]
-            logits_aux3 = [aux3(feat3[i]) for i, aux3 in enumerate(self.aux3)]
-            logits_aux4 = [aux4(feat4[i]) for i, aux4 in enumerate(self.aux4)]
-            logits_aux5_4 = [aux5_4(feat5_4[i]) for i, aux5_4 in enumerate(self.aux5_4)]
-            return logits, logits_aux2, logits_aux3, logits_aux4, logits_aux5_4
-        elif self.aux_mode == 'eval':
-            return logits,
-        elif self.aux_mode == 'pred':
-            # pred = logits.argmax(dim=1)
-            pred = [logit.argmax(dim=1) for logit in logits]
-            return pred
+        
+        # logits = [logit(feat_head[i]) for i, logit in enumerate(self.head)]
+        ## 修改后支持单张图片输入
+        if (len(other_x) == 0):
+            logits = [self.head[dataset](feat_head[0])]
         else:
-            raise NotImplementedError
+            logits = [self.head[i](feat_head[i]) for i in range(0, len(other_x) + 1)]
+        ## TODO 修改下面的多数据集模式
+        if (len(other_x) == 0):
+            if self.aux_mode == 'train':
+                # logits_aux2 = self.aux2(feat2)
+                # logits_aux3 = self.aux3(feat3)
+                # logits_aux4 = self.aux4(feat4)
+                # logits_aux5_4 = self.aux5_4(feat5_4)
+                ## 多数据集模式
+                ## 修改后支持单张图片输入
+                logits_aux2 = [self.aux2[dataset](feat2[0])]
+                logits_aux3 = [self.aux3[dataset](feat3[0])]
+                logits_aux4 = [self.aux4[dataset](feat4[0])]
+                logits_aux5_4 = [self.aux5_4[dataset](feat5_4[0])]
+                return logits, logits_aux2, logits_aux3, logits_aux4, logits_aux5_4
+            elif self.aux_mode == 'eval':
+                return logits,
+            elif self.aux_mode == 'pred':
+                # pred = logits.argmax(dim=1)
+                pred = [logit.argmax(dim=1) for logit in logits]
+                return pred
+            else:
+                raise NotImplementedError
+        else:
+            if self.aux_mode == 'train':
+                # logits_aux2 = self.aux2(feat2)
+                # logits_aux3 = self.aux3(feat3)
+                # logits_aux4 = self.aux4(feat4)
+                # logits_aux5_4 = self.aux5_4(feat5_4)
+                ## 多数据集模式
+                ## 修改后支持单张图片输入
+                logits_aux2 = [self.aux2[i](feat2[i]) for i in range(0, len(other_x) + 1)]
+                logits_aux3 = [self.aux3[i](feat3[i]) for i in range(0, len(other_x) + 1)]
+                logits_aux4 = [self.aux4[i](feat4[i]) for i in range(0, len(other_x) + 1)]
+                logits_aux5_4 = [self.aux5_4[i](feat5_4[i]) for i in range(0, len(other_x) + 1)]
+                return logits, logits_aux2, logits_aux3, logits_aux4, logits_aux5_4
+            elif self.aux_mode == 'eval':
+                return logits,
+            elif self.aux_mode == 'pred':
+                # pred = logits.argmax(dim=1)
+                pred = [logit.argmax(dim=1) for logit in logits]
+                return pred
+            else:
+                raise NotImplementedError
 
     def init_weights(self):
         for name, module in self.named_modules():
             if isinstance(module, (nn.Conv2d, nn.Linear)):
                 nn.init.kaiming_normal_(module.weight, mode='fan_out')
                 if not module.bias is None: nn.init.constant_(module.bias, 0)
-            elif isinstance(module, nn.modules.batchnorm._BatchNorm):
-                if hasattr(module, 'last_bn') and module.last_bn:
-                    nn.init.zeros_(module.weight)
+            # elif isinstance(module, nn.modules.batchnorm._BatchNorm):
+            #     if hasattr(module, 'last_bn') and module.last_bn:
+            #         nn.init.zeros_(module.weight)
+            #     else:
+            #         nn.init.ones_(module.weight)
+            #     nn.init.zeros_(module.bias)
+        for name, param in self.named_parameters():
+            if name.find('affine_weight') != -1:
+                if hasattr(param, 'last_bn') and param.last_bn:
+                    nn.init.zeros_(param)
                 else:
-                    nn.init.ones_(module.weight)
-                nn.init.zeros_(module.bias)
-        self.load_pretrain()
+                    nn.init.ones_(param)
+            elif name.find('affine_bias') != -1:
+                nn.init.zeros_(param)
+
+        # self.load_pretrain()
 
 
     def load_pretrain(self):
         # state = modelzoo.load_url(backbone_url)
         state = torch.load(backbone_url)
-        # self.load_state_dict(state, strict=True)
-        # print(state.)
-        # for name, child in self.named_children():
-        #     if name in state.keys():
-        #         child.load_state_dict(state[name], strict=True)
         detail_state = {}
-        detail_state['S1_1.conv.weight'] = state['detail']['S1.0.conv.weight']
-        detail_state['S1_2.conv.weight'] = state['detail']['S1.1.conv.weight']
-        detail_state['S2_1.conv.weight'] = state['detail']['S2.0.conv.weight']
-        detail_state['S2_2.conv.weight'] = state['detail']['S2.1.conv.weight']
-        detail_state['S2_3.conv.weight'] = state['detail']['S2.2.conv.weight']
-        detail_state['S3_1.conv.weight'] = state['detail']['S3.0.conv.weight']
-        detail_state['S3_2.conv.weight'] = state['detail']['S3.1.conv.weight']
-        detail_state['S3_3.conv.weight'] = state['detail']['S3.2.conv.weight']
+        def loadConvBNRelu(srcDict, src_name, targetdict, target_name):
+            targetdict[target_name+'.conv.weight'] = srcDict[src_name+'.conv.weight']
+            targetdict[target_name+'.affine_weight'] = srcDict[src_name+'.bn.weight']
+            targetdict[target_name+'.affine_bias'] = srcDict[src_name+'.bn.bias']
+
+        loadConvBNRelu(state['detail'], 'S1.0', detail_state, 'S1_1')
+        loadConvBNRelu(state['detail'], 'S1.1', detail_state, 'S1_2')
+        loadConvBNRelu(state['detail'], 'S2.0', detail_state, 'S2_1')
+        loadConvBNRelu(state['detail'], 'S2.1', detail_state, 'S2_2')
+        loadConvBNRelu(state['detail'], 'S2.2', detail_state, 'S2_3')
+        loadConvBNRelu(state['detail'], 'S3.0', detail_state, 'S3_1')
+        loadConvBNRelu(state['detail'], 'S3.1', detail_state, 'S3_2')
+        loadConvBNRelu(state['detail'], 'S3.2', detail_state, 'S3_3')
 
         segment_state = {}
-        segment_state['S1S2.conv.conv.weight'] = state['segment']['S1S2.conv.conv.weight']
-        segment_state['S1S2.left_1.conv.weight'] = state['segment']['S1S2.left.0.conv.weight']
-        segment_state['S1S2.left_2.conv.weight'] = state['segment']['S1S2.left.1.conv.weight']
-        segment_state['S1S2.fuse.conv.weight'] = state['segment']['S1S2.fuse.conv.weight']
+        loadConvBNRelu(state['segment'], 'S1S2.conv', segment_state, 'S1S2.conv')
+        loadConvBNRelu(state['segment'], 'S1S2.left.0', segment_state, 'S1S2.left_1')
+        loadConvBNRelu(state['segment'], 'S1S2.left.1', segment_state, 'S1S2.left_2')
+        loadConvBNRelu(state['segment'], 'S1S2.fuse', segment_state, 'S1S2.fuse')
 
-        def loadGELayerS2(srcDict, src_name, targerdict, target_name):
-            targerdict[target_name+'.conv1.conv.weight'] = srcDict[src_name+'.conv1.conv.weight']
-            targerdict[target_name+'.dwconv1.conv.weight'] = srcDict[src_name+'.dwconv1.0.weight']
-            targerdict[target_name+'.dwconv2.conv.weight'] = srcDict[src_name+'.dwconv2.0.weight']
-            targerdict[target_name+'.conv2.conv.weight'] = srcDict[src_name+'.conv2.0.weight']
-            targerdict[target_name+'.shortcut_1.conv.weight'] = srcDict[src_name+'.shortcut.0.weight']
-            targerdict[target_name+'.shortcut_2.conv.weight'] = srcDict[src_name+'.shortcut.2.weight']
+        def loadGELayerS2(srcDict, src_name, targetdict, target_name):
+            loadConvBNRelu(srcDict, src_name+'.conv1', targetdict, target_name+'.conv1')
+            
+            targetdict[target_name+'.dwconv1.conv.weight'] = srcDict[src_name+'.dwconv1.0.weight']
+            targetdict[target_name+'.dwconv1.affine_weight'] = srcDict[src_name+'.dwconv1.1.weight']
+            targetdict[target_name+'.dwconv1.affine_bias'] = srcDict[src_name+'.dwconv1.1.bias']
+            
+            targetdict[target_name+'.dwconv2.conv.weight'] = srcDict[src_name+'.dwconv2.0.weight']
+            targetdict[target_name+'.dwconv2.affine_weight'] = srcDict[src_name+'.dwconv2.1.weight']
+            targetdict[target_name+'.dwconv2.affine_bias'] = srcDict[src_name+'.dwconv2.1.bias']
+            
+            targetdict[target_name+'.conv2.conv.weight'] = srcDict[src_name+'.conv2.0.weight']
+            targetdict[target_name+'.conv2.affine_weight'] = srcDict[src_name+'.conv2.1.weight']
+            targetdict[target_name+'.conv2.affine_bias'] = srcDict[src_name+'.conv2.1.bias']
+            
+            targetdict[target_name+'.shortcut_1.conv.weight'] = srcDict[src_name+'.shortcut.0.weight']
+            targetdict[target_name+'.shortcut_1.affine_weight'] = srcDict[src_name+'.shortcut.1.weight']
+            targetdict[target_name+'.shortcut_1.affine_bias'] = srcDict[src_name+'.shortcut.1.bias']
+            
+            targetdict[target_name+'.shortcut_2.conv.weight'] = srcDict[src_name+'.shortcut.2.weight']
+            targetdict[target_name+'.shortcut_2.affine_weight'] = srcDict[src_name+'.shortcut.3.weight']
+            targetdict[target_name+'.shortcut_2.affine_bias'] = srcDict[src_name+'.shortcut.3.bias']
 
-        def loadGELayerS1(srcDict, src_name, targerdict, target_name):
-            targerdict[target_name+'.conv1.conv.weight'] = srcDict[src_name+'.conv1.conv.weight']
-            targerdict[target_name+'.dwconv.conv.weight'] = srcDict[src_name+'.dwconv.0.weight']
-            targerdict[target_name+'.conv2.conv.weight'] = srcDict[src_name+'.conv2.0.weight']
+        def loadGELayerS1(srcDict, src_name, targetdict, target_name):
+            loadConvBNRelu(srcDict, src_name+'.conv1', targetdict, target_name+'.conv1')
+            
+            targetdict[target_name+'.dwconv.conv.weight'] = srcDict[src_name+'.dwconv.0.weight']
+            targetdict[target_name+'.dwconv.affine_weight'] = srcDict[src_name+'.dwconv.1.weight']
+            targetdict[target_name+'.dwconv.affine_bias'] = srcDict[src_name+'.dwconv.1.bias']
+            
+            targetdict[target_name+'.conv2.conv.weight'] = srcDict[src_name+'.conv2.0.weight']
+            targetdict[target_name+'.conv2.affine_weight'] = srcDict[src_name+'.conv2.1.weight']
+            targetdict[target_name+'.conv2.affine_bias'] = srcDict[src_name+'.conv2.1.bias']
             
         loadGELayerS2(state['segment'], 'S3.0', segment_state, 'S3_1')
         loadGELayerS1(state['segment'], 'S3.1', segment_state, 'S3_2')
@@ -613,17 +728,36 @@ class BiSeNetV2(nn.Module):
         loadGELayerS1(state['segment'], 'S5_4.1', segment_state, 'S5_4_2')
         loadGELayerS1(state['segment'], 'S5_4.2', segment_state, 'S5_4_3')
         loadGELayerS1(state['segment'], 'S5_4.3', segment_state, 'S5_4_4')
-        segment_state['S5_5.conv_gap.conv.weight'] = state['segment']['S5_5.conv_gap.conv.weight']
-        segment_state['S5_5.conv_last.conv.weight'] = state['segment']['S5_5.conv_last.conv.weight']
+        loadConvBNRelu(state['segment'], 'S5_5.conv_gap', segment_state, 'S5_5.conv_gap')
+        loadConvBNRelu(state['segment'], 'S5_5.conv_last', segment_state, 'S5_5.conv_last')
+        # segment_state['S5_5.conv_gap.conv.weight'] = state['segment']['S5_5.conv_gap.conv.weight']
+        # segment_state['S5_5.conv_last.conv.weight'] = state['segment']['S5_5.conv_last.conv.weight']
 
         bga_state = {}
         bga_state['left1_convbn.conv.weight'] = state['bga']['left1.0.weight']
+        bga_state['left1_convbn.affine_weight'] = state['bga']['left1.1.weight']
+        bga_state['left1_convbn.affine_bias'] = state['bga']['left1.1.bias']
+
         bga_state['left1_conv.weight'] = state['bga']['left1.2.weight']
+
         bga_state['left2_convbn.conv.weight'] = state['bga']['left2.0.weight']
+        bga_state['left2_convbn.affine_weight'] = state['bga']['left2.1.weight']
+        bga_state['left2_convbn.affine_bias'] = state['bga']['left2.1.bias']
+
         bga_state['right1.conv.weight'] = state['bga']['right1.0.weight']
+        bga_state['right1.affine_weight'] = state['bga']['right1.1.weight']
+        bga_state['right1.affine_bias'] = state['bga']['right1.1.bias']
+
         bga_state['right2_convbn.conv.weight'] = state['bga']['right2.0.weight']
+        bga_state['right2_convbn.affine_weight'] = state['bga']['right2.1.weight']
+        bga_state['right2_convbn.affine_bias'] = state['bga']['right2.1.bias']
+
         bga_state['right2_conv.weight'] = state['bga']['right2.2.weight']
+
         bga_state['conv.conv.weight'] = state['bga']['conv.0.weight']
+        bga_state['conv.affine_weight'] = state['bga']['conv.1.weight']
+        bga_state['conv.affine_bias'] = state['bga']['conv.1.bias']
+
         
         self.detail.load_state_dict(detail_state, strict=False)
         self.segment.load_state_dict(segment_state, strict=False)
@@ -647,23 +781,74 @@ class BiSeNetV2(nn.Module):
                 add_param_to_list(child, wd_params, nowd_params)
         return wd_params, nowd_params, lr_mul_wd_params, lr_mul_nowd_params
 
-
 if __name__ == "__main__":
 
-    x1 = torch.randn(4, 3, 512, 1024).cuda()
-    x2 = torch.randn(4, 3, 1024, 1024).cuda()
-    model = BiSeNetV2(19, 'pred', 2, 38)
-    model.cuda()
-    model.eval()
+    # x1 = torch.randn(1, 3, 512, 1024).cuda()
+    # x2 = torch.randn(1, 3, 512, 1024).cuda()
+    # model = BiSeNetV2(38, 'eval', 2, 19)
+    
+    # model.cuda()
+    # model.eval()
+    
+    # out = model(x1, 0, x2)
+    # print(out)
+    
+    # starter, ender = torch.cuda.Event(enable_timing=True), torch.cuda.Event(enable_timing=True)
+    # repetitions = 100
+    # timings = np.zeros((repetitions, 1))
+    # end = time.time()
+    # # for i in range(0, repetitions):
+    # #     starter.record()
+    # #     start = end
+    # #     outs = model(x1, x2)
+    # #     ender.record()
+    # #     end = time.time()
+    # #     torch.cuda.synchronize()
+    # #     curr_time = starter.elapsed_time(ender)
+    # #     curr_time1 = end - start
+    # #     print('inference time:', 1000 * curr_time1)
+    # #     timings[i] = curr_time1
+    # #     print(curr_time)
+    
+    # for i in range(0, repetitions):
+    #     start = end
+    #     outs = model(x1, 0)
+    #     end = time.time()
+    #     print(outs[0][0].shape)
+    #     curr_time1 = end - start
+    #     print('inference time:', 1000 * curr_time1)
+    #     timings[i] = curr_time1
+    # timings = timings[10:]
+    # mean_time = timings.mean().item()
+    # print("Inference time: {:.6f}, FPS: {} ".format(mean_time*1000, 1/mean_time))
+    
 
-    outs = model(x1, x2)
-    for out in outs:
-        print(out[0][0].shape, out[1][1].shape)
+    # # for name, param in model.named_parameters():
+    # #     if len(param.size()) == 1:
+    # #         print(name)
+    # total = sum([param.nelement() for param in model.parameters()])
+    # print(total / 1e6)
+    # d_total = sum([param.nelement() for param in model.bga.parameters()])
+    # print(d_total / 1e6)
+    # d_total = sum([param.nelement() for param in model.detail.parameters()])
+    # print(d_total / 1e6)
+    # d_total = sum([param.nelement() for param in model.segment.parameters()])
+    # print(d_total / 1e6)
+    # d_total = sum([param.nelement() for param in model.head.parameters()])
+    # print(d_total / 1e6)
+    
+    weight = nn.Parameter(torch.tensor([1.0,-1.0]))
+    bias = nn.Parameter(torch.tensor([1.0,-1.0]))
+    print(weight)
+    print(bias)
+    a = torch.randn(2,2,2,2)
+    print(a)
 
-    for name, param in model.named_parameters():
-        if len(param.size()) == 1:
-            print(name)
-    total = sum([param.nelement() for param in model.parameters()])
-    print(total / 1e6)
-    d_total = sum([param.nelement() for param in model.bga.parameters()])
-    print(d_total / 1e6)
+    a = a * weight.reshape(1,-1,1,1) + bias.reshape(1,-1,1,1)
+
+    print(a)
+    
+    init_test = nn.Parameter(torch.empty(10))
+    print(init_test)
+    nn.init.ones_(init_test)
+    print(init_test)
