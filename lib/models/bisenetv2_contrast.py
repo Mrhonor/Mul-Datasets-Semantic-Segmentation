@@ -593,7 +593,7 @@ class BiSeNetV2(nn.Module):
 
         self.init_weights()
 
-    def forward(self, x, dataset=0, *other_x):
+    def forward(self, x, dataset=0, lb_q = None, *other_x):
         # x = x.cuda()
         ## other_x 其他数据集的输入
         # size = x.size()[2:]
@@ -627,7 +627,10 @@ class BiSeNetV2(nn.Module):
                 logits_aux5_4 = [self.aux5_4[dataset](feat5_4[0])]
                 
                 emb = [self.proj_head(feat_head[0])]
-                return {'seg': [logits, logits_aux2, logits_aux3, logits_aux4, logits_aux5_4], 'embed': emb}
+                if lb_q is None:
+                    return {'seg': [logits, logits_aux2, logits_aux3, logits_aux4, logits_aux5_4], 'embed': emb}
+                else:
+                    return {'seg': [logits, logits_aux2, logits_aux3, logits_aux4, logits_aux5_4], 'embed': emb, 'key': emb.detach(), 'lb_key': lb_q.detach()}
                 # return logits, logits_aux2, logits_aux3, logits_aux4, logits_aux5_4
             elif self.aux_mode == 'eval':
                 return logits,

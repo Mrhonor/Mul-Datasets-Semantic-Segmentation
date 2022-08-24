@@ -27,6 +27,7 @@ from lib.ohem_ce_loss import OhemCELoss
 from lib.lr_scheduler import WarmupPolyLrScheduler
 from lib.meters import TimeMeter, AvgMeter
 from lib.logger import setup_logger, print_log_msg
+from lib.loss_helper import FSAuxCELoss
 
 
 ## fix all random seeds
@@ -53,6 +54,7 @@ cfg = set_cfg_from_file(args.config)
 cfg_a2d2 = set_cfg_from_file('/root/autodl-tmp/project/BiSeNet/configs/bisenetv2_a2d2.py')
 cfg_city = set_cfg_from_file('/root/autodl-tmp/project/BiSeNet/configs/bisenetv2_city.py')
 
+configer = Configer(args_parser=args)
 
 def load_pretrained(net):
     state = torch.load(args.finetune_from, map_location='cpu')
@@ -175,6 +177,8 @@ def set_model_dist(net):
         )
     return net
 
+def set_contrast_loss(configer):
+    return FSAuxCELoss(configer=configer)
 
 def set_meters(config_file):
     time_meter = TimeMeter(config_file.max_iter)
@@ -184,7 +188,59 @@ def set_meters(config_file):
             for i in range(config_file.num_aux_heads)]
     return time_meter, loss_meter, loss_pre_meter, loss_aux_meters
 
+def dequeue_and_enqueue(configer, keys, labels,
+                            segment_queue, segment_queue_ptr,
+                            pixel_queue, pixel_queue_ptr):
+    batch_size = keys.shape[0]
+    feat_dim = keys.shape[1]
+    network_stride = configer.get('network', 'stride')
+    memory_size = configer.get('contrast', 'memory_size')
+    pixel_update_freq = configer.get('contrast', 'pixel_update_freq')
 
+    labels = labels[:, ::network_stride, ::network_stride]
+
+    for bs in range(batch_size):
+        this_feat = keys[bs].contiguous().view(feat_dim, -1)
+        this_label = labels[bs].contiguous().view(-1)
+        this_label_ids = torch.unique(this_label)
+        this_label_ids = [x for x in this_label_ids if x > 0]
+
+        for lb in this_label_ids:
+            idxs = (this_label == lb).nonzero()
+
+            # segment enqueue and dequeue
+            feat = torch.mean(this_feat[:, idxs], dim=1).squeeze(1)
+            ptr = int(segment_queue_ptr[lb])
+            segment_queue[lb, ptr, :] = nn.functional.normalize(feat.view(-1), p=2, dim=0)
+            segment_queue_ptr[lb] = (segment_queue_ptr[lb] + 1) % memory_size
+
+            # pixel enqueue and dequeue
+            num_pixel = idxs.shape[0]
+            perm = torch.randperm(num_pixel)
+            K = min(num_pixel, pixel_update_freq)
+            feat = this_feat[:, perm[:K]]
+            feat = torch.transpose(feat, 0, 1)
+            ptr = int(pixel_queue_ptr[lb])
+
+            if ptr + K >= memory_size:
+                pixel_queue[lb, -K:, :] = nn.functional.normalize(feat, p=2, dim=1)
+                pixel_queue_ptr[lb] = 0
+            else:
+                pixel_queue[lb, ptr:ptr + K, :] = nn.functional.normalize(feat, p=2, dim=1)
+                pixel_queue_ptr[lb] = (pixel_queue_ptr[lb] + 1) % memory_size
+
+def reduce_tensor(inp):
+    """
+    Reduce the loss from all processes so that 
+    process with rank 0 has the averaged results.
+    """
+    world_size = get_world_size()
+    if world_size < 2:
+        return inp
+    with torch.no_grad():
+        reduced_inp = inp
+        dist.reduce(reduced_inp, dst=0)
+    return reduced_inp
 
 def train():
     n_dataset = 2
@@ -196,6 +252,7 @@ def train():
     dl_city = get_data_loader(cfg_city, mode='train', distributed=is_dist)
     ## model
     net, criteria_pre, criteria_aux = set_model(cfg_a2d2, cfg_city)
+    pixel_loss = set_contrast_loss(configer)
 
     ## optimizer
     optim = set_optimizer(net, cfg)
@@ -277,9 +334,23 @@ def train():
                 out['segment_queue'] = net.module.segment_queue
                 out['segment_queue_ptr'] = net.module.segment_queue_ptr
             
-            # backward_loss = pixel_loss(outputs, targets, with_embed=with_embed)
+            backward_loss = pixel_loss(out, lb, with_embed=with_embed)
+            display_loss = reduce_tensor(backward_loss) / get_world_size()
 
-        scaler.scale(loss).backward()
+        if self.with_memory and 'key' in outputs and 'lb_key' in outputs:
+            dequeue_and_enqueue(configer, out['key'], out['lb_key'],
+                                segment_queue=net.module.segment_queue,
+                                segment_queue_ptr=net.module.segment_queue_ptr,
+                                pixel_queue=net.module.pixel_queue,
+                                pixel_queue_ptr=net.module.pixel_queue_ptr)
+
+
+        scaler.scale(backward_loss).backward()
+
+
+        # self.configer.plus_one('iters')
+
+        # scaler.scale(loss).backward()
         scaler.step(optim)
         scaler.update()
         torch.cuda.synchronize()
