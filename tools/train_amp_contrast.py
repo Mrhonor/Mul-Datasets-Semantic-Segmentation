@@ -2,6 +2,7 @@
 # -*- encoding: utf-8 -*-
 
 # from asyncio.windows_events import NULL # 有bug，去掉改为别的判定
+import imp
 import sys
 sys.path.insert(0, '.')
 import os
@@ -27,7 +28,8 @@ from lib.ohem_ce_loss import OhemCELoss
 from lib.lr_scheduler import WarmupPolyLrScheduler
 from lib.meters import TimeMeter, AvgMeter
 from lib.logger import setup_logger, print_log_msg
-from lib.loss_helper import FSAuxCELoss
+from lib.loss_contrast_mem import PixelContrastLoss
+from tools.configer import Configer
 
 
 ## fix all random seeds
@@ -38,6 +40,14 @@ from lib.loss_helper import FSAuxCELoss
 #  torch.backends.cudnn.deterministic = True
 #  torch.backends.cudnn.benchmark = True
 #  torch.multiprocessing.set_sharing_strategy('file_system')
+
+def get_world_size():
+    if not torch.distributed.is_initialized():
+        return 1
+    return torch.distributed.get_world_size()
+
+def is_distributed():
+    return torch.distributed.is_initialized()
 
 def parse_args():
     parse = argparse.ArgumentParser()
@@ -178,7 +188,7 @@ def set_model_dist(net):
     return net
 
 def set_contrast_loss(configer):
-    return FSAuxCELoss(configer=configer)
+    return PixelContrastLoss(configer=configer)
 
 def set_meters(config_file):
     time_meter = TimeMeter(config_file.max_iter)
@@ -276,6 +286,10 @@ def train():
     ## train loop
     # for it, (im, lb) in enumerate(dl):
     starti = 20000
+
+    contrast_warmup_iters = configer.get("contrast", "warmup_iters")
+    with_memory = configer.exists('contrast', 'with_memory')
+
     for i in range(starti, cfg.max_iter + starti):
         try:
             im_a2d2, lb_a2d2 = next(a2d2_iter)
@@ -322,7 +336,7 @@ def train():
             w2 = 1
             loss = w1 * loss_all[0] + w2 * loss_all[1]
             
-            with_embed = True if i >= self.contrast_warmup_iters else False
+            with_embed = True if i >= contrast_warmup_iters else False
             if is_distributed():
                 out['pixel_queue'] = net.pixel_queue
                 out['pixel_queue_ptr'] = net.pixel_queue_ptr
@@ -337,7 +351,7 @@ def train():
             backward_loss = pixel_loss(out, lb, with_embed=with_embed)
             display_loss = reduce_tensor(backward_loss) / get_world_size()
 
-        if self.with_memory and 'key' in outputs and 'lb_key' in outputs:
+        if with_memory and 'key' in out and 'lb_key' in out:
             dequeue_and_enqueue(configer, out['key'], out['lb_key'],
                                 segment_queue=net.module.segment_queue,
                                 segment_queue_ptr=net.module.segment_queue_ptr,
@@ -346,7 +360,6 @@ def train():
 
 
         scaler.scale(backward_loss).backward()
-
 
         # self.configer.plus_one('iters')
 

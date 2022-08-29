@@ -44,6 +44,7 @@ class PixelContrastLoss(nn.Module, ABC):
         if total_classes == 0:
             return None, None
 
+        ## 每个锚点保留个数
         n_view = self.max_samples // total_classes
         n_view = min(n_view, self.max_views)
 
@@ -109,6 +110,8 @@ class PixelContrastLoss(nn.Module, ABC):
 
         y_anchor = y_anchor.contiguous().view(-1, 1)
         anchor_count = n_view
+        # X_anchor:(3 dim) total_classes x n_view x feat_dim 
+        # anchor_feature:(2 dim) (total_classes x n_view) x feat_dim
         anchor_feature = torch.cat(torch.unbind(X_anchor, dim=1), dim=0)
 
         if queue is not None:
@@ -119,7 +122,8 @@ class PixelContrastLoss(nn.Module, ABC):
         else:
             y_contrast = y_anchor
             contrast_count = n_view
-            contrast_feature = torch.cat(torch.unbind(X_anchor, dim=1), dim=0)
+            # contrast_feature = torch.cat(torch.unbind(X_anchor, dim=1), dim=0)
+            contrast_feature = anchor_feature
 
         mask = torch.eq(y_anchor, y_contrast.T).float().cuda()
 
