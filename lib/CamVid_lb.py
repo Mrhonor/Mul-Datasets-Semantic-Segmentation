@@ -51,6 +51,19 @@ labels_info = [
     {"name": "Void", "id": 31, "color": [0, 0, 0], "trainId": 255}
 ]
 
+## {unify id} : {unify name} [{city trainId}, {Camvid trainId}]
+# 0: road [0, 3], 1: sidewalk [1, 4], 2: building [2, 1], 3: wall [3, 1]
+# 4: fence [3, 7], 5: pole [4, 2], 6: traffic light [5, 6] 7: traffic sign [6, 6]
+# 8: vegetation [7, 5], 9: terrain [8, 5], 10: sky [9, 0], 11: person [10, 9]
+# 12: rider [11, 10], 13: car [12, 8], 14: truck [13,  8], 15: bus [14, 8]
+# 16: train [15, 8], 17: motorcycle [16, 10], 18: bicycle [17, 10]
+
+## Camvid -> {unify class1, unify class2, ...}
+# Building -> {Building, Wall}, SignSymbol -> {traffic light, traffic sign},
+# Tree -> {vegetation, terrain}, Car -> {Car, truck, bus, train}
+# Bicyclist -> {motorcycle, bicycle, rider}
+
+
 class CamVid(Dataset):
     def __init__(self, dataroot, annpath, trans_func=None, mode='train'):
         super(CamVid, self).__init__()

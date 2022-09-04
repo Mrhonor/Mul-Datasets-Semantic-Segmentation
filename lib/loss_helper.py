@@ -429,3 +429,29 @@ class SegFixLoss(nn.Module):
         direction_weight = float(os.environ.get('direction_weight', 1))
 
         return mask_weight * mask_loss + direction_weight * direction_loss
+
+class NLLPlusLoss(nn.Module):
+    def __init__(self, configer=None):
+        super(NLLPlusLoss, self).__init__()
+        
+        self.configer = configer
+        ignore_index = -1
+        if self.configer.exists('loss', 'params') and 'ce_ignore_index' in self.configer.get('loss', 'params'):
+            ignore_index = self.configer.get('loss', 'params')['ce_ignore_index']
+        
+        self.softmax = nn.Softmax(dim=1)
+        self.nllloss = nn.NLLLoss(ignore_index=ignore_index, reduction='mean')
+    
+    def forward(self, x, labels):
+        # labels为 k x batch size x H x W
+        # k为最大映射数量，对于输入的x需要计算k次nll loss后求和，
+        # 对于没有k个映射对象的类别，如只有n个的类别，后n-k个labels值均为ignore_index
+        pred = self.softmax(x)
+        probs = None
+        for lb in labels:
+            val = -self.nllloss(pred, lb)
+            probs = val if probs is None else probs+val
+            
+        prob = torch.sum(probs)
+        loss = -torch.log(prob)
+        return loss

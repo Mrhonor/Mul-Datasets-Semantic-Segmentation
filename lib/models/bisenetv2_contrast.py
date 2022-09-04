@@ -553,7 +553,9 @@ class BiSeNetV2(nn.Module):
         ## unify proj head
         self.proj_dim = self.configer.get('contrast', 'proj_dim')
         self.projHead = ProjectionHead(dim_in=128, proj_dim=self.proj_dim)
-        self.memory_size = self.configer.get('contrast', 'memory_size')
+        self.with_memory = self.configer.exist("contrast", "with_memory")
+        if self.with_memory:
+            self.memory_size = self.configer.get('contrast', 'memory_size')
 
         ## TODO: what is the number of mid chan ?
         self.head = nn.ModuleList([])
@@ -581,14 +583,14 @@ class BiSeNetV2(nn.Module):
         #         self.aux3[i].cuda()
         #         self.aux4[i].cuda()
         #         self.aux5_4[i].cuda()
+        if self.with_memory:
+            self.register_buffer("segment_queue", torch.randn(num_classes, self.memory_size, dim))
+            self.segment_queue = nn.functional.normalize(self.segment_queue, p=2, dim=2)
+            self.register_buffer("segment_queue_ptr", torch.zeros(num_classes, dtype=torch.long))
 
-        self.register_buffer("segment_queue", torch.randn(num_classes, self.memory_size, dim))
-        self.segment_queue = nn.functional.normalize(self.segment_queue, p=2, dim=2)
-        self.register_buffer("segment_queue_ptr", torch.zeros(num_classes, dtype=torch.long))
-
-        self.register_buffer("pixel_queue", torch.randn(num_classes, self.memory_size, dim))
-        self.pixel_queue = nn.functional.normalize(self.pixel_queue, p=2, dim=2)
-        self.register_buffer("pixel_queue_ptr", torch.zeros(num_classes, dtype=torch.long))
+            # self.register_buffer("pixel_queue", torch.randn(num_classes, self.memory_size, dim))
+            # self.pixel_queue = nn.functional.normalize(self.pixel_queue, p=2, dim=2)
+            # self.register_buffer("pixel_queue_ptr", torch.zeros(num_classes, dtype=torch.long))
 
 
         self.init_weights()

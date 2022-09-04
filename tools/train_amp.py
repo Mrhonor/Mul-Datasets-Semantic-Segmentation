@@ -186,7 +186,6 @@ def set_meters(config_file):
     return time_meter, loss_meter, loss_pre_meter, loss_aux_meters
 
 
-
 def train():
     n_dataset = 2
     logger = logging.getLogger()

@@ -28,8 +28,9 @@ from lib.ohem_ce_loss import OhemCELoss
 from lib.lr_scheduler import WarmupPolyLrScheduler
 from lib.meters import TimeMeter, AvgMeter
 from lib.logger import setup_logger, print_log_msg
-from lib.loss_contrast_mem import PixelContrastLoss
+from lib.loss_cross_datasets import CrossDatasetsLoss
 from tools.configer import Configer
+from lib.class_remap import ClassRemap
 
 
 ## fix all random seeds
@@ -65,6 +66,8 @@ cfg_a2d2 = set_cfg_from_file('/root/autodl-tmp/project/BiSeNet/configs/bisenetv2
 cfg_city = set_cfg_from_file('/root/autodl-tmp/project/BiSeNet/configs/bisenetv2_city.py')
 
 configer = Configer(args_parser=args)
+ClassRemaper = ClassRemap(configer=configer)
+
 
 def load_pretrained(net):
     state = torch.load(args.finetune_from, map_location='cpu')
@@ -188,7 +191,7 @@ def set_model_dist(net):
     return net
 
 def set_contrast_loss(configer):
-    return PixelContrastLoss(configer=configer)
+    return CrossDatasetsLoss(configer=configer)
 
 def set_meters(config_file):
     time_meter = TimeMeter(config_file.max_iter)
@@ -200,12 +203,14 @@ def set_meters(config_file):
 
 def dequeue_and_enqueue(configer, keys, labels,
                             segment_queue, segment_queue_ptr,
-                            pixel_queue, pixel_queue_ptr):
+                            pixel_queue=None, pixel_queue_ptr=None):
+    ## 更新memory bank
+    
     batch_size = keys.shape[0]
     feat_dim = keys.shape[1]
     network_stride = configer.get('network', 'stride')
     memory_size = configer.get('contrast', 'memory_size')
-    pixel_update_freq = configer.get('contrast', 'pixel_update_freq')
+    # pixel_update_freq = configer.get('contrast', 'pixel_update_freq')
 
     labels = labels[:, ::network_stride, ::network_stride]
 
@@ -224,20 +229,20 @@ def dequeue_and_enqueue(configer, keys, labels,
             segment_queue[lb, ptr, :] = nn.functional.normalize(feat.view(-1), p=2, dim=0)
             segment_queue_ptr[lb] = (segment_queue_ptr[lb] + 1) % memory_size
 
-            # pixel enqueue and dequeue
-            num_pixel = idxs.shape[0]
-            perm = torch.randperm(num_pixel)
-            K = min(num_pixel, pixel_update_freq)
-            feat = this_feat[:, perm[:K]]
-            feat = torch.transpose(feat, 0, 1)
-            ptr = int(pixel_queue_ptr[lb])
+            # # pixel enqueue and dequeue
+            # num_pixel = idxs.shape[0]
+            # perm = torch.randperm(num_pixel)
+            # K = min(num_pixel, pixel_update_freq)
+            # feat = this_feat[:, perm[:K]]
+            # feat = torch.transpose(feat, 0, 1)
+            # ptr = int(pixel_queue_ptr[lb])
 
-            if ptr + K >= memory_size:
-                pixel_queue[lb, -K:, :] = nn.functional.normalize(feat, p=2, dim=1)
-                pixel_queue_ptr[lb] = 0
-            else:
-                pixel_queue[lb, ptr:ptr + K, :] = nn.functional.normalize(feat, p=2, dim=1)
-                pixel_queue_ptr[lb] = (pixel_queue_ptr[lb] + 1) % memory_size
+            # if ptr + K >= memory_size:
+            #     pixel_queue[lb, -K:, :] = nn.functional.normalize(feat, p=2, dim=1)
+            #     pixel_queue_ptr[lb] = 0
+            # else:
+            #     pixel_queue[lb, ptr:ptr + K, :] = nn.functional.normalize(feat, p=2, dim=1)
+            #     pixel_queue_ptr[lb] = (pixel_queue_ptr[lb] + 1) % memory_size
 
 def reduce_tensor(inp):
     """
@@ -338,13 +343,13 @@ def train():
             
             with_embed = True if i >= contrast_warmup_iters else False
             if is_distributed():
-                out['pixel_queue'] = net.pixel_queue
-                out['pixel_queue_ptr'] = net.pixel_queue_ptr
+                # out['pixel_queue'] = net.pixel_queue
+                # out['pixel_queue_ptr'] = net.pixel_queue_ptr
                 out['segment_queue'] = net.segment_queue
                 out['segment_queue_ptr'] = net.segment_queue_ptr
             else:
-                out['pixel_queue'] = net.module.pixel_queue
-                out['pixel_queue_ptr'] = net.module.pixel_queue_ptr
+                # out['pixel_queue'] = net.module.pixel_queue
+                # out['pixel_queue_ptr'] = net.module.pixel_queue_ptr
                 out['segment_queue'] = net.module.segment_queue
                 out['segment_queue_ptr'] = net.module.segment_queue_ptr
             
@@ -352,11 +357,15 @@ def train():
             display_loss = reduce_tensor(backward_loss) / get_world_size()
 
         if with_memory and 'key' in out and 'lb_key' in out:
+            # dequeue_and_enqueue(configer, out['key'], out['lb_key'],
+            #                     segment_queue=net.module.segment_queue,
+            #                     segment_queue_ptr=net.module.segment_queue_ptr,
+            #                     pixel_queue=net.module.pixel_queue,
+            #                     pixel_queue_ptr=net.module.pixel_queue_ptr)
             dequeue_and_enqueue(configer, out['key'], out['lb_key'],
-                                segment_queue=net.module.segment_queue,
-                                segment_queue_ptr=net.module.segment_queue_ptr,
-                                pixel_queue=net.module.pixel_queue,
-                                pixel_queue_ptr=net.module.pixel_queue_ptr)
+                                segment_queue=out['segment_queue'],
+                                segment_queue_ptr=out['segment_queue_ptr'],
+                                )
 
 
         scaler.scale(backward_loss).backward()
