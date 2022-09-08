@@ -3,6 +3,7 @@ from lib.loss_helper import NLLPlusLoss
 
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 from lib.class_remap import ClassRemap
 
 class CrossDatasetsLoss(nn.Module):
@@ -43,7 +44,7 @@ class CrossDatasetsLoss(nn.Module):
             segment_queue = None
 
         seg_label = self.classRemapper.SegRemapping(target, dataset_id)
-        
+        contrast_lable = self.classRemapper.ContrastRemapping(target, embedding, segment_queue, dataset_id)
 
         pred = F.interpolate(input=logits, size=(h, w), mode='bilinear', align_corners=True)
         loss = self.seg_criterion(pred, seg_label)
@@ -54,7 +55,7 @@ class CrossDatasetsLoss(nn.Module):
             loss +=  sum(loss_aux)
 
         _, predict = torch.max(logits, 1)
-        loss_contrast = self.contrast_criterion(embedding, target, predict, segment_queue)
+        loss_contrast = self.contrast_criterion(embedding, contrast_lable, predict, segment_queue)
 
 
         return loss + self.loss_weight * loss_contrast

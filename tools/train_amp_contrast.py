@@ -202,47 +202,35 @@ def set_meters(config_file):
     return time_meter, loss_meter, loss_pre_meter, loss_aux_meters
 
 def dequeue_and_enqueue(configer, keys, labels,
-                            segment_queue, segment_queue_ptr,
-                            pixel_queue=None, pixel_queue_ptr=None):
+                            segment_queue, dataset_id):
     ## 更新memory bank
     
     batch_size = keys.shape[0]
     feat_dim = keys.shape[1]
     network_stride = configer.get('network', 'stride')
-    memory_size = configer.get('contrast', 'memory_size')
+    classRemapper = ClassRemap(configer=configer)
     # pixel_update_freq = configer.get('contrast', 'pixel_update_freq')
 
     labels = labels[:, ::network_stride, ::network_stride]
 
-    for bs in range(batch_size):
-        this_feat = keys[bs].contiguous().view(feat_dim, -1)
-        this_label = labels[bs].contiguous().view(-1)
-        this_label_ids = torch.unique(this_label)
-        this_label_ids = [x for x in this_label_ids if x > 0]
+    emb = keys.permute(1, 0, 2, 3)
+    lbs = labels.permute(1, 0, 2, 3)
+    this_feat = emb.contiguous().view(feat_dim, -1)
+    this_label = lbs.contiguous().view(-1)
+    this_label_ids = torch.unique(this_label)
+    this_label_ids = [x for x in this_label_ids if x > 0]
 
-        for lb in this_label_ids:
-            idxs = (this_label == lb).nonzero()
+    for lb in this_label_ids:
+        if len(classRemapper.getAnyClassRemap(lb, dataset_id)) > 1:
+            continue
+        else:
+            remap_lb = classRemapper.getAnyClassRemap(lb, dataset_id)[0]
 
-            # segment enqueue and dequeue
-            feat = torch.mean(this_feat[:, idxs], dim=1).squeeze(1)
-            ptr = int(segment_queue_ptr[lb])
-            segment_queue[lb, ptr, :] = nn.functional.normalize(feat.view(-1), p=2, dim=0)
-            segment_queue_ptr[lb] = (segment_queue_ptr[lb] + 1) % memory_size
+        idxs = (this_label == lb).nonzero()
 
-            # # pixel enqueue and dequeue
-            # num_pixel = idxs.shape[0]
-            # perm = torch.randperm(num_pixel)
-            # K = min(num_pixel, pixel_update_freq)
-            # feat = this_feat[:, perm[:K]]
-            # feat = torch.transpose(feat, 0, 1)
-            # ptr = int(pixel_queue_ptr[lb])
-
-            # if ptr + K >= memory_size:
-            #     pixel_queue[lb, -K:, :] = nn.functional.normalize(feat, p=2, dim=1)
-            #     pixel_queue_ptr[lb] = 0
-            # else:
-            #     pixel_queue[lb, ptr:ptr + K, :] = nn.functional.normalize(feat, p=2, dim=1)
-            #     pixel_queue_ptr[lb] = (pixel_queue_ptr[lb] + 1) % memory_size
+        # segment enqueue and dequeue
+        feat = torch.mean(this_feat[:, idxs], dim=1).squeeze(1)
+        segment_queue[lb] = nn.functional.normalize(feat.view(-1), p=2, dim=0)
 
 def reduce_tensor(inp):
     """

@@ -1,5 +1,5 @@
 {
-    "n_datasets": 2,
+    "n_datasets": 3,
     "dataset1": "CityScapes",
     "dataset2": "camvid",
     "class_remap1":{
@@ -34,6 +34,10 @@
       "8": [13, 14, 15, 16],
       "9": [11],
       "10": [12, 17, 18]
+    },
+    "class_remap3":{ 
+      "0": [1, 2],
+      "1": [0, 3]
     },
     "method": "fcn_segmentor",
     "data1": {

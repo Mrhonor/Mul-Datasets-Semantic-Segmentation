@@ -1,4 +1,7 @@
+import imp
 import torch
+import torch.nn as nn
+import torch.nn.functional as F
 
 class ClassRemap():
     def __init__(self, configer=None):
@@ -8,6 +11,7 @@ class ClassRemap():
             self.ignore_index = self.configer.get('loss', 'params')['ce_ignore_index']
         self.remapList = []
         self.maxMapNums = [] # 最大映射类别数
+        self.softmax = nn.Softmax(dim=1)
         self._unpack()
         
         
@@ -17,7 +21,7 @@ class ClassRemap():
         outLabels = []
         
         for i in range(0, self.maxMapNums[dataset_id]):
-            mask = torch.ones_like(labels) * self.ignore_lb
+            mask = torch.ones_like(labels) * self.ignore_index
             
             for k, v in self.remapList[dataset_id].items():
                 if len(v) <= i: 
@@ -29,17 +33,23 @@ class ClassRemap():
             
         return outLabels
         
-    def ContrastRemapping(self, label, embed, proto):
-        mask = torch.ones_like(labels) * self.ignore_lb
+    def ContrastRemapping(self, labels, embed, proto, dataset_id):
+        mask = torch.ones_like(labels) * self.ignore_index
         
         for k, v in self.remapList[dataset_id].items():
             if len(v) == 1: 
                 mask[labels==int(k)] = v[0]
             else:
+                # 在多映射情况下，找到内积最大的一项的标签
                 shapeEmbed = embed.permute(0,2,3,1)
-                mask[labels==int(k)] = torch.einsum('nd,cd->nc', shapeEmbed[labels==int(k)], proto)
-                
-  
+                shapeEmbed = F.normalize(shapeEmbed, p=2, dim=-1)
+                # n: b x h x w, d: dim, c:  num of class
+                simScore = torch.einsum('nd,cd->nc', shapeEmbed[labels==int(k)], proto[v])
+                MaxSimIndex = torch.max(simScore, dim=1)[1]
+                mask[labels==int(k)] = torch.Tensor(v)[MaxSimIndex]
+
+
+                  
         return mask
         
     
@@ -64,18 +74,27 @@ class ClassRemap():
             self.remapList.append(class_remap)
             self.maxMapNums.append(maxMapNum)
             
-
+    def getAnyClassRemap(self, lb_id, dataset_id):
+        return self.remapList[dataset_id][lb_id]
         
         
 if __name__ == "__main__":
     import sys
-    sys.path.insert(0, 'D:/Study/code/BiSeNet')
+    sys.path.insert(0, 'G:/computer_info/Study/BiSeNet')
     from tools.configer import *
+    from math import sin, cos
+
+    pi = 3.14
+
     configer = Configer(configs='../configs/bisenetv2_city.json')
     classRemap = ClassRemap(configer=configer)
-    labels = torch.Tensor([3, 1, 10])
-    print(classRemap.Remaping(labels, 0))
-    print(classRemap.Remaping(labels, 1))
+    labels = torch.Tensor([[[0, 1, 0], [1, 0, 1]]]) # 1 x 2 x 3
+    embed = torch.Tensor([[[[cos(pi/6), cos(pi/3), cos(2*pi/3)], [cos(7*pi/6), cos(3*pi/2), cos(5*pi/3)]], 
+                           [[sin(pi/6), sin(pi/3), sin(2*pi/3)], [sin(7*pi/6), sin(3*pi/2), sin(5*pi/3)]]]]) # 1 x 1 x 2 x 3
+    proto = torch.Tensor([[-1, 0], [1, 0], [0, 1], [0, -1]]) # 19 x 2
+    # print(classRemap.ContrastRemapping(labels, embed, proto, 2))
+    # print(classRemap.Remaping(labels, 1))
+    print(classRemap.getAnyClassRemap(3, 0))
     
 
     
