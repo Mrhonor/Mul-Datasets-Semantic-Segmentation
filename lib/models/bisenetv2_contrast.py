@@ -540,58 +540,58 @@ class SegmentHead(nn.Module):
         return feat
 
 
-class BiSeNetV2(nn.Module):
+class BiSeNetV2_Contrast(nn.Module):
 
     def __init__(self, configer, aux_mode='train'):
-        super(BiSeNetV2, self).__init__()
+        super(BiSeNetV2_Contrast, self).__init__()
         self.configer = configer
         self.aux_mode = aux_mode
-        self.n_bn = self.configer.get("network", "n_bn")
-        self.detail = DetailBranch(n_bn=n_bn)
-        self.segment = SegmentBranch(n_bn=n_bn)
-        self.bga = BGALayer(n_bn=n_bn)
+        self.num_unify_classes = self.configer.get("num_unify_classes")
+        self.n_bn = self.configer.get("n_bn")
+        self.detail = DetailBranch(n_bn=self.n_bn)
+        self.segment = SegmentBranch(n_bn=self.n_bn)
+        self.bga = BGALayer(n_bn=self.n_bn)
         ## unify proj head
         self.proj_dim = self.configer.get('contrast', 'proj_dim')
-        self.projHead = ProjectionHead(dim_in=128, proj_dim=self.proj_dim)
-        self.with_memory = self.configer.exist("contrast", "with_memory")
+        if configer.get('use_sync_bn'):
+            self.projHead = ProjectionHead(dim_in=128, proj_dim=self.proj_dim, bn_type='torchsyncbn')
+        else:
+            self.projHead = ProjectionHead(dim_in=128, proj_dim=self.proj_dim, bn_type='torchbn')
+        self.with_memory = self.configer.exists("contrast", "with_memory")
         if self.with_memory:
             self.memory_size = self.configer.get('contrast', 'memory_size')
 
-        ## TODO: what is the number of mid chan ?
-        self.head = nn.ModuleList([])
-        if self.aux_mode == 'train':
-            self.aux2 = nn.ModuleList([])
-            self.aux3 = nn.ModuleList([])
-            self.aux4 = nn.ModuleList([])
-            self.aux5_4 = nn.ModuleList([])
+        # ## TODO: what is the number of mid chan ?
+        # self.head = nn.ModuleList([])
+        # if self.aux_mode == 'train':
+        #     self.aux2 = nn.ModuleList([])
+        #     self.aux3 = nn.ModuleList([])
+        #     self.aux4 = nn.ModuleList([])
+        #     self.aux5_4 = nn.ModuleList([])
 
         ## 多数据集的头
         # self.n_head = len(other_n_classes) + 1
         # if self.n_head > 1:
-        for n in other_n_classes:
-            self.head.append(SegmentHead(128, 1024, n, up_factor=8, aux=False))
-            if self.aux_mode == 'train':
-                self.aux2.append(SegmentHead(16, 128, n, up_factor=4))
-                self.aux3.append(SegmentHead(32, 128, n, up_factor=8))
-                self.aux4.append(SegmentHead(64, 128, n, up_factor=16))
-                self.aux5_4.append(SegmentHead(128, 128, n, up_factor=32))
-        # # 所有list的模型都需要手动.cuda()
-        # for i in range(0, n_bn):
-        #     self.head[i].cuda()
+        # for n in other_n_classes:
+        #     self.head.append(SegmentHead(128, 1024, n, up_factor=8, aux=False))
         #     if self.aux_mode == 'train':
-        #         self.aux2[i].cuda()
-        #         self.aux3[i].cuda()
-        #         self.aux4[i].cuda()
-        #         self.aux5_4[i].cuda()
-        if self.with_memory:
-            self.register_buffer("segment_queue", torch.randn(num_classes, self.memory_size, dim))
-            self.segment_queue = nn.functional.normalize(self.segment_queue, p=2, dim=2)
-            self.register_buffer("segment_queue_ptr", torch.zeros(num_classes, dtype=torch.long))
+        #         self.aux2.append(SegmentHead(16, 128, n, up_factor=4))
+        #         self.aux3.append(SegmentHead(32, 128, n, up_factor=8))
+        #         self.aux4.append(SegmentHead(64, 128, n, up_factor=16))
+        #         self.aux5_4.append(SegmentHead(128, 128, n, up_factor=32))
 
-            # self.register_buffer("pixel_queue", torch.randn(num_classes, self.memory_size, dim))
-            # self.pixel_queue = nn.functional.normalize(self.pixel_queue, p=2, dim=2)
-            # self.register_buffer("pixel_queue_ptr", torch.zeros(num_classes, dtype=torch.long))
-
+        # if self.with_memory:
+        
+        self.head = SegmentHead(128, 1024, self.num_unify_classes, up_factor=8, aux=False)
+        if self.aux_mode == 'train':
+            self.aux2 = SegmentHead(16, 128, self.num_unify_classes, up_factor=8, aux=False)
+            self.aux3 = SegmentHead(32, 128, self.num_unify_classes, up_factor=8, aux=False)
+            self.aux4 = SegmentHead(64, 128, self.num_unify_classes, up_factor=8, aux=False)
+            self.aux5_4 = SegmentHead(128, 128, self.num_unify_classes, up_factor=8, aux=False)
+        
+        self.register_buffer("segment_queue", torch.randn(self.num_unify_classes, self.proj_dim))
+        self.segment_queue = nn.functional.normalize(self.segment_queue, p=2, dim=1)
+        
 
         self.init_weights()
 
@@ -610,62 +610,35 @@ class BiSeNetV2(nn.Module):
         
         # logits = [logit(feat_head[i]) for i, logit in enumerate(self.head)]
         ## 修改后支持单张图片输入
-        if (len(other_x) == 0):
-            logits = [self.head[dataset](feat_head[0])]
-        else:
-            logits = [self.head[i](feat_head[i]) for i in range(0, len(other_x) + 1)]
-        ## TODO 修改下面的多数据集模式
-        if (len(other_x) == 0):
-            if self.aux_mode == 'train':
-                # logits_aux2 = self.aux2(feat2)
-                # logits_aux3 = self.aux3(feat3)
-                # logits_aux4 = self.aux4(feat4)
-                # logits_aux5_4 = self.aux5_4(feat5_4)
-                ## 多数据集模式
-                ## 修改后支持单张图片输入
-                logits_aux2 = [self.aux2[dataset](feat2[0])]
-                logits_aux3 = [self.aux3[dataset](feat3[0])]
-                logits_aux4 = [self.aux4[dataset](feat4[0])]
-                logits_aux5_4 = [self.aux5_4[dataset](feat5_4[0])]
-                
-                emb = [self.proj_head(feat_head[0])]
-                if lb_q is None:
-                    return {'seg': [logits, logits_aux2, logits_aux3, logits_aux4, logits_aux5_4], 'embed': emb}
-                else:
-                    return {'seg': [logits, logits_aux2, logits_aux3, logits_aux4, logits_aux5_4], 'embed': emb, 'key': emb.detach(), 'lb_key': lb_q.detach()}
-                # return logits, logits_aux2, logits_aux3, logits_aux4, logits_aux5_4
-            elif self.aux_mode == 'eval':
-                return logits,
-            elif self.aux_mode == 'pred':
-                # pred = logits.argmax(dim=1)
-                pred = [logit.argmax(dim=1) for logit in logits]
-                return pred
-            else:
-                raise NotImplementedError
-        else:
-            if self.aux_mode == 'train':
-                # logits_aux2 = self.aux2(feat2)
-                # logits_aux3 = self.aux3(feat3)
-                # logits_aux4 = self.aux4(feat4)
-                # logits_aux5_4 = self.aux5_4(feat5_4)
-                ## 多数据集模式
-                ## 修改后支持单张图片输入
-                logits_aux2 = [self.aux2[i](feat2[i]) for i in range(0, len(other_x) + 1)]
-                logits_aux3 = [self.aux3[i](feat3[i]) for i in range(0, len(other_x) + 1)]
-                logits_aux4 = [self.aux4[i](feat4[i]) for i in range(0, len(other_x) + 1)]
-                logits_aux5_4 = [self.aux5_4[i](feat5_4[i]) for i in range(0, len(other_x) + 1)]
-                
-                emb = [self.proj_head(feat_head[i]) for i in range(0, len(other_x) + 1)]
+
+        logits = [self.head(feat_head[i]) for i in range(0, len(other_x) + 1)]
+
+        if self.aux_mode == 'train':
+            # logits_aux2 = self.aux2(feat2)
+            # logits_aux3 = self.aux3(feat3)
+            # logits_aux4 = self.aux4(feat4)
+            # logits_aux5_4 = self.aux5_4(feat5_4)
+            ## 多数据集模式
+            ## 修改后支持单张图片输入
+            logits_aux2 = [self.aux2(feat2[i]) for i in range(0, len(other_x) + 1)]
+            logits_aux3 = [self.aux3(feat3[i]) for i in range(0, len(other_x) + 1)]
+            logits_aux4 = [self.aux4(feat4[i]) for i in range(0, len(other_x) + 1)]
+            logits_aux5_4 = [self.aux5_4(feat5_4[i]) for i in range(0, len(other_x) + 1)]
+            
+            emb = [self.projHead(feat_head[i]) for i in range(0, len(other_x) + 1)]
+            if lb_q is None:
                 return {'seg': [logits, logits_aux2, logits_aux3, logits_aux4, logits_aux5_4], 'embed': emb}
-                # return logits, logits_aux2, logits_aux3, logits_aux4, logits_aux5_4
-            elif self.aux_mode == 'eval':
-                return logits,
-            elif self.aux_mode == 'pred':
-                # pred = logits.argmax(dim=1)
-                pred = [logit.argmax(dim=1) for logit in logits]
-                return pred
             else:
-                raise NotImplementedError
+                return {'seg': [logits, logits_aux2, logits_aux3, logits_aux4, logits_aux5_4], 'embed': emb, 'key': emb.detach(), 'lb_key': lb_q.detach()}
+            # return logits, logits_aux2, logits_aux3, logits_aux4, logits_aux5_4
+        elif self.aux_mode == 'eval':
+            return logits,
+        elif self.aux_mode == 'pred':
+            # pred = logits.argmax(dim=1)
+            pred = [logit.argmax(dim=1) for logit in logits]
+            return pred
+        else:
+            raise NotImplementedError
 
     def init_weights(self):
         for name, module in self.named_modules():

@@ -1,4 +1,3 @@
-import imp
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -11,6 +10,7 @@ class ClassRemap():
             self.ignore_index = self.configer.get('loss', 'params')['ce_ignore_index']
         self.remapList = []
         self.maxMapNums = [] # 最大映射类别数
+        self.num_unify_classes = self.configer.get('num_unify_classes')
         self.softmax = nn.Softmax(dim=1)
         self._unpack()
         
@@ -33,8 +33,16 @@ class ClassRemap():
             
         return outLabels
         
-    def ContrastRemapping(self, labels, embed, proto, dataset_id):
+    def ContrastRemapping(self, target, embed, proto, dataset_id):
+        network_stride = self.configer.get('network', 'stride')
+        labels = target[:, ::network_stride, ::network_stride]
+        B, H, W = labels.shape
+        print(labels.shape)
+        print(embed.shape)
         mask = torch.ones_like(labels) * self.ignore_index
+        weight_mask = torch.zeros([B, H, W, self.num_unify_classes], dtype=torch.float32)
+        if embed.is_cuda:
+            weight_mask = weight_mask.cuda()
         
         for k, v in self.remapList[dataset_id].items():
             if len(v) == 1: 
@@ -47,10 +55,14 @@ class ClassRemap():
                 simScore = torch.einsum('nd,cd->nc', shapeEmbed[labels==int(k)], proto[v])
                 MaxSimIndex = torch.max(simScore, dim=1)[1]
                 mask[labels==int(k)] = torch.Tensor(v)[MaxSimIndex]
-
-
+                
+                expend_vector = torch.zeros([simScore.shape[0], self.num_unify_classes], dtype=torch.float32)
+                expend_vector[:, v] = self.softmax(simScore)
+                
+                weight_mask[labels==int(k)] = expend_vector
+                
                   
-        return mask
+        return mask, weight_mask
         
     
     def _unpack(self):
@@ -80,7 +92,7 @@ class ClassRemap():
         
 if __name__ == "__main__":
     import sys
-    sys.path.insert(0, 'G:/computer_info/Study/BiSeNet')
+    sys.path.insert(0, 'D:/Study/code/BiSeNet')
     from tools.configer import *
     from math import sin, cos
 
@@ -88,13 +100,13 @@ if __name__ == "__main__":
 
     configer = Configer(configs='../configs/bisenetv2_city.json')
     classRemap = ClassRemap(configer=configer)
-    labels = torch.Tensor([[[0, 1, 0], [1, 0, 1]]]) # 1 x 2 x 3
-    embed = torch.Tensor([[[[cos(pi/6), cos(pi/3), cos(2*pi/3)], [cos(7*pi/6), cos(3*pi/2), cos(5*pi/3)]], 
-                           [[sin(pi/6), sin(pi/3), sin(2*pi/3)], [sin(7*pi/6), sin(3*pi/2), sin(5*pi/3)]]]]) # 1 x 1 x 2 x 3
-    proto = torch.Tensor([[-1, 0], [1, 0], [0, 1], [0, -1]]) # 19 x 2
-    # print(classRemap.ContrastRemapping(labels, embed, proto, 2))
+    labels = torch.tensor([[[0, 1, 0], [1, 0, 1]]], dtype=torch.float) # 1 x 2 x 3
+    embed = torch.tensor([[[[cos(pi/4), cos(pi/3), cos(2*pi/3)], [cos(7*pi/6), cos(3*pi/2), cos(5*pi/3)]], 
+                           [[sin(pi/4), sin(pi/3), sin(2*pi/3)], [sin(7*pi/6), sin(3*pi/2), sin(5*pi/3)]]]], requires_grad=True) # 1 x 1 x 2 x 3
+    proto = torch.tensor([[-1, 0], [1, 0], [0, 1], [0, -1]], dtype=torch.float) # 19 x 2
+    print(classRemap.ContrastRemapping(labels, embed, proto, 2))
     # print(classRemap.Remaping(labels, 1))
-    print(classRemap.getAnyClassRemap(3, 0))
+    # print(classRemap.getAnyClassRemap(3, 0))
     
 
     

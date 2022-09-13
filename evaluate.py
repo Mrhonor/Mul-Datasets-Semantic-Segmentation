@@ -34,7 +34,6 @@ from lib.a2d2_to_cam import a2d2_to_Camid
 def get_round_size(size, divisor=32):
     return [math.ceil(el / divisor) * divisor for el in size]
 
-
 class MscEvalV0(object):
 
     def __init__(self, scales=(0.5, ), flip=False, ignore_label=255):
@@ -53,11 +52,9 @@ class MscEvalV0(object):
             N, _, H, W = label.shape
             label = label.squeeze(1).cuda()
             size = label.size()[-2:]
-            # probs = torch.zeros(
-            #         (N, n_classes, H, W), dtype=torch.float32).cuda().detach()
-            # city to camvid
             probs = torch.zeros(
-                    (N, 19, H, W), dtype=torch.float32).cuda().detach()
+                    (N, n_classes, H, W), dtype=torch.float32).cuda().detach()
+
             for scale in self.scales:
                 sH, sW = int(scale * H), int(scale * W)
                 sH, sW = get_round_size((sH, sW))
@@ -66,22 +63,19 @@ class MscEvalV0(object):
 
                 im_sc = im_sc.cuda()
                 
-                logits = net(im_sc, 1)[0][0]
-                # logits = net(im_sc)[0][1] ## for precise bn
+                logits = net(im_sc)['seg'][0]
                 logits = F.interpolate(logits, size=size,
                         mode='bilinear', align_corners=True)
                 probs += torch.softmax(logits, dim=1)
                 if self.flip:
                     im_sc = torch.flip(im_sc, dims=(3, ))
-                    logits = net(im_sc, 1)[0][0]
-                    # logits = net(im_sc)[0][1] ## for precise bn
+                    logits = net(im_sc)['seg'][0]
                     logits = torch.flip(logits, dims=(3, ))
                     logits = F.interpolate(logits, size=size,
                             mode='bilinear', align_corners=True)
                     probs += torch.softmax(logits, dim=1)
             preds = torch.argmax(probs, dim=1)
-            # preds = a2d2_to_Camid(preds)
-            preds = Cityid_to_Camid(preds)
+
             keep = label != self.ignore_label
             hist += torch.tensor(np.bincount(
                 label.cpu().numpy()[keep.cpu().numpy()] * n_classes + preds.cpu().numpy()[keep.cpu().numpy()],
@@ -90,7 +84,6 @@ class MscEvalV0(object):
         if dist.is_initialized():
             dist.all_reduce(hist, dist.ReduceOp.SUM)
         ious = hist.diag() / (hist.sum(dim=0) + hist.sum(dim=1) - hist.diag())
-        print(ious)
         miou = np.nanmean(ious.detach().cpu().numpy())
         return miou.item()
 
@@ -628,6 +621,34 @@ def evaluate_cdcl(cfg_a2d2, cfg_city, cfg_cam, weight_pth):
 #     # miou_tab[1] = ['CityScapes'] + miou_tab[1]
 #     # heads = ['dataset'] + heads
 #     # logger.info(tabulate(miou_tab, headers=heads, tablefmt='orgtbl'))
+
+@torch.no_grad()
+def eval_model_contrast(configer, net):
+    org_aux = net.aux_mode
+    net.aux_mode = 'eval'
+
+    is_dist = dist.is_initialized()
+    
+    cfg_city = set_cfg_from_file(configer.get('dataset1'))
+    cfg_cam  = set_cfg_from_file(configer.get('dataset2'))
+
+    dl_cam = get_data_loader(cfg_cam, mode='val', distributed=is_dist)
+    dl_city = get_data_loader(cfg_city, mode='val', distributed=is_dist)
+    net.eval()
+
+    heads, mious = [], []
+    logger = logging.getLogger()
+
+    single_scale = MscEvalV0((1., ), False)
+    mIOU_cam = single_scale(net, dl_cam, cfg_cam.n_cats)
+    mIOU_city = single_scale(net, dl_city, cfg_city.n_cats)
+
+    heads.append('single_scale')
+    mious.append(mIOU)
+    logger.info('Cam single mIOU is: %s\nCityScapes single mIOU is: %s\n', mIOU_cam, mIOU_city)
+
+    net.aux_mode = org_aux
+    return heads, mious
 
 
 def parse_args():

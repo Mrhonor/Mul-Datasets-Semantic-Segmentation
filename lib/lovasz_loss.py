@@ -6,9 +6,9 @@ import torch.nn.functional as F
 from torch.autograd import Variable
 
 from torch.nn import BCELoss
-from lib.loss.aaf import losses as lossx
+import lib.Aff_losses as lossx
 
-from lib.utils.tools.logger import Logger as Log
+from tools.logger import Logger as Log
 
 
 # weights

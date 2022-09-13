@@ -115,10 +115,13 @@ class PixelContrastLoss(nn.Module, ABC):
         anchor_feature = torch.cat(torch.unbind(X_anchor, dim=1), dim=0)
 
         if queue is not None:
-            X_contrast, y_contrast = self._sample_negative(queue)
-            y_contrast = y_contrast.contiguous().view(-1, 1)
+            # X_contrast, y_contrast = self._sample_negative(queue)
+            # y_contrast = y_contrast.contiguous().view(-1, 1)
+            # contrast_count = 1
+            # contrast_feature = X_contrast
+            y_contrast = y_anchor
             contrast_count = 1
-            contrast_feature = X_contrast
+            contrast_feature = queue
         else:
             y_contrast = y_anchor
             contrast_count = n_view
@@ -174,6 +177,32 @@ class PixelContrastLoss(nn.Module, ABC):
         loss = self._contrastive(feats_, labels_, queue=queue)
         return loss
 
+
+# class PixelContrastLossWithWeight(PixelContrastLoss):
+#     def __init__(self, configer=None):
+#         super(PixelContrastLossWithWeight, self).__init__(configer)
+        
+#     def forward(self, feats, labels=None, predict=None, queue=None):
+#         labels = labels.unsqueeze(1).float().clone()
+#         labels = torch.nn.functional.interpolate(labels,
+#                                                  (feats.shape[2], feats.shape[3]), mode='nearest')
+#         labels = labels.squeeze(1).long()
+#         assert labels.shape[-1] == feats.shape[-1], '{} {}'.format(labels.shape, feats.shape)
+
+#         batch_size = feats.shape[0]
+
+#         labels = labels.contiguous().view(batch_size, -1)
+#         predict = predict.contiguous().view(batch_size, -1)
+#         feats = feats.permute(0, 2, 3, 1)
+#         feats = feats.contiguous().view(feats.shape[0], -1, feats.shape[-1])
+
+#         loss = self._contrastive(feats, labels, queue=queue)
+#         # feats_, labels_ = self._hard_anchor_sampling(feats, labels, predict)
+
+#         # loss = self._contrastive(feats_, labels_, queue=queue)
+#         return loss
+        
+    
 
 class ContrastCELoss(nn.Module, ABC):
     def __init__(self, configer=None):
@@ -278,3 +307,5 @@ class ContrastAuxCELoss(nn.Module, ABC):
             return loss + self.loss_weight * loss_contrast
 
         return loss
+
+

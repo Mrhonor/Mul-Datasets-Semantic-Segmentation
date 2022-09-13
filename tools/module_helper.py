@@ -19,7 +19,7 @@ try:
 except ImportError:
     from urllib.request import urlretrieve
 
-from lib.utils.tools.logger import Logger as Log
+from tools.logger import Logger as Log
 from torch.nn.functional import interpolate
 
 

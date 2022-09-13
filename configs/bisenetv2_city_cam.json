@@ -1,0 +1,84 @@
+{
+    "model_name": "bisenetv2_contrast",
+    "n_datasets": 2,
+    "num_unify_classes": 19,
+    "dataset1": "configs/bisenetv2_city.py",
+    "dataset2": "configs/bisenetv2_cam.py",
+    "n_bn": 1,
+    "class_remap1":{
+      "0": [0], 
+      "1": [1],
+      "2": [2], 
+      "3": [3, 4],
+      "4": [5],
+      "5": [6],
+      "6": [7],
+      "7": [8],
+      "8": [9],
+      "9": [10],
+      "10": [11],
+      "11": [12],
+      "12": [13],
+      "13": [14],
+      "14": [15],
+      "15": [16],
+      "16": [17],
+      "17": [18]
+    }, 
+    "class_remap2":{ 
+      "0": [10],
+      "1": [2],
+      "2": [5],
+      "3": [0],
+      "4": [1],
+      "5": [8],
+      "6": [6, 7],
+      "7": [4],
+      "8": [13, 14, 15, 16],
+      "9": [11],
+      "10": [12, 17, 18],
+      "11": [3]
+    },
+    "loss":{
+      "with_aux": true,
+      "aux_num": 4
+    },
+    "lr": {
+      "lr_start": 5e-2,
+      "weight_decay": 5e-4,
+      "warmup_iters": 1000,
+      "max_iter": 150000
+    },
+    "train": {
+      "scales": [0.25, 2.0],
+      "cropsize": [512, 1024],
+      "finetune": false,
+      "finetune_frome": "none"
+    },
+    "val": {
+      "scales": [0.5, 0.75, 1.0, 1.25, 1.5, 1.75],
+      "cropsize": [512, 1024]
+    },
+    "use_fp16": false,
+    "use_sync_bn": false,
+    "contrast": {
+      "proj_dim": 128,
+      "temperature": 0.07,
+      "base_temperature": 0.07,
+      "max_samples": 1024,
+      "max_views": 1,
+      "stride": 8,
+      "warmup_iters": 1000,
+      "loss_weight": 1,
+      "use_rmi": false,
+      "use_lovasz": false,
+      "with_memory": false,
+      "memory_size": 5000,
+      "pixel_update_freq": 10,
+      "coefficient": 0.999
+    },
+    "res_save_pth": "res/",
+    "network": {
+      "stride": 8
+    }
+}

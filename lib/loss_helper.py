@@ -20,6 +20,7 @@ import numpy as np
 import torch.nn.functional as F
 from torch.autograd import Variable
 # from lib.utils.tools.logger import Logger as Log
+
 from lib.rmi_loss import RMILoss
 
 from lib.lovasz_loss import lovasz_softmax_flat, flatten_probas
@@ -451,7 +452,34 @@ class NLLPlusLoss(nn.Module):
         for lb in labels:
             val = -self.nllloss(pred, lb)
             probs = val if probs is None else probs+val
+        
+        # prob = torch.sum(probs)
+        loss = -torch.log(probs)
+        return loss
+    
+class WeightedNLLPlusLoss(NLLPlusLoss):
+    def __init__(self, configer=None):
+        super(WeightedNLLPlusLoss, self).__init__(configer=configer)
+        
+    def forward(self, x, weighted_mask):
+        # labels: k x batch size x H x W, weighted_mask: batch size x H x W x num_of_class
+        batch_size, n, h, w = x.shape
+        
+        pred = self.softmax(x)
+        probs = torch.einsum('bnhw,bhwn->bhw', pred, weighted_mask)
+        
             
-        prob = torch.sum(probs)
+        prob = torch.sum(probs) / (batch_size * h * w)
         loss = -torch.log(prob)
         return loss
+
+if __name__ == "__main__":
+    a = torch.randn(2, 3, 2, 2)
+    
+    b = torch.tensor([[[[0,0],[1,1]],[[2,2],[0,0]]]])
+    weighted_mask = torch.tensor([[[[0.5,0,0.5], [0.3,0.7,0]],[[0.3,0.4,0.3], [0,1,0]]],[[[0,0,1], [0,0,1]],[[1,0,0],[1,0,0]]]], dtype=torch.float)
+    loss1 = NLLPlusLoss()
+    loss2 = WeightedNLLPlusLoss()
+    print(loss1(a,b))
+    print(loss2(a,weighted_mask))
+    print(loss2(a,weighted_mask).item())

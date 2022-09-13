@@ -24,6 +24,7 @@ class RandomResizedCrop(object):
             return im_lb
 
         im, lb = im_lb['im'], im_lb['lb']
+
         assert im.shape[:2] == lb.shape[:2]
 
         crop_h, crop_w = self.size
