@@ -9,7 +9,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from lib.loss_helper import FSAuxCELoss, FSRMILoss, FSCELoss, FSCELOVASZLoss
-# from lib.utils.tools.logger import Logger as Log
+from tools.logger import Logger as Log
 
 
 class PixelContrastLoss(nn.Module, ABC):
@@ -20,9 +20,7 @@ class PixelContrastLoss(nn.Module, ABC):
         self.temperature = self.configer.get('contrast', 'temperature')
         self.base_temperature = self.configer.get('contrast', 'base_temperature')
 
-        self.ignore_label = -1
-        if self.configer.exists('loss', 'params') and 'ce_ignore_index' in self.configer.get('loss', 'params'):
-            self.ignore_label = self.configer.get('loss', 'params')['ce_ignore_index']
+        self.ignore_label = self.configer.get('loss', 'ignore_index')
 
         self.max_samples = self.configer.get('contrast', 'max_samples')
         self.max_views = self.configer.get('contrast', 'max_views')
@@ -90,59 +88,69 @@ class PixelContrastLoss(nn.Module, ABC):
         return X_, y_
 
     def _sample_negative(self, Q):
-        class_num, cache_size, feat_size = Q.shape
+        class_num, feat_size = Q.shape
 
-        X_ = torch.zeros((class_num * cache_size, feat_size)).float().cuda()
-        y_ = torch.zeros((class_num * cache_size, 1)).float().cuda()
+        X_ = torch.zeros((class_num, feat_size)).float().cuda()
+        y_ = torch.zeros((class_num, 1)).float().cuda()
         sample_ptr = 0
         for ii in range(class_num):
-            if ii == 0: continue
-            this_q = Q[ii, :cache_size, :]
+            # if ii == 0: continue
+            this_q = Q[ii, :]
 
-            X_[sample_ptr:sample_ptr + cache_size, ...] = this_q
-            y_[sample_ptr:sample_ptr + cache_size, ...] = ii
-            sample_ptr += cache_size
+            X_[sample_ptr, ...] = this_q
+            y_[sample_ptr, ...] = ii
+            sample_ptr += 1
 
         return X_, y_
 
     def _contrastive(self, X_anchor, y_anchor, queue=None):
         anchor_num, n_view = X_anchor.shape[0], X_anchor.shape[1]
 
+
         y_anchor = y_anchor.contiguous().view(-1, 1)
+
         anchor_count = n_view
         # X_anchor:(3 dim) total_classes x n_view x feat_dim 
         # anchor_feature:(2 dim) (total_classes x n_view) x feat_dim
         anchor_feature = torch.cat(torch.unbind(X_anchor, dim=1), dim=0)
 
         if queue is not None:
-            # X_contrast, y_contrast = self._sample_negative(queue)
-            # y_contrast = y_contrast.contiguous().view(-1, 1)
-            # contrast_count = 1
-            # contrast_feature = X_contrast
-            y_contrast = y_anchor
+            X_contrast, y_contrast = self._sample_negative(queue)
+            y_contrast = y_contrast.contiguous().view(-1, 1)
             contrast_count = 1
-            contrast_feature = queue
+            contrast_feature = X_contrast
+            # y_contrast = y_anchor
+            # contrast_count = 1
+            # contrast_feature = queue
         else:
             y_contrast = y_anchor
             contrast_count = n_view
             # contrast_feature = torch.cat(torch.unbind(X_anchor, dim=1), dim=0)
             contrast_feature = anchor_feature
 
+        # mask: total_classes x num_of_class
         mask = torch.eq(y_anchor, y_contrast.T).float().cuda()
 
+        # anchor_dot_contrast : n x num_of_class
         anchor_dot_contrast = torch.div(torch.matmul(anchor_feature, contrast_feature.T),
                                         self.temperature)
         logits_max, _ = torch.max(anchor_dot_contrast, dim=1, keepdim=True)
+        # logits : n x num_of_class
         logits = anchor_dot_contrast - logits_max.detach()
 
         mask = mask.repeat(anchor_count, contrast_count)
+        
         neg_mask = 1 - mask
 
-        logits_mask = torch.ones_like(mask).scatter_(1,
-                                                     torch.arange(anchor_num * anchor_count).view(-1, 1).cuda(),
-                                                     0)
-
-        mask = mask * logits_mask
+        ## 用于回避自己作为自己的正例，但使用memory bank的情况可以不用
+        # mask = mask * logits_mask
+        # # 去掉对角线
+        # logits_mask = torch.ones_like(mask).scatter_(1,
+        #                                              torch.arange(anchor_num * anchor_count).view(-1, 1).cuda(),
+        #                                              0)
+        
+        
+        # mask = mask * logits_mask
 
         neg_logits = torch.exp(logits) * neg_mask
         neg_logits = neg_logits.sum(1, keepdim=True)
@@ -176,6 +184,7 @@ class PixelContrastLoss(nn.Module, ABC):
 
         loss = self._contrastive(feats_, labels_, queue=queue)
         return loss
+
 
 
 # class PixelContrastLossWithWeight(PixelContrastLoss):

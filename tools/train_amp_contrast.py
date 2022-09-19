@@ -3,6 +3,7 @@
 
 # from asyncio.windows_events import NULL # 有bug，去掉改为别的判定
 
+from cgi import print_directory
 import sys
 sys.path.insert(0, '.')
 import os
@@ -23,7 +24,6 @@ import torch.cuda.amp as amp
 from lib.models import model_factory
 from configs import set_cfg_from_file
 from lib.get_dataloader import get_data_loader
-from evaluate import eval_model
 from lib.ohem_ce_loss import OhemCELoss
 from lib.lr_scheduler import WarmupPolyLrScheduler
 from lib.meters import TimeMeter, AvgMeter
@@ -31,7 +31,7 @@ from lib.logger import setup_logger, print_log_msg
 from lib.loss_cross_datasets import CrossDatasetsLoss
 from tools.configer import Configer
 from lib.class_remap import ClassRemap
-
+from evaluate import eval_model_contrast
 
 ## fix all random seeds
 #  torch.manual_seed(123)
@@ -53,7 +53,7 @@ def is_distributed():
 def parse_args():
     parse = argparse.ArgumentParser()
     parse.add_argument('--local_rank', dest='local_rank', type=int, default=-1,)
-    parse.add_argument('--port', dest='port', type=int, default=12345,)
+    parse.add_argument('--port', dest='port', type=int, default=16745,)
     parse.add_argument('--finetune_from', type=str, default=None,)
     parse.add_argument('--config', dest='config', type=str, default='configs/bisenetv2_city_cam.json',)
     return parse.parse_args()
@@ -205,35 +205,45 @@ def set_meters(configer):
     return time_meter, loss_meter, loss_pre_meter, loss_aux_meters, loss_contrast_meter
 
 def dequeue_and_enqueue(configer, keys, labels,
-                            segment_queue, dataset_id):
+                            segment_queue, iter, dataset_id):
     ## 更新memory bank
     
     batch_size = keys.shape[0]
     feat_dim = keys.shape[1]
     network_stride = configer.get('network', 'stride')
     coefficient = configer.get('contrast', 'coefficient')
+    warmup_iter = configer.get('lr', 'warmup_iters')
+    ignore_index = configer.get('loss', 'ignore_index')
+    if iter < warmup_iter:
+        coefficient = coefficient * iter / warmup_iter
+    
     classRemapper = ClassRemap(configer=configer)
     
     labels = labels[:, ::network_stride, ::network_stride]
 
     emb = keys.permute(1, 0, 2, 3)
-    lbs = labels.permute(1, 0, 2, 3)
+    # lbs = labels.permute(1, 0, 2, 3)
     this_feat = emb.contiguous().view(feat_dim, -1)
-    this_label = lbs.contiguous().view(-1)
+    this_label = labels.contiguous().view(-1)
     this_label_ids = torch.unique(this_label)
-    this_label_ids = [x for x in this_label_ids if x > 0]
+    this_label_ids = [x for x in this_label_ids if x >= 0 and x != ignore_index]
 
-    for lb in this_label_ids:
+    for lb_id in this_label_ids:
+        lb = lb_id.item()
+
+        idxs = (this_label == lb).nonzero()
+        # segment enqueue and dequeue
+        feat = torch.mean(this_feat[:, idxs], dim=1).squeeze(1)
+
         if len(classRemapper.getAnyClassRemap(lb, dataset_id)) > 1:
-            continue
+            remap_lb = lb
         else:
             remap_lb = classRemapper.getAnyClassRemap(lb, dataset_id)[0]
 
-        idxs = (this_label == lb).nonzero()
-
-        # segment enqueue and dequeue
-        feat = torch.mean(this_feat[:, idxs], dim=1).squeeze(1)
-        segment_queue[lb] = coefficient * segment_queue[lb] + (1 - coefficient) * nn.functional.normalize(feat.view(-1), p=2, dim=0)
+        # print(nn.functional.normalize(feat.view(-1), p=2, dim=0))
+        # print(segment_queue[lb])
+            
+        segment_queue[remap_lb] = coefficient * segment_queue[remap_lb] + (1 - coefficient) * nn.functional.normalize(feat, p=2, dim=0)
 
 def reduce_tensor(inp):
     """
@@ -330,13 +340,7 @@ def train():
             # logits, *logits_aux = out['seg']
             # emb = out['embed']
             
-            
-            
             with_embed = True if i >= contrast_warmup_iters else False
-            if is_distributed():
-                out['segment_queue'] = net.module.segment_queue
-            else:
-                out['segment_queue'] = net.segment_queue
 
             cam_size = im_cam.shape[0]
             city_size = im_city.shape[0]
@@ -359,26 +363,53 @@ def train():
                     city_out[k] = emb[perm_index.sort()[1]][:city_size] 
                     cam_out[k] = emb[perm_index.sort()[1]][city_size:city_size+cam_size]
             
-            if i < configer.get('contrast', 'warmup_iters'):
-                backward_loss, loss_seg, loss_contrast, loss_aux = contrast_losses[CAM_ID](cam_out, lb_cam, CAM_ID, True) \
-                                                            + contrast_losses[CITY_ID](city_out, lb_city, CITY_ID, True)
+            if is_distributed():
+                city_out['segment_queue'] = net.module.segment_queue
+                cam_out['segment_queue'] = net.module.segment_queue
             else:
-                backward_loss, loss_seg, loss_contrast, loss_aux = contrast_losses[CAM_ID](cam_out, lb_cam, CAM_ID, False) \
-                                                            + contrast_losses[CITY_ID](city_out, lb_city, CITY_ID, False)
+                city_out['segment_queue'] = net.segment_queue
+                cam_out['segment_queue'] = net.segment_queue
+            
+            if i < configer.get('contrast', 'warmup_iters'):
+                backward_loss0, loss_seg0, loss_aux0 = contrast_losses[CITY_ID](city_out, lb_city, CITY_ID, True)
+                backward_loss1, loss_seg1, loss_aux1 = contrast_losses[CAM_ID](cam_out, lb_cam, CAM_ID, True)
+                
+                
+                backward_loss =  backward_loss0 + backward_loss1
+                loss_seg =  loss_seg0 + loss_seg1
+                loss_aux = [aux0 + aux1 for aux0, aux1 in zip(loss_aux0, loss_aux1)]
+                # print(backward_loss0)
+                # print(backward_loss1)
+                # print(loss_seg0)
+                # print(loss_seg1)
+                # print(loss_aux0)
+                # print(loss_aux1)
+                # print("***************************")
+            else:
+                backward_loss0, loss_seg0, loss_aux0, loss_contrast0 = contrast_losses[CITY_ID](city_out, lb_city, CITY_ID, False)
+                backward_loss1, loss_seg1, loss_aux1, loss_contrast1 = contrast_losses[CAM_ID](cam_out, lb_cam, CAM_ID, False)
+                
+                
+                backward_loss =  backward_loss0 + backward_loss1
+                loss_seg =  loss_seg0 + loss_seg1
+                loss_aux = [aux0 + aux1 for aux0, aux1 in zip(loss_aux0, loss_aux1)]
+                loss_contrast = loss_contrast0 + loss_contrast1
+                
             
             # display_loss = reduce_tensor(backward_loss) / get_world_size()
 
-        if with_memory and 'key' in out and 'lb_key' in out:
+        if with_memory and 'key' in out:
             # dequeue_and_enqueue(configer, out['key'], out['lb_key'],
             #                     segment_queue=net.module.segment_queue,
             #                     segment_queue_ptr=net.module.segment_queue_ptr,
             #                     pixel_queue=net.module.pixel_queue,
             #                     pixel_queue_ptr=net.module.pixel_queue_ptr)
-            dequeue_and_enqueue(configer, cam_out['key'], cam_out['lb_key'],
-                                cam_out['segment_queue'], CAM_ID)
-            
-            dequeue_and_enqueue(configer, city_out['key'], city_out['lb_key'],
-                                city_out['segment_queue'], CITY_ID)
+
+            dequeue_and_enqueue(configer, city_out['key'], lb_city.detach(),
+                                city_out['segment_queue'], i, CITY_ID)
+
+            dequeue_and_enqueue(configer, cam_out['key'], lb_cam.detach(),
+                                cam_out['segment_queue'], i, CAM_ID)
 
 
         scaler.scale(backward_loss).backward()
@@ -395,25 +426,32 @@ def train():
         # loss_pre_meter.update(loss_pre.item())
         loss_pre_meter.update(loss_seg.item()) 
         _ = [mter.update(lss.item()) for mter, lss in zip(loss_aux_meters, loss_aux)]
-        loss_contrast_meter.update(loss_contrast.item)
+        if i >= configer.get('contrast', 'warmup_iters'):
+            loss_contrast_meter.update(loss_contrast.item())
 
         ## print training log message
         if (i + 1) % 100 == 0:
             lr = lr_schdr.get_lr()
             lr = sum(lr) / len(lr)
             print_log_msg(
-                i, a2d2_epoch, city_epoch, cfg.max_iter+starti, lr, time_meter, loss_meter,
+                i, cam_epoch, city_epoch, configer.get('lr', 'max_iter')+starti, lr, time_meter, loss_meter,
                 loss_pre_meter, loss_aux_meters, loss_contrast_meter)
 
         if (i + 1) % 1000 == 0:
-            save_pth = osp.join(cfg.respth, 'model_{}.pth'.format(i+1))
+            save_pth = osp.join(configer.get('res_save_pth'), 'model_{}.pth'.format(i+1))
             logger.info('\nsave models to {}'.format(save_pth))
+
+            if is_distributed():
+                heads, mious = eval_model_contrast(configer, net.module)
+            else:
+                heads, mious = eval_model_contrast(configer, net)
+            logger.info(tabulate([mious, ], headers=heads, tablefmt='orgtbl'))
+            
             if is_distributed():
                 state = net.module.state_dict()
             else:
                 state = net.state_dict()
-            
-            if dist.get_rank() == 0: torch.save(state, save_pth)
+            torch.save(state, save_pth)
 
         lr_schdr.step()
 

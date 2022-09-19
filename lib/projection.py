@@ -6,10 +6,11 @@ from tools.module_helper import ModuleHelper
 
 
 class ProjectionHead(nn.Module):
-    def __init__(self, dim_in, proj_dim=256, proj='convmlp', bn_type='torchsyncbn'):
+    def __init__(self, dim_in, proj_dim=256, up_factor=8, proj='convmlp', bn_type='torchsyncbn'):
         super(ProjectionHead, self).__init__()
 
         # Log.info('proj_dim: {}'.format(proj_dim))
+        self.up_sample = nn.Upsample(scale_factor=up_factor, mode='bilinear', align_corners=True)
 
         if proj == 'linear':
             self.proj = nn.Conv2d(dim_in, proj_dim, kernel_size=1)
@@ -21,4 +22,6 @@ class ProjectionHead(nn.Module):
             )
 
     def forward(self, x):
-        return F.normalize(self.proj(x), p=2, dim=1)
+        feat = self.up_sample(x)
+
+        return F.normalize(self.proj(feat), p=2, dim=1)

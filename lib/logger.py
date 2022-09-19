@@ -23,24 +23,26 @@ def setup_logger(name, logpth):
     logging.root.addHandler(logging.StreamHandler())
 
 
-def print_log_msg(it, A2D2_epoch, CityScapes_epoch, max_iter, lr, time_meter, loss_meter, loss_pre_meter,
-        loss_aux_meters):
+def print_log_msg(it, Cam_epoch, CityScapes_epoch, max_iter, lr, time_meter, loss_meter, loss_pre_meter,
+        loss_aux_meters, loss_contrast_meter):
     t_intv, eta = time_meter.get()
     loss_avg, _ = loss_meter.get()
     loss_pre_avg, _ = loss_pre_meter.get()
+    loss_contrast, _ = loss_contrast_meter.get()
     loss_aux_avg = ', '.join(['{}: {:.4f}'.format(el.name, el.get()[0]) for el in loss_aux_meters])
     msg = ', '.join([
         'iter: {it}/{max_it}',
-        'A2D2_epoch: {A2D2_epoch}',
+        'Cam_epoch: {Cam_epoch}',
         'CityScapes_epoch: {CityScapes_epoch}',
         'lr: {lr:4f}',
         'eta: {eta}',
         'time: {time:.2f}',
         'loss: {loss:.4f}',
         'loss_pre: {loss_pre:.4f}',
+        'loss_contrast: {loss_contrast:.4f}'
     ]).format(
         it=it+1,
-        A2D2_epoch=A2D2_epoch,
+        Cam_epoch=Cam_epoch,
         CityScapes_epoch=CityScapes_epoch,
         max_it=max_iter,
         lr=lr,
@@ -48,6 +50,7 @@ def print_log_msg(it, A2D2_epoch, CityScapes_epoch, max_iter, lr, time_meter, lo
         eta=eta,
         loss=loss_avg,
         loss_pre=loss_pre_avg,
+        loss_contrast = loss_contrast
         )
     msg += ', ' + loss_aux_avg
     logger = logging.getLogger()

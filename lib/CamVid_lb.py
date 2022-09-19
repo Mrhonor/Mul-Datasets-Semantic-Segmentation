@@ -123,7 +123,10 @@ class CamVid(Dataset):
         impth = self.img_paths[idx]
         lbpth = self.lb_paths[idx]
         # print(impth)
+
+
         img = cv2.imread(impth)[:, :, ::-1]
+        
         # img = cv2.resize(img, (960, 768))
         label = np.array(Image.open(lbpth).convert('RGB'))
         label = self.convert_labels(label, impth)

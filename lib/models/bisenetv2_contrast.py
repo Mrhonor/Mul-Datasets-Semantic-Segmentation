@@ -518,7 +518,7 @@ class SegmentHead(nn.Module):
         self.conv1 = ConvBNReLU(mid_chan, mid_chan2, 3, stride=1)
 
         self.conv2 = nn.Conv2d(mid_chan2, out_chan, 1, 1, 0, bias=True)
-        self.up_sample2 = nn.Upsample(scale_factor=up_factor, mode='bilinear', align_corners=False)
+        self.up_sample2 = nn.Upsample(scale_factor=up_factor, mode='bilinear', align_corners=True)
         
 
     def forward(self, x):
@@ -551,12 +551,13 @@ class BiSeNetV2_Contrast(nn.Module):
         self.detail = DetailBranch(n_bn=self.n_bn)
         self.segment = SegmentBranch(n_bn=self.n_bn)
         self.bga = BGALayer(n_bn=self.n_bn)
+        self.network_stride = self.configer.get('network', 'stride')
         ## unify proj head
         self.proj_dim = self.configer.get('contrast', 'proj_dim')
         if configer.get('use_sync_bn'):
-            self.projHead = ProjectionHead(dim_in=128, proj_dim=self.proj_dim, bn_type='torchsyncbn')
+            self.projHead = ProjectionHead(dim_in=128, proj_dim=self.proj_dim, up_factor=self.network_stride, bn_type='torchsyncbn')
         else:
-            self.projHead = ProjectionHead(dim_in=128, proj_dim=self.proj_dim, bn_type='torchbn')
+            self.projHead = ProjectionHead(dim_in=128, proj_dim=self.proj_dim, up_factor=self.network_stride, bn_type='torchbn')
         self.with_memory = self.configer.exists("contrast", "with_memory")
         if self.with_memory:
             self.memory_size = self.configer.get('contrast', 'memory_size')
@@ -590,12 +591,13 @@ class BiSeNetV2_Contrast(nn.Module):
             self.aux5_4 = SegmentHead(128, 128, self.num_unify_classes, up_factor=8, aux=False)
         
         self.register_buffer("segment_queue", torch.randn(self.num_unify_classes, self.proj_dim))
+
         self.segment_queue = nn.functional.normalize(self.segment_queue, p=2, dim=1)
-        
+
 
         self.init_weights()
 
-    def forward(self, x, dataset=0, lb_q = None, *other_x):
+    def forward(self, x, dataset=0, *other_x):
         # x = x.cuda()
         ## other_x 其他数据集的输入
         # size = x.size()[2:]
@@ -626,13 +628,14 @@ class BiSeNetV2_Contrast(nn.Module):
             logits_aux5_4 = [self.aux5_4(feat5_4[i]) for i in range(0, len(other_x) + 1)]
             
             emb = [self.projHead(feat_head[i]) for i in range(0, len(other_x) + 1)]
-            if lb_q is None:
-                return {'seg': [logits, logits_aux2, logits_aux3, logits_aux4, logits_aux5_4], 'embed': emb}
+            if self.with_memory:
+                return {'seg': [logits, logits_aux2, logits_aux3, logits_aux4, logits_aux5_4], 'embed': emb, 'key': [embed.detach() for embed in emb]}
             else:
-                return {'seg': [logits, logits_aux2, logits_aux3, logits_aux4, logits_aux5_4], 'embed': emb, 'key': emb.detach(), 'lb_key': lb_q.detach()}
+                return {'seg': [logits, logits_aux2, logits_aux3, logits_aux4, logits_aux5_4], 'embed': emb}
+                
             # return logits, logits_aux2, logits_aux3, logits_aux4, logits_aux5_4
         elif self.aux_mode == 'eval':
-            return logits,
+            return logits
         elif self.aux_mode == 'pred':
             # pred = logits.argmax(dim=1)
             pred = [logit.argmax(dim=1) for logit in logits]

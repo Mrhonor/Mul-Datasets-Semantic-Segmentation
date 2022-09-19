@@ -436,12 +436,10 @@ class NLLPlusLoss(nn.Module):
         super(NLLPlusLoss, self).__init__()
         
         self.configer = configer
-        ignore_index = -1
-        if self.configer.exists('loss', 'params') and 'ce_ignore_index' in self.configer.get('loss', 'params'):
-            ignore_index = self.configer.get('loss', 'params')['ce_ignore_index']
+        self.ignore_index = self.configer.get('loss', 'ignore_index')
         
         self.softmax = nn.Softmax(dim=1)
-        self.nllloss = nn.NLLLoss(ignore_index=ignore_index, reduction='mean')
+        self.nllloss = nn.NLLLoss(ignore_index=self.ignore_index, reduction='mean')
     
     def forward(self, x, labels):
         # labels为 k x batch size x H x W

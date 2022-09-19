@@ -1,7 +1,9 @@
 #!/usr/bin/python
 # -*- encoding: utf-8 -*-
 
+
 import sys
+
 sys.path.insert(0, '.')
 import os
 import os.path as osp
@@ -28,8 +30,11 @@ from lib.logger import setup_logger
 from lib.get_dataloader import get_data_loader
 from lib.city_to_cam import Cityid_to_Camid
 from lib.a2d2_to_cam import a2d2_to_Camid
+from lib.class_remap import ClassRemap
+from tools.configer import Configer
 
-
+CITY_ID = 0
+CAM_ID = 1
 
 def get_round_size(size, divisor=32):
     return [math.ceil(el / divisor) * divisor for el in size]
@@ -75,8 +80,70 @@ class MscEvalV0(object):
                             mode='bilinear', align_corners=True)
                     probs += torch.softmax(logits, dim=1)
             preds = torch.argmax(probs, dim=1)
+            
 
             keep = label != self.ignore_label
+            hist += torch.tensor(np.bincount(
+                label.cpu().numpy()[keep.cpu().numpy()] * n_classes + preds.cpu().numpy()[keep.cpu().numpy()],
+                minlength=n_classes ** 2
+            )).cuda().view(n_classes, n_classes)
+        if dist.is_initialized():
+            dist.all_reduce(hist, dist.ReduceOp.SUM)
+        ious = hist.diag() / (hist.sum(dim=0) + hist.sum(dim=1) - hist.diag())
+        miou = np.nanmean(ious.detach().cpu().numpy())
+        return miou.item()
+
+class MscEvalV0_Contrast(object):
+
+    def __init__(self, configer, scales=(0.5, ), flip=False, ignore_label=255):
+        self.configer = configer
+        self.num_unify_classes = self.configer.get('num_unify_classes')
+        self.class_Remaper = ClassRemap(configer=self.configer)
+        self.scales = scales
+        self.flip = flip
+        self.ignore_label = ignore_label
+
+    def __call__(self, net, dl, n_classes, dataset_id):
+        ## evaluate
+        hist = torch.zeros(n_classes, n_classes).cuda().detach()
+        if dist.is_initialized() and dist.get_rank() != 0:
+            diter = enumerate(dl)
+        else:
+            diter = enumerate(tqdm(dl))
+        for i, (imgs, label) in diter:
+            N, _, H, W = label.shape
+            label = label.squeeze(1).cuda()
+            size = label.size()[-2:]
+            probs = torch.zeros(
+                    (N, self.num_unify_classes, H, W), dtype=torch.float32).cuda().detach()
+
+            for scale in self.scales:
+                sH, sW = int(scale * H), int(scale * W)
+                sH, sW = get_round_size((sH, sW))
+                im_sc = F.interpolate(imgs, size=(sH, sW),
+                        mode='bilinear', align_corners=True)
+
+                im_sc = im_sc.cuda()
+                
+                logits = net(im_sc)[0]
+                logits = F.interpolate(logits, size=size,
+                        mode='bilinear', align_corners=True)
+                probs += torch.softmax(logits, dim=1)
+                if self.flip:
+                    im_sc = torch.flip(im_sc, dims=(3, ))
+                    logits = net(im_sc)[0]
+                    logits = torch.flip(logits, dims=(3, ))
+                    logits = F.interpolate(logits, size=size,
+                            mode='bilinear', align_corners=True)
+                    probs += torch.softmax(logits, dim=1)
+            preds = torch.argmax(probs, dim=1)
+
+            if dataset_id == CAM_ID:
+                # CityScapes数据集一一对应不需要逆映射
+                preds = self.class_Remaper.ReverseSegRemap(preds, dataset_id)
+
+            keep = label != self.ignore_label
+
             hist += torch.tensor(np.bincount(
                 label.cpu().numpy()[keep.cpu().numpy()] * n_classes + preds.cpu().numpy()[keep.cpu().numpy()],
                 minlength=n_classes ** 2
@@ -639,12 +706,14 @@ def eval_model_contrast(configer, net):
     heads, mious = [], []
     logger = logging.getLogger()
 
-    single_scale = MscEvalV0((1., ), False)
-    mIOU_cam = single_scale(net, dl_cam, cfg_cam.n_cats)
-    mIOU_city = single_scale(net, dl_city, cfg_city.n_cats)
+    single_scale = MscEvalV0_Contrast(configer, (1., ), False)
+    
+    mIOU_city = single_scale(net, dl_city, 19, CITY_ID)
+    mIOU_cam = single_scale(net, dl_cam, cfg_cam.n_cats, CAM_ID)
 
     heads.append('single_scale')
-    mious.append(mIOU)
+    mious.append(mIOU_cam)
+    mious.append(mIOU_city)
     logger.info('Cam single mIOU is: %s\nCityScapes single mIOU is: %s\n', mIOU_cam, mIOU_city)
 
     net.aux_mode = org_aux

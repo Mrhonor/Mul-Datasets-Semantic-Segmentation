@@ -41,7 +41,8 @@
     },
     "loss":{
       "with_aux": true,
-      "aux_num": 4
+      "aux_num": 4,
+      "ignore_index": 255
     },
     "lr": {
       "lr_start": 5e-2,
@@ -65,14 +66,14 @@
       "proj_dim": 128,
       "temperature": 0.07,
       "base_temperature": 0.07,
-      "max_samples": 1024,
-      "max_views": 1,
+      "max_samples": 4096,
+      "max_views": 1000,
       "stride": 8,
-      "warmup_iters": 1000,
+      "warmup_iters": 0,
       "loss_weight": 1,
       "use_rmi": false,
       "use_lovasz": false,
-      "with_memory": false,
+      "with_memory": true,
       "memory_size": 5000,
       "pixel_update_freq": 10,
       "coefficient": 0.999
