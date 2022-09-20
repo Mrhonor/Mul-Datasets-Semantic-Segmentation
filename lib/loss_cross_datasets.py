@@ -1,4 +1,5 @@
 from cmath import inf
+from traceback import print_tb
 from lib.loss_contrast_mem import PixelContrastLoss
 from lib.loss_helper import NLLPlusLoss, WeightedNLLPlusLoss
 
@@ -56,7 +57,7 @@ class CrossDatasetsLoss(nn.Module):
             pred = F.interpolate(input=logits, size=(h, w), mode='bilinear', align_corners=True)
 
             loss_seg = self.seg_criterion(pred, weight_mask)
-
+            loss = loss_seg
             loss_aux = None
             if self.with_aux:
                 pred_aux = [F.interpolate(input=logit, size=(h, w), mode='bilinear', align_corners=True) for logit in logits_aux]
@@ -80,18 +81,30 @@ class CrossDatasetsLoss(nn.Module):
             loss_contrast = self.contrast_criterion(embedding, contrast_lable, predict, segment_queue)
 
             loss_seg = self.seg_criterion(pred, weight_mask)
-            
+            loss = loss_seg
             loss_aux = None
+            
             if self.with_aux:
                 aux_weight_mask = self.classRemapper.GetEqWeightMask(target, dataset_id)
                 pred_aux = [F.interpolate(input=logit, size=(h, w), mode='bilinear', align_corners=True) for logit in logits_aux]
                 loss_aux = [aux_criterion(aux, aux_weight_mask) for aux, aux_criterion in zip(pred_aux, self.segLoss_aux)]
                 for i, aux in enumerate(loss_aux):
-                    if aux.item() is inf or torch.nan:
+                    if torch.isinf(aux).any() or torch.isnan(aux).any():
                         print(aux)
-                        print(pred_aux[i])
+                        print(i)
+                        print(aux_weight_mask)
+                        # print(pred_aux[i])
                 
                 loss = loss_seg + sum(loss_aux)
+                
+            # print(loss_seg)
+            if torch.isinf(loss_seg).any() or torch.isnan(loss_seg).any():
+                print("inf or nan")
+                # print(pred)
+                if torch.isinf(pred).any():
+                    print("!")
+                # print("weight_mask:")
+                # print(weight_mask)
             
             return loss + self.loss_weight * loss_contrast, loss_seg, loss_aux, loss_contrast
     

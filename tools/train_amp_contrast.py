@@ -144,7 +144,7 @@ def set_model(configer):
 
     if configer.get('train', 'finetune'):
         logger.info(f"load pretrained weights from {configer.get('train', 'finetune_from')}")
-        net.load_state_dict(torch.load(configer.get('train', 'finetune_frome'), map_location='cpu'))
+        net.load_state_dict(torch.load(configer.get('train', 'finetune_from'), map_location='cpu'))
     if configer.get('use_sync_bn'): 
         net = nn.SyncBatchNorm.convert_sync_batchnorm(net)
     net.cuda()
@@ -295,8 +295,9 @@ def train():
     # for it, (im, lb) in enumerate(dl):
     starti = 0
 
-    contrast_warmup_iters = configer.get("contrast", "warmup_iters")
+    contrast_warmup_iters = configer.get("lr", "warmup_iters")
     with_memory = configer.exists('contrast', 'with_memory')
+    with_aux = configer.get('loss', 'with_aux')
 
     for i in range(starti, configer.get('lr','max_iter') + starti):
         try:
@@ -370,14 +371,15 @@ def train():
                 city_out['segment_queue'] = net.segment_queue
                 cam_out['segment_queue'] = net.segment_queue
             
-            if i < configer.get('contrast', 'warmup_iters'):
+            if i < configer.get('lr', 'warmup_iters'):
                 backward_loss0, loss_seg0, loss_aux0 = contrast_losses[CITY_ID](city_out, lb_city, CITY_ID, True)
                 backward_loss1, loss_seg1, loss_aux1 = contrast_losses[CAM_ID](cam_out, lb_cam, CAM_ID, True)
                 
                 
                 backward_loss =  backward_loss0 + backward_loss1
                 loss_seg =  loss_seg0 + loss_seg1
-                loss_aux = [aux0 + aux1 for aux0, aux1 in zip(loss_aux0, loss_aux1)]
+                if with_aux:
+                    loss_aux = [aux0 + aux1 for aux0, aux1 in zip(loss_aux0, loss_aux1)]
                 # print(backward_loss0)
                 # print(backward_loss1)
                 # print(loss_seg0)
@@ -392,7 +394,9 @@ def train():
                 
                 backward_loss =  backward_loss0 + backward_loss1
                 loss_seg =  loss_seg0 + loss_seg1
-                loss_aux = [aux0 + aux1 for aux0, aux1 in zip(loss_aux0, loss_aux1)]
+                if with_aux:
+                    loss_aux = [aux0 + aux1 for aux0, aux1 in zip(loss_aux0, loss_aux1)]
+                    
                 loss_contrast = loss_contrast0 + loss_contrast1
                 
             
@@ -425,8 +429,10 @@ def train():
         loss_meter.update(backward_loss.item())
         # loss_pre_meter.update(loss_pre.item())
         loss_pre_meter.update(loss_seg.item()) 
-        _ = [mter.update(lss.item()) for mter, lss in zip(loss_aux_meters, loss_aux)]
-        if i >= configer.get('contrast', 'warmup_iters'):
+        if with_aux:
+            _ = [mter.update(lss.item()) for mter, lss in zip(loss_aux_meters, loss_aux)]
+            
+        if i >= configer.get('lr', 'warmup_iters'):
             loss_contrast_meter.update(loss_contrast.item())
 
         ## print training log message
@@ -446,6 +452,7 @@ def train():
             else:
                 heads, mious = eval_model_contrast(configer, net)
             logger.info(tabulate([mious, ], headers=heads, tablefmt='orgtbl'))
+            net.train()
             
             if is_distributed():
                 state = net.module.state_dict()
@@ -479,12 +486,12 @@ def train():
 
 def main():
     torch.cuda.set_device(args.local_rank)
-    # dist.init_process_group(
-    #     backend='nccl',
-    #     init_method='tcp://127.0.0.1:{}'.format(args.port),
-    #     world_size=torch.cuda.device_count(),
-    #     rank=args.local_rank
-    # )
+    dist.init_process_group(
+        backend='nccl',
+        init_method='tcp://127.0.0.1:{}'.format(args.port),
+        world_size=torch.cuda.device_count(),
+        rank=args.local_rank
+    )
     if not osp.exists(configer.get('res_save_pth')): os.makedirs(configer.get('res_save_pth'))
 
     setup_logger(f"{configer.get('model_name')}-train", configer.get('res_save_pth'))

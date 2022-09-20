@@ -112,6 +112,7 @@ class MscEvalV0_Contrast(object):
             diter = enumerate(tqdm(dl))
         for i, (imgs, label) in diter:
             N, _, H, W = label.shape
+
             label = label.squeeze(1).cuda()
             size = label.size()[-2:]
             probs = torch.zeros(
@@ -148,6 +149,7 @@ class MscEvalV0_Contrast(object):
                 label.cpu().numpy()[keep.cpu().numpy()] * n_classes + preds.cpu().numpy()[keep.cpu().numpy()],
                 minlength=n_classes ** 2
             )).cuda().view(n_classes, n_classes)
+                
         if dist.is_initialized():
             dist.all_reduce(hist, dist.ReduceOp.SUM)
         ious = hist.diag() / (hist.sum(dim=0) + hist.sum(dim=1) - hist.diag())
@@ -722,32 +724,40 @@ def eval_model_contrast(configer, net):
 
 def parse_args():
     parse = argparse.ArgumentParser()
-    parse.add_argument('--local_rank', dest='local_rank',
-                       type=int, default=-1,)
-    parse.add_argument('--weight-path', dest='weight_pth', type=str,
-                       default='model_final.pth',)
-    parse.add_argument('--port', dest='port', type=int, default=12346,)
-    parse.add_argument('--config', dest='config', type=str,
-            default='configs/bisenetv2.py',)
+    parse.add_argument('--local_rank', dest='local_rank', type=int, default=-1,)
+    parse.add_argument('--port', dest='port', type=int, default=16745,)
+    parse.add_argument('--finetune_from', type=str, default=None,)
+    parse.add_argument('--config', dest='config', type=str, default='configs/bisenetv2_city_cam.json',)
     return parse.parse_args()
 
 
 def main():
     # 修改后用于多数据集
     args = parse_args()
-    cfg_a2d2 = set_cfg_from_file('configs/bisenetv2_a2d2.py')
-    cfg_city = set_cfg_from_file('configs/bisenetv2_city.py')
-    cfg_cam  = set_cfg_from_file('configs/bisenetv2_cam.py')
-    if not args.local_rank == -1:
-        torch.cuda.set_device(args.local_rank)
-        dist.init_process_group(backend='nccl',
-        init_method='tcp://127.0.0.1:{}'.format(args.port),
-        world_size=torch.cuda.device_count(),
-        rank=args.local_rank
-    )
-    if not osp.exists(cfg_a2d2.respth): os.makedirs(cfg_a2d2.respth)
-    setup_logger('{}-eval'.format(cfg_a2d2.model_type), cfg_a2d2.respth)
-    evaluate_cdcl(cfg_a2d2, cfg_city, cfg_cam, args.weight_pth)
+    configer = Configer(configs=args.config)
+
+
+    cfg_city = set_cfg_from_file(configer.get('dataset1'))
+    cfg_cam  = set_cfg_from_file(configer.get('dataset2'))
+
+    # if not args.local_rank == -1:
+    #     torch.cuda.set_device(args.local_rank)
+    #     dist.init_process_group(backend='nccl',
+    #     init_method='tcp://127.0.0.1:{}'.format(args.port),
+    #     world_size=torch.cuda.device_count(),
+    #     rank=args.local_rank
+    # )
+    if not osp.exists(configer.get('res_save_pth')): os.makedirs(configer.get('res_save_pth'))
+    setup_logger('{}-eval'.format(configer.get('model_name')), configer.get('res_save_pth'))
+    
+    logger = logging.getLogger()
+    net = model_factory[configer.get('model_name')](configer)
+    net.cuda()
+    net.aux_mode = 'eval'
+    net.eval()
+    
+    heads, mious = eval_model_contrast(configer, net)
+    logger.info(tabulate([mious, ], headers=heads, tablefmt='orgtbl'))
     
     
 

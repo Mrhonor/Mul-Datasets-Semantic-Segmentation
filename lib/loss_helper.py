@@ -469,6 +469,24 @@ class WeightedNLLPlusLoss(NLLPlusLoss):
             
         prob = torch.sum(probs) / (batch_size * h * w)
         loss = -torch.log(prob)
+        
+        if torch.isinf(loss).any():
+            print("loss is inf")
+            print(prob)
+            print(torch.sum(probs))
+            print(torch.sum(pred))
+            print(torch.sum(weighted_mask))
+            print((batch_size * h * w))
+            print(pred[0,:,0,0])
+            print(weighted_mask[0,0,0,:])
+            
+        if torch.isinf(prob).any():
+            print("prob is inf")
+            print(batch_size, h, w)
+        
+        if torch.isinf(probs).any():
+            print("probs any is inf")
+            
         return loss
 
 if __name__ == "__main__":

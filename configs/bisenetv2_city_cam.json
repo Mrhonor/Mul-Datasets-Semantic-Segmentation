@@ -31,7 +31,7 @@
       "2": [5],
       "3": [0],
       "4": [1],
-      "5": [8],
+      "5": [8, 9],
       "6": [6, 7],
       "7": [4],
       "8": [13, 14, 15, 16],
@@ -45,16 +45,16 @@
       "ignore_index": 255
     },
     "lr": {
-      "lr_start": 5e-2,
+      "lr_start": 1e-2,
       "weight_decay": 5e-4,
-      "warmup_iters": 1000,
-      "max_iter": 150000
+      "warmup_iters": 0,
+      "max_iter": 90000
     },
     "train": {
       "scales": [0.25, 2.0],
       "cropsize": [512, 1024],
-      "finetune": false,
-      "finetune_frome": "none"
+      "finetune": true,
+      "finetune_from": "res/last_model_63000.pth"
     },
     "val": {
       "scales": [0.5, 0.75, 1.0, 1.25, 1.5, 1.75],
@@ -69,14 +69,14 @@
       "max_samples": 4096,
       "max_views": 1000,
       "stride": 8,
-      "warmup_iters": 0,
-      "loss_weight": 1,
+      "loss_weight": 0.3,
       "use_rmi": false,
       "use_lovasz": false,
       "with_memory": true,
       "memory_size": 5000,
       "pixel_update_freq": 10,
-      "coefficient": 0.999
+      "coefficient": 0.999,
+      "upsample": "before"
     },
     "res_save_pth": "res/",
     "network": {
