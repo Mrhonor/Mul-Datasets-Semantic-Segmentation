@@ -72,12 +72,15 @@ class CrossDatasetsLoss(nn.Module):
 
             return loss, loss_seg, loss_aux
         else:
-            
             contrast_lable, weight_mask = self.classRemapper.ContrastRemapping(target, embedding, segment_queue, dataset_id)
             pred = F.interpolate(input=logits, size=(h, w), mode='bilinear', align_corners=True)
 
             _, predict = torch.max(logits, 1)
 
+            if self.configer.get('contrast', 'upsample') is False:
+                network_stride = self.configer.get('network', 'stride')
+                predict = predict[:, ::network_stride, ::network_stride]
+            
             loss_contrast = self.contrast_criterion(embedding, contrast_lable, predict, segment_queue)
 
             loss_seg = self.seg_criterion(pred, weight_mask)
@@ -88,23 +91,10 @@ class CrossDatasetsLoss(nn.Module):
                 aux_weight_mask = self.classRemapper.GetEqWeightMask(target, dataset_id)
                 pred_aux = [F.interpolate(input=logit, size=(h, w), mode='bilinear', align_corners=True) for logit in logits_aux]
                 loss_aux = [aux_criterion(aux, aux_weight_mask) for aux, aux_criterion in zip(pred_aux, self.segLoss_aux)]
-                for i, aux in enumerate(loss_aux):
-                    if torch.isinf(aux).any() or torch.isnan(aux).any():
-                        print(aux)
-                        print(i)
-                        print(aux_weight_mask)
-                        # print(pred_aux[i])
+
                 
                 loss = loss_seg + sum(loss_aux)
                 
-            # print(loss_seg)
-            if torch.isinf(loss_seg).any() or torch.isnan(loss_seg).any():
-                print("inf or nan")
-                # print(pred)
-                if torch.isinf(pred).any():
-                    print("!")
-                # print("weight_mask:")
-                # print(weight_mask)
             
             return loss + self.loss_weight * loss_contrast, loss_seg, loss_aux, loss_contrast
     

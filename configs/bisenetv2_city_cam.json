@@ -45,15 +45,15 @@
       "ignore_index": 255
     },
     "lr": {
-      "lr_start": 1e-2,
+      "lr_start": 4e-2,
       "weight_decay": 5e-4,
-      "warmup_iters": 0,
-      "max_iter": 90000
+      "warmup_iters": 1000,
+      "max_iter": 100000
     },
     "train": {
-      "scales": [0.25, 2.0],
+      "scales": [0.5, 1.0, 2.0],
       "cropsize": [512, 1024],
-      "finetune": true,
+      "finetune": false,
       "finetune_from": "res/last_model_63000.pth"
     },
     "val": {
@@ -76,7 +76,7 @@
       "memory_size": 5000,
       "pixel_update_freq": 10,
       "coefficient": 0.999,
-      "upsample": "before"
+      "upsample": true
     },
     "res_save_pth": "res/",
     "network": {

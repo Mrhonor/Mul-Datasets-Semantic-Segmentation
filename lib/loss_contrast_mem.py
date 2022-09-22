@@ -33,9 +33,10 @@ class PixelContrastLoss(nn.Module, ABC):
         for ii in range(batch_size):
             this_y = y_hat[ii]
             this_classes = torch.unique(this_y)
+            
             this_classes = [x for x in this_classes if x != self.ignore_label]
             this_classes = [x for x in this_classes if (this_y == x).nonzero().shape[0] > self.max_views]
-
+            
             classes.append(this_classes)
             total_classes += len(this_classes)
 
@@ -45,7 +46,7 @@ class PixelContrastLoss(nn.Module, ABC):
         ## 每个锚点保留个数
         n_view = self.max_samples // total_classes
         n_view = min(n_view, self.max_views)
-
+        
         X_ = torch.zeros((total_classes, n_view, feat_dim), dtype=torch.float).cuda()
         y_ = torch.zeros(total_classes, dtype=torch.float).cuda()
 
@@ -179,7 +180,7 @@ class PixelContrastLoss(nn.Module, ABC):
         predict = predict.contiguous().view(batch_size, -1)
         feats = feats.permute(0, 2, 3, 1)
         feats = feats.contiguous().view(feats.shape[0], -1, feats.shape[-1])
-
+        
         feats_, labels_ = self._hard_anchor_sampling(feats, labels, predict)
 
         loss = self._contrastive(feats_, labels_, queue=queue)

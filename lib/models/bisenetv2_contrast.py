@@ -518,7 +518,8 @@ class SegmentHead(nn.Module):
         self.conv1 = ConvBNReLU(mid_chan, mid_chan2, 3, stride=1)
 
         self.conv2 = nn.Conv2d(mid_chan2, out_chan, 1, 1, 0, bias=True)
-        self.up_sample2 = nn.Upsample(scale_factor=up_factor, mode='bilinear', align_corners=True)
+        if self.up_factor > 1:
+            self.up_sample2 = nn.Upsample(scale_factor=up_factor, mode='bilinear', align_corners=True)
         
 
     def forward(self, x):
@@ -535,7 +536,8 @@ class SegmentHead(nn.Module):
         else:
             feat = self.conv2(feat)
             
-        feat = self.up_sample2(feat)
+        if self.up_factor > 1:
+            feat = self.up_sample2(feat)
 
         return feat
 
@@ -554,10 +556,12 @@ class BiSeNetV2_Contrast(nn.Module):
         self.network_stride = self.configer.get('network', 'stride')
         ## unify proj head
         self.proj_dim = self.configer.get('contrast', 'proj_dim')
+        self.upsample = self.configer.get('contrast', 'upsample') 
+        
         if configer.get('use_sync_bn'):
-            self.projHead = ProjectionHead(dim_in=128, proj_dim=self.proj_dim, up_factor=self.network_stride, bn_type='torchsyncbn')
+            self.projHead = ProjectionHead(dim_in=128, proj_dim=self.proj_dim, up_factor=self.network_stride, bn_type='torchsyncbn', up_sample=self.upsample)
         else:
-            self.projHead = ProjectionHead(dim_in=128, proj_dim=self.proj_dim, up_factor=self.network_stride, bn_type='torchbn')
+            self.projHead = ProjectionHead(dim_in=128, proj_dim=self.proj_dim, up_factor=self.network_stride, bn_type='torchbn', up_sample=self.upsample)
         self.with_memory = self.configer.exists("contrast", "with_memory")
         if self.with_memory:
             self.memory_size = self.configer.get('contrast', 'memory_size')
@@ -582,13 +586,17 @@ class BiSeNetV2_Contrast(nn.Module):
         #         self.aux5_4.append(SegmentHead(128, 128, n, up_factor=32))
 
         # if self.with_memory:
-        
-        self.head = SegmentHead(128, 1024, self.num_unify_classes, up_factor=8, aux=False)
+        if self.upsample:
+            self.head = SegmentHead(128, 1024, self.num_unify_classes, up_factor=8, aux=False)
+        else:
+            self.head = SegmentHead(128, 1024, self.num_unify_classes, up_factor=1, aux=False)
+            self.up_sample = nn.Upsample(scale_factor=8, mode='nearest', align_corners=True)
+            
         if self.aux_mode == 'train':
-            self.aux2 = SegmentHead(16, 128, self.num_unify_classes, up_factor=8, aux=False)
-            self.aux3 = SegmentHead(32, 128, self.num_unify_classes, up_factor=8, aux=False)
-            self.aux4 = SegmentHead(64, 128, self.num_unify_classes, up_factor=8, aux=False)
-            self.aux5_4 = SegmentHead(128, 128, self.num_unify_classes, up_factor=8, aux=False)
+            self.aux2 = SegmentHead(16, 128, self.num_unify_classes, up_factor=4, aux=True)
+            self.aux3 = SegmentHead(32, 128, self.num_unify_classes, up_factor=8, aux=True)
+            self.aux4 = SegmentHead(64, 128, self.num_unify_classes, up_factor=16, aux=True)
+            self.aux5_4 = SegmentHead(128, 128, self.num_unify_classes, up_factor=32, aux=True)
         
         self.register_buffer("segment_queue", torch.randn(self.num_unify_classes, self.proj_dim))
 
@@ -635,6 +643,9 @@ class BiSeNetV2_Contrast(nn.Module):
                 
             # return logits, logits_aux2, logits_aux3, logits_aux4, logits_aux5_4
         elif self.aux_mode == 'eval':
+            if self.up_sample is False:
+                logits = [self.up_sample(logit) for logit in logits] 
+                
             return logits
         elif self.aux_mode == 'pred':
             # pred = logits.argmax(dim=1)
@@ -663,7 +674,7 @@ class BiSeNetV2_Contrast(nn.Module):
             elif name.find('affine_bias') != -1:
                 nn.init.zeros_(param)
 
-        # self.load_pretrain()
+        self.load_pretrain()
 
 
     def load_pretrain(self):

@@ -10,6 +10,8 @@ class ClassRemap():
         self.maxMapNums = [] # 最大映射类别数
         self.num_unify_classes = self.configer.get('num_unify_classes')
         self.softmax = nn.Softmax(dim=1)
+        self.network_stride = self.configer.get('network', 'stride')
+        self.Upsample = nn.Upsample(scale_factor=self.network_stride, mode='nearest')
         self._unpack()
         
         
@@ -32,44 +34,50 @@ class ClassRemap():
         return outLabels
         
     def ContrastRemapping(self, labels, embed, proto, dataset_id):
-        # network_stride = self.configer.get('network', 'stride')
-        # labels = target[:, ::network_stride, ::network_stride]
-        B, H, W = labels.shape
-
-        mask = torch.ones_like(labels) * self.ignore_index
+        is_emb_upsampled = self.configer.get('contrast', 'upsample')
+        
+        if is_emb_upsampled:
+            contrast_lb = labels
+        else:
+            contrast_lb = labels[:, ::self.network_stride, ::self.network_stride]
+        
+        B, H, W = contrast_lb.shape
+        
+        mask = torch.ones_like(contrast_lb) * self.ignore_index
         weight_mask = torch.zeros([B, H, W, self.num_unify_classes], dtype=torch.float32)
         if embed.is_cuda:
             weight_mask = weight_mask.cuda()
         
         for k, v in self.remapList[dataset_id].items():
+            # 判断是否为空
+            if not (contrast_lb==int(k)).any():
+                continue
+            
+            
             if len(v) == 1: 
-                mask[labels==int(k)] = v[0]
+                mask[contrast_lb==int(k)] = v[0]
                 
                 weight_vector = torch.zeros(self.num_unify_classes, dtype=torch.float32)
                 if weight_mask.is_cuda:
                     weight_vector = weight_vector.cuda()
                     
                 weight_vector[v[0]] = 1
-                weight_mask[labels==int(k)] = weight_vector
+                weight_mask[contrast_lb==int(k)] = weight_vector
             else:
                 # 在多映射情况下，找到内积最大的一项的标签
                 
-                # 判断是否为空
-                if (labels==int(k)).nonzero().numel():
-                    continue
-                
                 shapeEmbed = embed.permute(0,2,3,1)
-                shapeEmbed = F.normalize(shapeEmbed, p=2, dim=-1)
+                # shapeEmbed = F.normalize(shapeEmbed, p=2, dim=-1)
                 # print(shapeEmbed[labels==int(k)].shape)
                 # print(proto.shape)
                 # print(proto[v].shape)
                 # n: b x h x w, d: dim, c:  num of class
-                simScore = torch.einsum('nd,cd->nc', shapeEmbed[labels==int(k)], proto[v])
+                simScore = torch.einsum('nd,cd->nc', shapeEmbed[contrast_lb==int(k)], proto[v])
                 MaxSimIndex = torch.max(simScore, dim=1)[1]
                 if mask.is_cuda:
-                    mask[labels==int(k)] = torch.tensor(v, dtype=torch.long)[MaxSimIndex].cuda()
+                    mask[contrast_lb==int(k)] = torch.tensor(v, dtype=torch.long)[MaxSimIndex].cuda()
                 else:
-                    mask[labels==int(k)] = torch.tensor(v, dtype=torch.long)[MaxSimIndex]
+                    mask[contrast_lb==int(k)] = torch.tensor(v, dtype=torch.long)[MaxSimIndex]
                 
                 expend_vector = torch.zeros([simScore.shape[0], self.num_unify_classes], dtype=torch.float32)
                 if weight_mask.is_cuda:
@@ -78,9 +86,11 @@ class ClassRemap():
                 
                 expend_vector[:, v] = self.softmax(simScore)
                 
-                weight_mask[labels==int(k)] = expend_vector
+                weight_mask[contrast_lb==int(k)] = expend_vector
                 
-                  
+        if is_emb_upsampled is False:
+            weight_mask = self.Upsample(weight_mask.permute(0,3,1,2)).permute(0,2,3,1)
+          
         return mask, weight_mask
         
     def GetEqWeightMask(self, labels, dataset_id):
