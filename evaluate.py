@@ -2,6 +2,7 @@
 # -*- encoding: utf-8 -*-
 
 
+from email.policy import strict
 import sys
 
 sys.path.insert(0, '.')
@@ -153,6 +154,7 @@ class MscEvalV0_Contrast(object):
         if dist.is_initialized():
             dist.all_reduce(hist, dist.ReduceOp.SUM)
         ious = hist.diag() / (hist.sum(dim=0) + hist.sum(dim=1) - hist.diag())
+        print(ious)
         miou = np.nanmean(ious.detach().cpu().numpy())
         return miou.item()
 
@@ -752,6 +754,9 @@ def main():
     
     logger = logging.getLogger()
     net = model_factory[configer.get('model_name')](configer)
+    state = torch.load('res/upsample_model_97000.pth', map_location='cpu')
+    net.load_state_dict(state, strict=False)
+    
     net.cuda()
     net.aux_mode = 'eval'
     net.eval()

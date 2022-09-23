@@ -643,7 +643,7 @@ class BiSeNetV2_Contrast(nn.Module):
                 
             # return logits, logits_aux2, logits_aux3, logits_aux4, logits_aux5_4
         elif self.aux_mode == 'eval':
-            if self.up_sample is False:
+            if self.upsample is False:
                 logits = [self.up_sample(logit) for logit in logits] 
                 
             return logits
