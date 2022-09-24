@@ -67,7 +67,7 @@ labels_info = [
 class CamVid(Dataset):
     def __init__(self, dataroot, annpath, trans_func=None, mode='train'):
         super(CamVid, self).__init__()
-        assert mode in ('train', 'val', 'test')
+        assert mode in ('train', 'eval', 'test')
 
         self.mode = mode
         self.trans_func = trans_func

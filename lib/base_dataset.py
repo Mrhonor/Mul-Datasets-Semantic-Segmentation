@@ -20,7 +20,7 @@ class BaseDataset(Dataset):
     '''
     def __init__(self, dataroot, annpath, trans_func=None, mode='train'):
         super(BaseDataset, self).__init__()
-        assert mode in ('train', 'val', 'test')
+        assert mode in ('train', 'eval', 'test')
         self.mode = mode
         self.trans_func = trans_func
 
@@ -63,7 +63,7 @@ class BaseDatasetIm(Dataset):
     '''
     def __init__(self, dataroot, annpath, trans_func=None, mode='train'):
         super(BaseDatasetIm, self).__init__()
-        assert mode in ('train', 'val', 'test')
+        assert mode in ('train', 'eval', 'test')
         self.mode = mode
         self.trans_func = trans_func
 
@@ -104,7 +104,7 @@ class BaseDatasetIm(Dataset):
 if __name__ == "__main__":
     from tqdm import tqdm
     from torch.utils.data import DataLoader
-    ds = CityScapes('./data/', mode='val')
+    ds = CityScapes('./data/', mode='eval')
     dl = DataLoader(ds,
                     batch_size = 4,
                     shuffle = True,

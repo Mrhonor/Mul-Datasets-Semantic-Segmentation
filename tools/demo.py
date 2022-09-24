@@ -12,6 +12,7 @@ from time import time
 import lib.transform_cv2 as T
 from lib.models import model_factory
 from configs import set_cfg_from_file
+from tools.configer import Configer
 
 torch.set_grad_enabled(False)
 np.random.seed(123)
@@ -19,25 +20,25 @@ np.random.seed(123)
 
 # args
 parse = argparse.ArgumentParser()
-parse.add_argument('--config', dest='config', type=str, default='configs/bisenetv2_city.py',)
-parse.add_argument('--weight-path', type=str, default='./res/model_final_1_1.pth',)
-parse.add_argument('--img-path', dest='img_path', type=str, default='./Seq05VD_f02070.png',)
+parse.add_argument('--weight_path', type=str, default='res/model_50000.pth',)
+parse.add_argument('--config', dest='config', type=str, default='configs/bisenetv2_city_cam.json',)
+parse.add_argument('--img_path', dest='img_path', type=str, default='0001TP_009210.png',)
 args = parse.parse_args()
-cfg = set_cfg_from_file(args.config)
-
+# cfg = set_cfg_from_file(args.config)
+configer = Configer(configs=args.config)
 
 palette = np.random.randint(0, 256, (256, 3), dtype=np.uint8)
 
 class E2EModel(torch.nn.Module):
         
-    def __init__(self, cfg, weight_path) -> None:
+    def __init__(self, configer, weight_path) -> None:
         super().__init__()
         
         self.mean = torch.tensor([0.3257, 0.3690, 0.3223])[:, None, None] #.cuda()
         self.std = torch.tensor([0.2112, 0.2148, 0.2115])[:, None, None] #.cuda()
         
         # self.net = model_factory[cfg.model_type](cfg.n_cats, aux_mode="pred")
-        self.net = model_factory[cfg.model_type](38, 'pred', 2, 19)
+        self.net = model_factory[configer.get('model_name')](configer)
         self.net.load_state_dict(torch.load(weight_path, map_location='cpu'), strict=False)
         self.net.eval()
         # self.net.cuda()
@@ -46,13 +47,11 @@ class E2EModel(torch.nn.Module):
         x = x.permute(0, 3, 1, 2)
         x = x.div_(255.)
         x = x.sub_(self.mean).div_(self.std).clone()
-        out = self.net(x, 0)[0]
+        out = self.net(x)[0]
         return out
     
-net1 = E2EModel(cfg, args.weight_path)
-net2 = E2EModel(cfg, args.weight_path)
-net2.net.segment.load_state_dict(torch.load('res/segment_precise_bn_40.pth', map_location='cpu'), strict=False)
-net2.net.detail.load_state_dict(torch.load('res/detail_precise_bn.pth', map_location='cpu'), strict=False)
+net = E2EModel(configer, args.weight_path)
+# net.load_state_dict(torch.load('res/model_50000.pth', map_location='cpu'), strict=False)
 
 # # define model
 # net = model_factory[cfg.model_type](cfg.n_cats, aux_mode='pred')
@@ -72,17 +71,17 @@ im = cv2.imread(args.img_path)[:, :, ::-1]
 for i in range(1):
     t0 = time()
     # input_im = to_tensor(dict(im=im, lb=None))['im'].unsqueeze(0).cuda()
-    input_im = cv2.resize(im, (960, 768))
+    input_im = cv2.resize(im, (1024, 512))
     # input_im = im
     input_im = torch.tensor(input_im.astype(np.float32).copy()).unsqueeze(0) #.cuda()
     # print(input_im)
     # inference
     # out1 = net1(input_im).squeeze().detach().cpu().numpy()
-    out2 = net2(input_im).squeeze().detach().cpu().numpy()
+    out2 = net(input_im).squeeze().detach().cpu().numpy()
     # print(out.shape)
     # pred1 = palette[out1]
     pred2 = palette[out2]
     # print((time() - t0) * 1000)
 
 # cv2.imwrite('./res1.jpg', pred1)
-cv2.imwrite('./res2.jpg', pred2)
+cv2.imwrite('./res.jpg', pred2)

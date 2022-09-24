@@ -700,11 +700,11 @@ def eval_model_contrast(configer, net):
 
     is_dist = dist.is_initialized()
     
-    cfg_city = set_cfg_from_file(configer.get('dataset1'))
-    cfg_cam  = set_cfg_from_file(configer.get('dataset2'))
+    # cfg_city = set_cfg_from_file(configer.get('dataset1'))
+    # cfg_cam  = set_cfg_from_file(configer.get('dataset2'))
 
-    dl_cam = get_data_loader(cfg_cam, mode='val', distributed=is_dist)
-    dl_city = get_data_loader(cfg_city, mode='val', distributed=is_dist)
+    # dl_cam = get_data_loader(cfg_cam, mode='val', distributed=is_dist)
+    dl_city, dl_cam = get_data_loader(configer, distributed=is_dist)
     net.eval()
 
     heads, mious = [], []
@@ -739,9 +739,6 @@ def main():
     configer = Configer(configs=args.config)
 
 
-    cfg_city = set_cfg_from_file(configer.get('dataset1'))
-    cfg_cam  = set_cfg_from_file(configer.get('dataset2'))
-
     # if not args.local_rank == -1:
     #     torch.cuda.set_device(args.local_rank)
     #     dist.init_process_group(backend='nccl',
@@ -754,7 +751,7 @@ def main():
     
     logger = logging.getLogger()
     net = model_factory[configer.get('model_name')](configer)
-    state = torch.load('res/upsample_model_97000.pth', map_location='cpu')
+    state = torch.load('res/upsample_model_final.pth', map_location='cpu')
     net.load_state_dict(state, strict=False)
     
     net.cuda()

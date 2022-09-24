@@ -544,10 +544,10 @@ class SegmentHead(nn.Module):
 
 class BiSeNetV2_Contrast(nn.Module):
 
-    def __init__(self, configer, aux_mode='train'):
+    def __init__(self, configer):
         super(BiSeNetV2_Contrast, self).__init__()
         self.configer = configer
-        self.aux_mode = aux_mode
+        self.aux_mode = self.configer.get('aux_mode')
         self.num_unify_classes = self.configer.get("num_unify_classes")
         self.n_bn = self.configer.get("n_bn")
         self.detail = DetailBranch(n_bn=self.n_bn)
@@ -557,14 +557,17 @@ class BiSeNetV2_Contrast(nn.Module):
         ## unify proj head
         self.proj_dim = self.configer.get('contrast', 'proj_dim')
         self.upsample = self.configer.get('contrast', 'upsample') 
+        self.use_contrast = self.configer.get('contrast', 'use_contrast')
+        self.use_dataset_aux_head = self.configer.get('dataset_aux_head')
         
-        if configer.get('use_sync_bn'):
-            self.projHead = ProjectionHead(dim_in=128, proj_dim=self.proj_dim, up_factor=self.network_stride, bn_type='torchsyncbn', up_sample=self.upsample)
-        else:
-            self.projHead = ProjectionHead(dim_in=128, proj_dim=self.proj_dim, up_factor=self.network_stride, bn_type='torchbn', up_sample=self.upsample)
-        self.with_memory = self.configer.exists("contrast", "with_memory")
-        if self.with_memory:
-            self.memory_size = self.configer.get('contrast', 'memory_size')
+        if self.use_contrast:
+            if configer.get('use_sync_bn'):
+                self.projHead = ProjectionHead(dim_in=128, proj_dim=self.proj_dim, up_factor=self.network_stride, bn_type='torchsyncbn', up_sample=self.upsample)
+            else:
+                self.projHead = ProjectionHead(dim_in=128, proj_dim=self.proj_dim, up_factor=self.network_stride, bn_type='torchbn', up_sample=self.upsample)
+            self.with_memory = self.configer.exists("contrast", "with_memory")
+            if self.with_memory:
+                self.memory_size = self.configer.get('contrast', 'memory_size')
 
         # ## TODO: what is the number of mid chan ?
         # self.head = nn.ModuleList([])
@@ -635,7 +638,11 @@ class BiSeNetV2_Contrast(nn.Module):
             logits_aux4 = [self.aux4(feat4[i]) for i in range(0, len(other_x) + 1)]
             logits_aux5_4 = [self.aux5_4(feat5_4[i]) for i in range(0, len(other_x) + 1)]
             
+            if not self.use_contrast:
+                return {'seg': [logits, logits_aux2, logits_aux3, logits_aux4, logits_aux5_4]}
+   
             emb = [self.projHead(feat_head[i]) for i in range(0, len(other_x) + 1)]
+                
             if self.with_memory:
                 return {'seg': [logits, logits_aux2, logits_aux3, logits_aux4, logits_aux5_4], 'embed': emb, 'key': [embed.detach() for embed in emb]}
             else:
@@ -649,6 +656,9 @@ class BiSeNetV2_Contrast(nn.Module):
             return logits
         elif self.aux_mode == 'pred':
             # pred = logits.argmax(dim=1)
+            if self.upsample is False:
+                logits = [self.up_sample(logit) for logit in logits] 
+            
             pred = [logit.argmax(dim=1) for logit in logits]
             return pred
         else:

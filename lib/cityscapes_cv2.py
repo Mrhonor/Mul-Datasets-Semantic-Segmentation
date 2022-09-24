@@ -148,7 +148,7 @@ class CityScapes(BaseDataset):
         self.lb_map = np.arange(256).astype(np.uint8)
         if mode == 'train':
             self.labels_info = labels_info_train
-        elif mode == 'val':
+        elif mode == 'eval':
             self.labels_info = labels_info_eval
             
         for el in self.labels_info:
@@ -182,7 +182,7 @@ class CityScapesIm(BaseDatasetIm):
 if __name__ == "__main__":
     from tqdm import tqdm
     from torch.utils.data import DataLoader
-    ds = CityScapes('./data/', mode='val')
+    ds = CityScapes('./data/', mode='eval')
     dl = DataLoader(ds,
                     batch_size = 4,
                     shuffle = True,

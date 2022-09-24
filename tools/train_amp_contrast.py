@@ -53,7 +53,7 @@ def is_distributed():
 def parse_args():
     parse = argparse.ArgumentParser()
     parse.add_argument('--local_rank', dest='local_rank', type=int, default=-1,)
-    parse.add_argument('--port', dest='port', type=int, default=16745,)
+    parse.add_argument('--port', dest='port', type=int, default=16746,)
     parse.add_argument('--finetune_from', type=str, default=None,)
     parse.add_argument('--config', dest='config', type=str, default='configs/bisenetv2_city_cam.json',)
     return parse.parse_args()
@@ -63,8 +63,8 @@ args = parse_args()
 configer = Configer(configs=args.config)
 
 
-cfg_city = set_cfg_from_file(configer.get('dataset1'))
-cfg_cam  = set_cfg_from_file(configer.get('dataset2'))
+# cfg_city = set_cfg_from_file(configer.get('dataset1'))
+# cfg_cam  = set_cfg_from_file(configer.get('dataset2'))
 
 CITY_ID = 0
 CAM_ID = 1
@@ -265,8 +265,8 @@ def train():
     ## dataset
     # dl = get_data_loader(cfg, mode='train', distributed=is_dist)
     
-    dl_city = get_data_loader(cfg_city, mode='train', distributed=is_dist)
-    dl_cam = get_data_loader(cfg_cam, mode='train', distributed=is_dist)
+    dl_city, dl_cam = get_data_loader(configer, distributed=is_dist)
+    # dl_cam = get_data_loader(configer, distributed=is_dist)
     ## model
     net = set_model(configer=configer)
     contrast_losses = set_contrast_loss(configer)
@@ -302,20 +302,20 @@ def train():
     for i in range(starti, configer.get('lr','max_iter') + starti):
         try:
             im_cam, lb_cam = next(cam_iter)
-            if not im_cam.size()[0] == cfg_cam.ims_per_gpu:
+            if not im_cam.size()[0] == configer.get('dataset2', 'ims_per_gpu'):
                 raise StopIteration
         except StopIteration:
             cam_iter = iter(dl_cam)
             im_cam, lb_cam = next(cam_iter)
-        cam_epoch = i * cfg_cam.ims_per_gpu / 469
+        cam_epoch = i * configer.get('dataset2', 'ims_per_gpu') / 469
         try:
             im_city, lb_city = next(city_iter)
-            if not im_city.size()[0] == cfg_city.ims_per_gpu:
+            if not im_city.size()[0] == configer.get('dataset1', 'ims_per_gpu'):
                 raise StopIteration
         except StopIteration:
             city_iter = iter(dl_city)
             im_city, lb_city = next(city_iter)
-        city_epoch = i * cfg_city.ims_per_gpu / 2976
+        city_epoch = i * configer.get('dataset2', 'ims_per_gpu') / 2976
 
         im_city = im_city.cuda()
         lb_city = lb_city.cuda()
@@ -371,7 +371,7 @@ def train():
                 city_out['segment_queue'] = net.segment_queue
                 cam_out['segment_queue'] = net.segment_queue
             
-            if i < configer.get('lr', 'warmup_iters'):
+            if i < configer.get('lr', 'warmup_iters') or not configer.get('contrast', 'use_contrast'):
                 backward_loss0, loss_seg0, loss_aux0 = contrast_losses[CITY_ID](city_out, lb_city, CITY_ID, True)
                 backward_loss1, loss_seg1, loss_aux1 = contrast_losses[CAM_ID](cam_out, lb_cam, CAM_ID, True)
                 
@@ -432,7 +432,7 @@ def train():
         if with_aux:
             _ = [mter.update(lss.item()) for mter, lss in zip(loss_aux_meters, loss_aux)]
             
-        if i >= configer.get('lr', 'warmup_iters'):
+        if i >= configer.get('lr', 'warmup_iters') and configer.get('contrast', 'use_contrast'):
             loss_contrast_meter.update(loss_contrast.item())
 
         ## print training log message
@@ -444,7 +444,7 @@ def train():
                 loss_pre_meter, loss_aux_meters, loss_contrast_meter)
 
         if (i + 1) % 1000 == 0:
-            save_pth = osp.join(configer.get('res_save_pth'), 'model_{}.pth'.format(i+1))
+            save_pth = osp.join(configer.get('res_save_pth'), 'nll_model_{}.pth'.format(i+1))
             logger.info('\nsave models to {}'.format(save_pth))
 
             if is_distributed():
@@ -463,7 +463,7 @@ def train():
         lr_schdr.step()
 
     ## dump the final model and evaluate the result
-    save_pth = osp.join(configer.get('res_save_pth'), 'model_final.pth')
+    save_pth = osp.join(configer.get('res_save_pth'), 'nll_model_final.pth')
     logger.info('\nsave models to {}'.format(save_pth))
     
     if is_distributed():

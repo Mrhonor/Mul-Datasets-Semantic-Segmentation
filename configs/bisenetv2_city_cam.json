@@ -1,9 +1,27 @@
 {
     "model_name": "bisenetv2_contrast",
+    "aux_mode": "train",
     "n_datasets": 2,
     "num_unify_classes": 19,
-    "dataset1": "configs/bisenetv2_city.py",
-    "dataset2": "configs/bisenetv2_cam.py",
+    "dataset1": {
+      "n_cats": 18,
+      "data_reader": "CityScapes",
+      "im_root": "/home/cxh/datasets/",
+      "train_im_anns":"datasets/Cityscapes/train.txt",
+      "val_im_anns":"datasets/Cityscapes/test.txt", 
+      "ims_per_gpu": 3,
+      "eval_ims_per_gpu": 2
+
+    },
+    "dataset2": {
+      "n_cats": 12, 
+      "data_reader": "CamVid",
+      "im_root": "/home/cxh/datasets/CamVid",
+      "train_im_anns":"datasets/CamVid/train.txt",
+      "val_im_anns":"datasets/CamVid/test.txt", 
+      "ims_per_gpu": 2,
+      "eval_ims_per_gpu": 2
+    },
     "n_bn": 1,
     "class_remap1":{
       "0": [0], 
@@ -45,8 +63,8 @@
       "ignore_index": 255
     },
     "lr": {
-      "lr_start": 2e-2,
-      "weight_decay": 5e-4,
+      "lr_start": 1e-3,
+      "weight_decay": 5e-5,
       "warmup_iters": 0,
       "max_iter": 70000
     },
@@ -54,7 +72,7 @@
       "scales": [0.5, 1.0, 2.0],
       "cropsize": [512, 1024],
       "finetune": true,
-      "finetune_from": "res/model_32000.pth"
+      "finetune_from": "res/upsample_model_final.pth"
     },
     "val": {
       "scales": [0.5, 0.75, 1.0, 1.25, 1.5, 1.75],
@@ -63,6 +81,7 @@
     "use_fp16": false,
     "use_sync_bn": true,
     "contrast": {
+      "use_contrast": true,
       "proj_dim": 128,
       "temperature": 0.07,
       "base_temperature": 0.07,
@@ -81,5 +100,9 @@
     "res_save_pth": "res/",
     "network": {
       "stride": 8
+    },
+    "dataset_aux_head": {
+      "use_dataset_aux_head": true,
+      "aux_iter": 30000
     }
 }

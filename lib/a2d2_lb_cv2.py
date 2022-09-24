@@ -75,7 +75,7 @@ labels_info = [
 class A2D2Data(Dataset):
     def __init__(self, dataroot, annpath, trans_func=None, mode='train'):
         super(A2D2Data, self).__init__()
-        assert mode in ('train', 'val', 'test')
+        assert mode in ('train', 'eval', 'test')
 
         self.mode = mode
         self.trans_func = trans_func
