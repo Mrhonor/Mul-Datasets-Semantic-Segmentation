@@ -39,8 +39,8 @@ class TransformationVal(object):
         return dict(im=im, lb=lb)
 
 
-def get_data_loader(configer, distributed=True):
-    mode = configer.get('aux_mode')
+def get_data_loader(configer, aux_mode='eval', distributed=True):
+    mode = aux_mode
     n_datasets = configer.get('n_datasets')
     max_iter = configer.get('lr', 'max_iter')
     

@@ -713,7 +713,7 @@ def eval_model_contrast(configer, net):
     single_scale = MscEvalV0_Contrast(configer, (1., ), False)
     
     mIOU_city = single_scale(net, dl_city, 19, CITY_ID)
-    mIOU_cam = single_scale(net, dl_cam, cfg_cam.n_cats, CAM_ID)
+    mIOU_cam = single_scale(net, dl_cam, configer.get('dataset2', 'n_cats'), CAM_ID)
 
     heads.append('single_scale')
     mious.append(mIOU_cam)

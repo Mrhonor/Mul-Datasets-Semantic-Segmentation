@@ -265,7 +265,7 @@ def train():
     ## dataset
     # dl = get_data_loader(cfg, mode='train', distributed=is_dist)
     
-    dl_city, dl_cam = get_data_loader(configer, distributed=is_dist)
+    dl_city, dl_cam = get_data_loader(configer, aux_mode='train', distributed=is_dist)
     # dl_cam = get_data_loader(configer, distributed=is_dist)
     ## model
     net = set_model(configer=configer)
@@ -463,7 +463,7 @@ def train():
         lr_schdr.step()
 
     ## dump the final model and evaluate the result
-    save_pth = osp.join(configer.get('res_save_pth'), 'nll_model_final.pth')
+    save_pth = osp.join(configer.get('res_save_pth'), 'upsample_model_final.pth')
     logger.info('\nsave models to {}'.format(save_pth))
     
     if is_distributed():

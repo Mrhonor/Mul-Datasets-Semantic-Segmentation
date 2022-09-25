@@ -8,7 +8,7 @@
       "data_reader": "CityScapes",
       "im_root": "/home/cxh/datasets/",
       "train_im_anns":"datasets/Cityscapes/train.txt",
-      "val_im_anns":"datasets/Cityscapes/test.txt", 
+      "val_im_anns":"datasets/Cityscapes/val.txt", 
       "ims_per_gpu": 3,
       "eval_ims_per_gpu": 2
 
@@ -22,7 +22,7 @@
       "ims_per_gpu": 2,
       "eval_ims_per_gpu": 2
     },
-    "n_bn": 1,
+    "n_bn": 2,
     "class_remap1":{
       "0": [0], 
       "1": [1],
@@ -63,16 +63,16 @@
       "ignore_index": 255
     },
     "lr": {
-      "lr_start": 1e-3,
+      "lr_start": 5e-3,
       "weight_decay": 5e-5,
-      "warmup_iters": 0,
-      "max_iter": 70000
+      "warmup_iters": 1000,
+      "max_iter": 100000
     },
     "train": {
       "scales": [0.5, 1.0, 2.0],
       "cropsize": [512, 1024],
       "finetune": true,
-      "finetune_from": "res/upsample_model_final.pth"
+      "finetune_from": "res/upsample_model_126000.pth"
     },
     "val": {
       "scales": [0.5, 0.75, 1.0, 1.25, 1.5, 1.75],
@@ -95,7 +95,7 @@
       "memory_size": 5000,
       "pixel_update_freq": 10,
       "coefficient": 0.999,
-      "upsample": true
+      "upsample": false
     },
     "res_save_pth": "res/",
     "network": {
