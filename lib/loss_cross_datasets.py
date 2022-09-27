@@ -34,6 +34,7 @@ class CrossDatasetsLoss(nn.Module):
             self.contrast_criterion = PixelContrastLoss(configer=configer)
         
         self.upsample = self.configer.get('contrast', 'upsample')
+        self.network_stride = self.configer.get('network', 'stride')
         
     def forward(self, preds, target, dataset_id, is_warmup=False):
         assert "seg" in preds
@@ -43,12 +44,14 @@ class CrossDatasetsLoss(nn.Module):
         if self.use_contrast:
             embedding = preds['embed']
         
+
         b, h, w = logits[0].shape
 
         lb = target
         # 对标签下采样
         if not self.upsample:
-            lb = F.interpolate(input=target, size=(h, w), mode='nearest')
+            # lb = lb[:, ::self.network_stride, ::self.network_stride]
+            lb = F.interpolate(input=target.unsqueeze(1).float(), size=(h, w), mode='nearest').squeeze().long()
 
         if "segment_queue" in preds:
             segment_queue = preds['segment_queue']
@@ -85,10 +88,10 @@ class CrossDatasetsLoss(nn.Module):
 
             _, predict = torch.max(logits, 1)
 
-            if self.configer.get('contrast', 'upsample') is False:
-                network_stride = self.configer.get('network', 'stride')
-                predict = predict[:, ::network_stride, ::network_stride]
-            
+            # if self.configer.get('contrast', 'upsample') is False:
+            #     network_stride = self.configer.get('network', 'stride')
+            #     predict = predict[:, ::network_stride, ::network_stride]
+
             loss_contrast = self.contrast_criterion(embedding, contrast_lable, predict, segment_queue)
 
             loss_seg = self.seg_criterion(logits, weight_mask)

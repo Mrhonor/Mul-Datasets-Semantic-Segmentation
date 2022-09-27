@@ -36,11 +36,11 @@ class ClassRemap():
     def ContrastRemapping(self, labels, embed, proto, dataset_id):
         is_emb_upsampled = self.configer.get('contrast', 'upsample')
         
-        if is_emb_upsampled:
-            contrast_lb = labels
-        else:
-            contrast_lb = labels[:, ::self.network_stride, ::self.network_stride]
-        
+        # if is_emb_upsampled:
+        #     contrast_lb = labels
+        # else:
+        #     contrast_lb = labels[:, ::self.network_stride, ::self.network_stride]
+        contrast_lb = labels
         B, H, W = contrast_lb.shape
         
         mask = torch.ones_like(contrast_lb) * self.ignore_index
@@ -88,8 +88,8 @@ class ClassRemap():
                 
                 weight_mask[contrast_lb==int(k)] = expend_vector
                 
-        if is_emb_upsampled is False:
-            weight_mask = self.Upsample(weight_mask.permute(0,3,1,2)).permute(0,2,3,1)
+        # if is_emb_upsampled is False:
+        #     weight_mask = self.Upsample(weight_mask.permute(0,3,1,2)).permute(0,2,3,1)
           
         return mask, weight_mask
         

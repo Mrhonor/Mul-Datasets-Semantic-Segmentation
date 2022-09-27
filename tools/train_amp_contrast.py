@@ -4,6 +4,8 @@
 # from asyncio.windows_events import NULL # 有bug，去掉改为别的判定
 
 from cgi import print_directory
+from email.policy import strict
+from math import perm
 import sys
 sys.path.insert(0, '.')
 import os
@@ -31,7 +33,9 @@ from lib.logger import setup_logger, print_log_msg
 from lib.loss_cross_datasets import CrossDatasetsLoss
 from tools.configer import Configer
 from lib.class_remap import ClassRemap
-from evaluate import eval_model_contrast
+from evaluate import eval_model_contrast, eval_model_aux
+
+from ipdb import set_trace
 
 ## fix all random seeds
 #  torch.manual_seed(123)
@@ -53,7 +57,7 @@ def is_distributed():
 def parse_args():
     parse = argparse.ArgumentParser()
     parse.add_argument('--local_rank', dest='local_rank', type=int, default=-1,)
-    parse.add_argument('--port', dest='port', type=int, default=16746,)
+    parse.add_argument('--port', dest='port', type=int, default=16747,)
     parse.add_argument('--finetune_from', type=str, default=None,)
     parse.add_argument('--config', dest='config', type=str, default='configs/bisenetv2_city_cam.json',)
     return parse.parse_args()
@@ -144,7 +148,9 @@ def set_model(configer):
 
     if configer.get('train', 'finetune'):
         logger.info(f"load pretrained weights from {configer.get('train', 'finetune_from')}")
-        net.load_state_dict(torch.load(configer.get('train', 'finetune_from'), map_location='cpu'))
+        net.load_state_dict(torch.load(configer.get('train', 'finetune_from'), map_location='cpu'), strict=False)
+
+        
     if configer.get('use_sync_bn'): 
         net = nn.SyncBatchNorm.convert_sync_batchnorm(net)
     net.cuda()
@@ -165,6 +171,9 @@ def set_optimizer(model, configer):
     else:
         wd_params, non_wd_params = [], []
         for name, param in model.named_parameters():
+            # if param.requires_grad == False:
+            #     continue
+            
             if param.dim() == 1:
                 non_wd_params.append(param)
             elif param.dim() == 2 or param.dim() == 4:
@@ -277,9 +286,6 @@ def train():
     ## mixed precision training
     scaler = amp.GradScaler()
 
-    ## ddp training
-    if is_distributed():
-        net = set_model_dist(net)
 
     ## meters
     time_meter, loss_meter, loss_pre_meter, loss_aux_meters, loss_contrast_meter = set_meters(configer)
@@ -294,6 +300,21 @@ def train():
     ## train loop
     # for it, (im, lb) in enumerate(dl):
     starti = 0
+    use_dataset_aux_head = configer.get('dataset_aux_head', 'use_dataset_aux_head')
+    train_aux = use_dataset_aux_head
+    if use_dataset_aux_head:
+        aux_iter = configer.get('dataset_aux_head', 'aux_iter')
+        net.set_train_dataset_aux(starti < aux_iter)
+        criteria_pre = OhemCELoss(0.7)
+        criteria_aux = [OhemCELoss(0.7) for _ in range(configer.get('loss', 'aux_num'))]
+    
+    finetune = configer.get('train', 'finetune')
+    # if finetune:
+    #     net.switch_require_grad_state(False)
+    
+    ## ddp training
+    if is_distributed():
+        net = set_model_dist(net)
 
     contrast_warmup_iters = configer.get("lr", "warmup_iters")
     with_memory = configer.exists('contrast', 'with_memory')
@@ -336,71 +357,102 @@ def train():
 
         optim.zero_grad()
         with amp.autocast(enabled=configer.get('use_fp16')):
-            ## 修改为多数据集模式
-            out = net(im)
-            # logits, *logits_aux = out['seg']
-            # emb = out['embed']
-            
-            with_embed = True if i >= contrast_warmup_iters else False
-
-            cam_size = im_cam.shape[0]
-            city_size = im_city.shape[0]
-            
-            city_out = {}
-            cam_out = {}
-            
-            for k, v in out.items():
-                if k == 'seg':
-                    city_logits_list = []
-                    cam_logits_list = []
-                    for logit in v:
-                        city_logits_list.append(logit[0][perm_index.sort()[1]][:city_size]) 
-                        cam_logits_list.append(logit[0][perm_index.sort()[1]][city_size:city_size+cam_size])
-                        
-                    city_out[k] = city_logits_list
-                    cam_out[k] = cam_logits_list
+            if finetune and i >= contrast_warmup_iters:
+                finetune = False
+                if is_distributed():
+                    net.module.switch_require_grad_state(True)
                 else:
-                    emb = v[0]
-                    city_out[k] = emb[perm_index.sort()[1]][:city_size] 
-                    cam_out[k] = emb[perm_index.sort()[1]][city_size:city_size+cam_size]
+                    net.switch_require_grad_state(True)
+                
             
-            if is_distributed():
-                city_out['segment_queue'] = net.module.segment_queue
-                cam_out['segment_queue'] = net.module.segment_queue
+            ## 修改为多数据集模式
+            if use_dataset_aux_head and i < aux_iter:
+                lb = [lb_city, lb_cam]
+                
+                out = net(im, perm_index=perm_index)
+                logits, *logits_aux = out['seg']
+                loss_pre = [criteria_pre(logits[i], lb[i]) for i in range(0, n_dataset)]
+                loss_aux = [[crit(lgt[i], lb[i]) for crit, lgt in zip(criteria_aux, logits_aux)] for i in range(0, n_dataset)]
+                loss_all = [loss_pre[i] + sum(loss_aux[i]) for i in range(0, n_dataset)]
+                # 不同数据集loss的权重
+                w1 = 1
+                w2 = 1
+                backward_loss = w1 * loss_all[0] + w2 * loss_all[1]
             else:
-                city_out['segment_queue'] = net.segment_queue
-                cam_out['segment_queue'] = net.segment_queue
-            
-            if i < configer.get('lr', 'warmup_iters') or not configer.get('contrast', 'use_contrast'):
-                backward_loss0, loss_seg0, loss_aux0 = contrast_losses[CITY_ID](city_out, lb_city, CITY_ID, True)
-                backward_loss1, loss_seg1, loss_aux1 = contrast_losses[CAM_ID](cam_out, lb_cam, CAM_ID, True)
+                if train_aux:
+                    train_aux = False
+                    if is_distributed():
+                        net.module.set_train_dataset_aux(False)
+                    else:
+                        net.set_train_dataset_aux(False)    
+                                
+                out = net(im)
+                # logits, *logits_aux = out['seg']
+                # emb = out['embed']
                 
+                with_embed = True if i >= contrast_warmup_iters else False
+
+                cam_size = im_cam.shape[0]
+                city_size = im_city.shape[0]
                 
-                backward_loss =  backward_loss0 + backward_loss1
-                loss_seg =  loss_seg0 + loss_seg1
-                if with_aux:
-                    loss_aux = [aux0 + aux1 for aux0, aux1 in zip(loss_aux0, loss_aux1)]
-                # print(backward_loss0)
-                # print(backward_loss1)
-                # print(loss_seg0)
-                # print(loss_seg1)
-                # print(loss_aux0)
-                # print(loss_aux1)
-                # print("***************************")
-            else:
-                backward_loss0, loss_seg0, loss_aux0, loss_contrast0 = contrast_losses[CITY_ID](city_out, lb_city, CITY_ID, False)
-                backward_loss1, loss_seg1, loss_aux1, loss_contrast1 = contrast_losses[CAM_ID](cam_out, lb_cam, CAM_ID, False)
+                city_out = {}
+                cam_out = {}
                 
+                for k, v in out.items():
+                    if k == 'seg':
+                        city_logits_list = []
+                        cam_logits_list = []
+                        for logit in v:
+                            city_logits_list.append(logit[0][perm_index.sort()[1]][:city_size]) 
+                            cam_logits_list.append(logit[0][perm_index.sort()[1]][city_size:city_size+cam_size])
+                            
+                        city_out[k] = city_logits_list
+                        cam_out[k] = cam_logits_list
+                    else:
+                        emb = v[0]
+                        city_out[k] = emb[perm_index.sort()[1]][:city_size] 
+                        cam_out[k] = emb[perm_index.sort()[1]][city_size:city_size+cam_size]
                 
-                backward_loss =  backward_loss0 + backward_loss1
-                loss_seg =  loss_seg0 + loss_seg1
-                if with_aux:
-                    loss_aux = [aux0 + aux1 for aux0, aux1 in zip(loss_aux0, loss_aux1)]
+                if is_distributed():
+                    city_out['segment_queue'] = net.module.segment_queue
+                    cam_out['segment_queue'] = net.module.segment_queue
+                else:
+                    city_out['segment_queue'] = net.segment_queue
+                    cam_out['segment_queue'] = net.segment_queue
+                
+                if i < configer.get('lr', 'warmup_iters') or not configer.get('contrast', 'use_contrast'):
+                    backward_loss0, loss_seg0, loss_aux0 = contrast_losses[0](city_out, lb_city, CITY_ID, True)
+                    backward_loss1, loss_seg1, loss_aux1 = contrast_losses[0](cam_out, lb_cam, CAM_ID, True)
                     
-                loss_contrast = loss_contrast0 + loss_contrast1
+                    
+                    
+                    backward_loss =  backward_loss0 + backward_loss1
+                    
+                    loss_seg =  loss_seg0 + loss_seg1
+                    if with_aux:
+                        loss_aux = [aux0 + aux1 for aux0, aux1 in zip(loss_aux0, loss_aux1)]
+                    # print(backward_loss0)
+                    # print(backward_loss1)
+                    # print(loss_seg0)
+                    # print(loss_seg1)
+                    # print(loss_aux0)
+                    # print(loss_aux1)
+                    # print("***************************")
+                else:
+                    backward_loss0, loss_seg0, loss_aux0, loss_contrast0 = contrast_losses[CITY_ID](city_out, lb_city, CITY_ID, False)
+                    backward_loss1, loss_seg1, loss_aux1, loss_contrast1 = contrast_losses[CAM_ID](cam_out, lb_cam, CAM_ID, False)
+                    
+                    
+                    backward_loss =  backward_loss0 + backward_loss1
+                    loss_seg =  loss_seg0 + loss_seg1
+                    if with_aux:
+                        loss_aux = [aux0 + aux1 for aux0, aux1 in zip(loss_aux0, loss_aux1)]
+                        
+                    loss_contrast = loss_contrast0 + loss_contrast1
+                    
                 
-            
             # display_loss = reduce_tensor(backward_loss) / get_world_size()
+
 
         if with_memory and 'key' in out:
             # dequeue_and_enqueue(configer, out['key'], out['lb_key'],
@@ -415,8 +467,11 @@ def train():
             dequeue_and_enqueue(configer, cam_out['key'], lb_cam.detach(),
                                 cam_out['segment_queue'], i, CAM_ID)
 
-
+        print('before backward')
+        # set_trace()
         scaler.scale(backward_loss).backward()
+        print('after backward')
+        sys.stdout.flush()
 
         # self.configer.plus_one('iters')
 
@@ -424,16 +479,18 @@ def train():
         scaler.step(optim)
         scaler.update()
         torch.cuda.synchronize()
-
+        # print('synchronize')
         time_meter.update()
         loss_meter.update(backward_loss.item())
         # loss_pre_meter.update(loss_pre.item())
-        loss_pre_meter.update(loss_seg.item()) 
-        if with_aux:
-            _ = [mter.update(lss.item()) for mter, lss in zip(loss_aux_meters, loss_aux)]
-            
-        if i >= configer.get('lr', 'warmup_iters') and configer.get('contrast', 'use_contrast'):
-            loss_contrast_meter.update(loss_contrast.item())
+        
+        if not use_dataset_aux_head or i > aux_iter:
+            loss_pre_meter.update(loss_seg.item()) 
+            if with_aux:
+                _ = [mter.update(lss.item()) for mter, lss in zip(loss_aux_meters, loss_aux)]
+                
+            if i >= configer.get('lr', 'warmup_iters') and configer.get('contrast', 'use_contrast'):
+                loss_contrast_meter.update(loss_contrast.item())
 
         ## print training log message
         if (i + 1) % 100 == 0:
@@ -444,13 +501,18 @@ def train():
                 loss_pre_meter, loss_aux_meters, loss_contrast_meter)
 
         if (i + 1) % 1000 == 0:
-            save_pth = osp.join(configer.get('res_save_pth'), 'nll_model_{}.pth'.format(i+1))
+            save_pth = osp.join(configer.get('res_save_pth'), 'model_{}.pth'.format(i+1))
             logger.info('\nsave models to {}'.format(save_pth))
 
-            if is_distributed():
-                heads, mious = eval_model_contrast(configer, net.module)
+            if use_dataset_aux_head and i < aux_iter:
+                eval_model = eval_model_aux
             else:
-                heads, mious = eval_model_contrast(configer, net)
+                eval_model = eval_model_contrast
+
+            if is_distributed():
+                heads, mious = eval_model(configer, net.module)
+            else:
+                heads, mious = eval_model(configer, net)
             logger.info(tabulate([mious, ], headers=heads, tablefmt='orgtbl'))
             net.train()
             
@@ -463,7 +525,7 @@ def train():
         lr_schdr.step()
 
     ## dump the final model and evaluate the result
-    save_pth = osp.join(configer.get('res_save_pth'), 'upsample_model_final.pth')
+    save_pth = osp.join(configer.get('res_save_pth'), 'model_final.pth')
     logger.info('\nsave models to {}'.format(save_pth))
     
     if is_distributed():
@@ -485,13 +547,23 @@ def train():
 
 
 def main():
-    torch.cuda.set_device(args.local_rank)
+
+    local_rank = int(os.environ["LOCAL_RANK"])
+    # torch.cuda.set_device(args.local_rank)
+    # dist.init_process_group(
+    #     backend='nccl',
+    #     init_method='tcp://127.0.0.1:{}'.format(args.port),
+    #     world_size=torch.cuda.device_count(),
+    #     rank=args.local_rank
+    # )
+    torch.cuda.set_device(local_rank)
     dist.init_process_group(
         backend='nccl',
         init_method='tcp://127.0.0.1:{}'.format(args.port),
         world_size=torch.cuda.device_count(),
-        rank=args.local_rank
+        rank=local_rank
     )
+    
     if not osp.exists(configer.get('res_save_pth')): os.makedirs(configer.get('res_save_pth'))
 
     setup_logger(f"{configer.get('model_name')}-train", configer.get('res_save_pth'))

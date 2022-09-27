@@ -28,7 +28,7 @@ import torch.distributed as dist
 from lib.models import model_factory
 from configs import set_cfg_from_file
 from lib.logger import setup_logger
-from lib.get_dataloader import get_data_loader
+from lib.get_dataloader import get_data_loader, get_city_loader
 from lib.city_to_cam import Cityid_to_Camid
 from lib.a2d2_to_cam import a2d2_to_Camid
 from lib.class_remap import ClassRemap
@@ -47,7 +47,7 @@ class MscEvalV0(object):
         self.flip = flip
         self.ignore_label = ignore_label
 
-    def __call__(self, net, dl, n_classes):
+    def __call__(self, net, dl, n_classes, dataset_id):
         ## evaluate
         hist = torch.zeros(n_classes, n_classes).cuda().detach()
         if dist.is_initialized() and dist.get_rank() != 0:
@@ -69,13 +69,13 @@ class MscEvalV0(object):
 
                 im_sc = im_sc.cuda()
                 
-                logits = net(im_sc)['seg'][0]
+                logits = net(im_sc, dataset=dataset_id)[0]
                 logits = F.interpolate(logits, size=size,
                         mode='bilinear', align_corners=True)
                 probs += torch.softmax(logits, dim=1)
                 if self.flip:
                     im_sc = torch.flip(im_sc, dims=(3, ))
-                    logits = net(im_sc)['seg'][0]
+                    logits = net(im_sc, dataset=dataset_id)[0]
                     logits = torch.flip(logits, dims=(3, ))
                     logits = F.interpolate(logits, size=size,
                             mode='bilinear', align_corners=True)
@@ -91,6 +91,7 @@ class MscEvalV0(object):
         if dist.is_initialized():
             dist.all_reduce(hist, dist.ReduceOp.SUM)
         ious = hist.diag() / (hist.sum(dim=0) + hist.sum(dim=1) - hist.diag())
+        print(ious)
         miou = np.nanmean(ious.detach().cpu().numpy())
         return miou.item()
 
@@ -158,84 +159,6 @@ class MscEvalV0_Contrast(object):
         miou = np.nanmean(ious.detach().cpu().numpy())
         return miou.item()
 
-# 修改后用于多数据集
-class MscEvalV0_cdcl(object):
-
-    def __init__(self, scales=(0.5, ), flip=False, ignore_label=255):
-        self.scales = scales
-        self.flip = flip
-        self.ignore_label = ignore_label
-
-    def __call__(self, net, dl, n_classes):
-        ## evaluate
-        # 修改后用于多数据集
-        hist = [torch.zeros(n_c, n_c).cuda().detach() for n_c in n_classes]
-        diter = [iter(d) for d in dl]
-
-        # a2d2的验证集大约为4000，cityscapes的为500，cityscapes的多次计算
-        num_imgs = 500
-        batch_size = 1
-        for i in range(0, num_imgs):
-            if (i+1) % 50 == 0:
-                print('iter:', i+1)
-            imgs = []
-            label = []
-            for j in range(0, len(diter)):
-                try:
-                    im_ds, lb_ds = next(diter[j])
-                    if not im_ds.size()[0] == batch_size:
-                        raise StopIteration
-                except StopIteration:
-                    print("StopIteration")
-                    diter[j] = iter(dl[j])
-                    im_ds, lb_ds = next(diter[j])
-                imgs.append(im_ds)
-                label.append(lb_ds)
-            N, _, H, W = [[lb.size()[j] for lb in label] for j in range(0, 4)]
-            label = [lb.squeeze(1).cuda() for lb in label]
-            size = [lb.size()[-2:] for lb in label]
-            probs = [(torch.zeros((N[j], n_classes[j], H[j], W[j]),
-                                dtype=torch.float32).cuda().detach()) for j in range(0, len(N))]
-            for scale in self.scales:
-                sH, sW = [int(scale * h) for h in H], [int(scale * w) for w in W]
-                sH, sW = get_round_size(sH), get_round_size(sW)
-
-                im_sc = [F.interpolate(imgs[j], size=(sH[j], sW[j]),
-                        mode='bilinear', align_corners=True) for j in range(0, len(imgs))]
-                im_sc = [im.cuda() for im in im_sc]
-                # logits = net(*im_sc)[0]
-                logits = [net(im)[0][i] for i, im in enumerate(im_sc)]
-                logits = [F.interpolate(logits[j], size=(size[j][0], size[j][1]),
-                        mode='bilinear', align_corners=True) for j in range(0, len(logits))]
-                sm = [torch.softmax(lg, dim=1) for lg in logits]
-                probs = [p + s for p, s in zip(probs, sm)]
-                if self.flip:
-                    im_sc = [torch.flip(im_sc[j], dims=(3, )) for j in range(0, len(im_sc))]
-                    # logits = net(*im_sc)[0]
-                    logits = [net(im)[0][i] for i, im in enumerate(im_sc)]
-                    logits = [torch.flip(lg, dims=(3, )) for lg in logits]
-                    logits = [F.interpolate(logits[j], size=(size[j][0], size[j][1]),
-                                            mode='bilinear', align_corners=True) for j in range(0, len(logits))]
-                    sm = [torch.softmax(lg, dim=1) for lg in logits]
-                    probs = [p + s for p, s in zip(probs, sm)]
-            preds = [torch.argmax(pb, dim=1) for pb in probs]
-            keep = [lb != self.ignore_label for lb in label]
-            # bincount = [torch.bincount(
-            #     label[j][keep[j]] * n_classes[j] + preds[j][keep[j]],
-            #     minlength=n_classes[j] ** 2
-            #     ).view(n_classes[j], n_classes[j]) for j in range(0, len(label))]
-            # 可能由于某些tensor在显存不连续导致这一步计算速度很慢，放到numpy上计算
-            bincount = [torch.tensor(np.bincount(
-                label[j].cpu().numpy()[keep[j].cpu().numpy()] * n_classes[j] + preds[j].cpu().numpy()[keep[j].cpu().numpy()],
-                minlength=n_classes[j] ** 2
-            )).cuda().view(n_classes[j], n_classes[j]) for j in range(0, len(label))]
-            hist = [h + b for h, b in zip(hist, bincount)]
-        if dist.is_initialized():
-            for j in range(0, len(hist)):
-                dist.all_reduce(hist[j], dist.ReduceOp.SUM)
-        ious = [h.diag() / (h.sum(dim=0) + h.sum(dim=1) - h.diag()) for h in hist]
-        miou = [np.nanmean(i.detach().cpu().numpy()) for i in ious]
-        return [mi.item() for mi in miou]
 
 class MscEvalCrop(object):
 
@@ -704,7 +627,7 @@ def eval_model_contrast(configer, net):
     # cfg_cam  = set_cfg_from_file(configer.get('dataset2'))
 
     # dl_cam = get_data_loader(cfg_cam, mode='val', distributed=is_dist)
-    dl_city, dl_cam = get_data_loader(configer, distributed=is_dist)
+    dl_city, dl_cam = get_data_loader(configer, aux_mode='eval', distributed=is_dist)
     net.eval()
 
     heads, mious = [], []
@@ -713,6 +636,38 @@ def eval_model_contrast(configer, net):
     single_scale = MscEvalV0_Contrast(configer, (1., ), False)
     
     mIOU_city = single_scale(net, dl_city, 19, CITY_ID)
+    mIOU_cam = single_scale(net, dl_cam, configer.get('dataset2', 'n_cats'), CAM_ID)
+
+    heads.append('single_scale')
+    mious.append(mIOU_cam)
+    mious.append(mIOU_city)
+    logger.info('Cam single mIOU is: %s\nCityScapes single mIOU is: %s\n', mIOU_cam, mIOU_city)
+
+    net.aux_mode = org_aux
+    return heads, mious
+
+@torch.no_grad()
+def eval_model_aux(configer, net):
+    org_aux = net.aux_mode
+    net.aux_mode = 'eval'
+
+    is_dist = dist.is_initialized()
+    
+    # cfg_city = set_cfg_from_file(configer.get('dataset1'))
+    # cfg_cam  = set_cfg_from_file(configer.get('dataset2'))
+
+    # dl_cam = get_data_loader(cfg_cam, mode='val', distributed=is_dist)
+    _, dl_cam = get_data_loader(configer, aux_mode='eval', distributed=is_dist)
+    dl_city = get_city_loader(configer, aux_mode='eval', distributed=is_dist)
+    
+    net.eval()
+
+    heads, mious = [], []
+    logger = logging.getLogger()
+
+    single_scale = MscEvalV0((1., ), False)
+    
+    mIOU_city = single_scale(net, dl_city, configer.get('dataset1', 'n_cats'), CITY_ID)
     mIOU_cam = single_scale(net, dl_cam, configer.get('dataset2', 'n_cats'), CAM_ID)
 
     heads.append('single_scale')

@@ -20,9 +20,9 @@ np.random.seed(123)
 
 # args
 parse = argparse.ArgumentParser()
-parse.add_argument('--weight_path', type=str, default='res/model_50000.pth',)
+parse.add_argument('--weight_path', type=str, default='res/nll_model_25000.pth',)
 parse.add_argument('--config', dest='config', type=str, default='configs/bisenetv2_city_cam.json',)
-parse.add_argument('--img_path', dest='img_path', type=str, default='0001TP_009210.png',)
+parse.add_argument('--img_path', dest='img_path', type=str, default='0001TP_007380.png',)
 args = parse.parse_args()
 # cfg = set_cfg_from_file(args.config)
 configer = Configer(configs=args.config)
@@ -71,7 +71,7 @@ im = cv2.imread(args.img_path)[:, :, ::-1]
 for i in range(1):
     t0 = time()
     # input_im = to_tensor(dict(im=im, lb=None))['im'].unsqueeze(0).cuda()
-    input_im = cv2.resize(im, (1024, 512))
+    input_im = cv2.resize(im, (960, 768))
     # input_im = im
     input_im = torch.tensor(input_im.astype(np.float32).copy()).unsqueeze(0) #.cuda()
     # print(input_im)

@@ -21,10 +21,12 @@ class ConvBNReLU(nn.Module):
                 in_chan, out_chan, kernel_size=ks, stride=stride,
                 padding=padding, dilation=dilation,
                 groups=groups, bias=bias)
-        self.bn = nn.ModuleList([nn.BatchNorm2d(out_chan, affine=False) for i in range(0, n_bn)])
+        
+        self.n_bn = n_bn
+        self.bn = nn.ModuleList([nn.BatchNorm2d(out_chan, affine=True) for i in range(0, self.n_bn)])
         ## 采用共享的affine parameter
-        self.affine_weight = nn.Parameter(torch.empty(out_chan))
-        self.affine_bias = nn.Parameter(torch.empty(out_chan))
+        # self.affine_weight = nn.Parameter(torch.empty(out_chan))
+        # self.affine_bias = nn.Parameter(torch.empty(out_chan))
         
         self.relu = nn.ReLU(inplace=True)
 
@@ -44,8 +46,8 @@ class ConvBNReLU(nn.Module):
                 end_index = begin_index + batch_size[i]
                 feat_ = self.bn[i](feat[begin_index: end_index])
                 
-                ## affine param
-                feat_ = feat_ * self.affine_weight.reshape(1,-1,1,1) + self.affine_bias.reshape(1,-1,1,1)
+                # ## affine param
+                # feat_ = feat_ * self.affine_weight.reshape(1,-1,1,1) + self.affine_bias.reshape(1,-1,1,1)
                 
                 feat_ = self.relu(feat_)
                 feats.append(feat_)
@@ -59,11 +61,14 @@ class ConvBNReLU(nn.Module):
             # for i in range(0, len(other_x) + 1):
             #     feats.append(feats_out[i * batch_size: (i + 1) * batch_size])
         else:
+            if dataset >= self.n_bn or dataset < 0:
+                dataset = 0
+            
             feat = self.conv(x)
             feat = self.bn[dataset](feat)
             
-            ## affine param
-            feat = feat * self.affine_weight.reshape(1,-1,1,1) + self.affine_bias.reshape(1,-1,1,1)
+            # ## affine param
+            # feat = feat * self.affine_weight.reshape(1,-1,1,1) + self.affine_bias.reshape(1,-1,1,1)
             
             feat = self.relu(feat)
             feats = [feat]
@@ -85,10 +90,12 @@ class ConvBN(nn.Module):
                 in_chan, out_chan, kernel_size=ks, stride=stride,
                 padding=padding, dilation=dilation,
                 groups=groups, bias=bias)
-        self.bn = nn.ModuleList([nn.BatchNorm2d(out_chan, affine=False) for i in range(0, n_bn)])
+        self.n_bn = n_bn
+        self.bn = nn.ModuleList([nn.BatchNorm2d(out_chan, affine=True) for i in range(0, self.n_bn)])
+        
         ## 采用共享的affine parameter
-        self.affine_weight = nn.Parameter(torch.empty(out_chan))
-        self.affine_bias = nn.Parameter(torch.empty(out_chan))
+        # self.affine_weight = nn.Parameter(torch.empty(out_chan))
+        # self.affine_bias = nn.Parameter(torch.empty(out_chan))
         
 
     def forward(self, dataset, x, *other_x):
@@ -105,26 +112,29 @@ class ConvBN(nn.Module):
                 end_index = begin_index + batch_size[i]
                 feat_ = self.bn[i](feat[begin_index: end_index])
                 
-                ## affine param
-                feat_ = feat_ * self.affine_weight.reshape(1,-1,1,1) + self.affine_bias.reshape(1,-1,1,1)
+                # ## affine param
+                # feat_ = feat_ * self.affine_weight.reshape(1,-1,1,1) + self.affine_bias.reshape(1,-1,1,1)
                 
                 feats.append(feat_)
                 begin_index = end_index
         else:
+            if dataset >= self.n_bn or dataset < 0:
+                dataset = 0
+            
             feat = self.conv(x)
             feat = self.bn[dataset](feat)
             
-            ## affine param
-            feat = feat * self.affine_weight.reshape(1,-1,1,1) + self.affine_bias.reshape(1,-1,1,1)
+            # ## affine param
+            # feat = feat * self.affine_weight.reshape(1,-1,1,1) + self.affine_bias.reshape(1,-1,1,1)
             
             feats = [feat]
         return feats
 
     def SetLastBNAttr(self, attr):
-        self.affine_weight.last_bn = attr
-        self.affine_bias.last_bn = attr
-        # for bn in self.bn:
-        #     bn.last_bn = attr
+        # self.affine_weight.last_bn = attr
+        # self.affine_bias.last_bn = attr
+        for bn in self.bn:
+            bn.last_bn = attr
 
 
 
@@ -234,15 +244,21 @@ class CEBlock(nn.Module):
         ## n_bn bn层数量，对应混合的数据集数量
 
         super(CEBlock, self).__init__()
-        self.bn = nn.ModuleList([nn.BatchNorm2d(128) for i in range(0, n_bn)])
+        
+        self.n_bn = n_bn
+        
+        self.bn = nn.ModuleList([nn.BatchNorm2d(128) for i in range(0, self.n_bn)])
         # # 所有list的模型都需要手动.cuda()
         # for i in range(0, n_bn):
         #     self.bn[i].cuda()
-        self.conv_gap = ConvBNReLU(128, 128, 1, stride=1, padding=0, n_bn=n_bn)
+        self.conv_gap = ConvBNReLU(128, 128, 1, stride=1, padding=0, n_bn=self.n_bn)
         #TODO: in paper here is naive conv2d, no bn-relu
-        self.conv_last = ConvBNReLU(128, 128, 3, stride=1, n_bn=n_bn)
+        self.conv_last = ConvBNReLU(128, 128, 3, stride=1, n_bn=self.n_bn)
 
     def forward(self, dataset, x, *other_x):
+        if dataset >= self.n_bn or dataset < 0:
+            dataset = 0
+    
         # feat = torch.mean(x, dim=(2, 3), keepdim=True)
         feat = x.view(x.shape[0], x.shape[1], -1)
         feat = feat.mean(2)
@@ -549,7 +565,7 @@ class BiSeNetV2_Contrast(nn.Module):
         self.configer = configer
         self.aux_mode = self.configer.get('aux_mode')
         self.num_unify_classes = self.configer.get("num_unify_classes")
-        self.n_datasets = self.configer.get('num_unify_classes')
+        self.n_datasets = self.configer.get('n_datasets')
         self.n_bn = self.configer.get("n_bn")
         self.detail = DetailBranch(n_bn=self.n_bn)
         self.segment = SegmentBranch(n_bn=self.n_bn)
@@ -558,6 +574,9 @@ class BiSeNetV2_Contrast(nn.Module):
         ## unify proj head
         self.proj_dim = self.configer.get('contrast', 'proj_dim')
         self.upsample = self.configer.get('contrast', 'upsample') 
+        
+        # 用于分数据集训练
+        self.batch_sizes = [self.configer.get('dataset'+str(i), 'ims_per_gpu') for i in range(1, self.n_datasets+1)]
         
         # 分数据集训练阶段
         self.train_dataset_aux = False
@@ -629,7 +648,9 @@ class BiSeNetV2_Contrast(nn.Module):
 
         self.init_weights()
 
-    def forward(self, x, dataset=0, *other_x):
+    def forward(self, x, dataset=0, perm_index=None, *other_x):
+        # perm_index用于恢复batch size中数据集来源信息，临时使用
+        
         # x = x.cuda()
         ## other_x 其他数据集的输入
         # size = x.size()[2:]
@@ -645,9 +666,10 @@ class BiSeNetV2_Contrast(nn.Module):
         # logits = [logit(feat_head[i]) for i, logit in enumerate(self.head)]
         ## 修改后支持单张图片输入
 
-        logits = [self.head(feat_head[i]) for i in range(0, len(other_x) + 1)]
+        
 
-        if self.aux_mode == 'train':
+        if self.aux_mode == 'train' and self.train_dataset_aux == False:
+            logits = [self.head(feat_head[i]) for i in range(0, len(other_x) + 1)]
             # logits_aux2 = self.aux2(feat2)
             # logits_aux3 = self.aux3(feat3)
             # logits_aux4 = self.aux4(feat4)
@@ -670,9 +692,36 @@ class BiSeNetV2_Contrast(nn.Module):
                 return {'seg': [logits, logits_aux2, logits_aux3, logits_aux4, logits_aux5_4], 'embed': emb}
                 
             # return logits, logits_aux2, logits_aux3, logits_aux4, logits_aux5_4
+        elif self.aux_mode == 'train' and self.train_dataset_aux == True:
+            acc = 0
+            sort_index = perm_index.sort()[1]
+            recover_index = []
+            
+            for i in range(self.n_datasets):
+                recover_index.append(sort_index[acc:acc+self.batch_sizes[i]])
+                acc += self.batch_sizes[i] 
+            
+            
+            ## 多数据集模式
+            ## 修改后支持单张图片输入
+            logits = [self.dataset_aux_head[i](feat_head[0][recover_index[i]]) for i in range(0, self.n_datasets)]
+            
+            logits_aux2 = [self.dataset_aux2[i](feat2[0][recover_index[i]]) for i in range(0, self.n_datasets)]
+            logits_aux3 = [self.dataset_aux3[i](feat3[0][recover_index[i]]) for i in range(0, self.n_datasets)]
+            logits_aux4 = [self.dataset_aux4[i](feat4[0][recover_index[i]]) for i in range(0, self.n_datasets)]
+            logits_aux5_4 = [self.dataset_aux5_4[i](feat5_4[0][recover_index[i]]) for i in range(0, self.n_datasets)]
+            
+            return {'seg': [logits, logits_aux2, logits_aux3, logits_aux4, logits_aux5_4]}
+   
+ 
+            # return logits, logits_aux2, logits_aux3, logits_aux4, logits_aux5_4
         elif self.aux_mode == 'eval':
-            if self.upsample is False:
-                logits = [self.up_sample(logit) for logit in logits] 
+            if self.train_dataset_aux:
+                logits = [self.dataset_aux_head[dataset](feat_head[0])]
+            else:    
+                logits = [self.head(feat_head[i]) for i in range(0, len(other_x) + 1)]
+                if self.upsample is False:
+                    logits = [self.up_sample(logit) for logit in logits] 
                 
             return logits
         elif self.aux_mode == 'pred':
@@ -829,6 +878,19 @@ class BiSeNetV2_Contrast(nn.Module):
     
     def set_train_dataset_aux(self, new_val=False):
         self.train_dataset_aux = new_val
+
+    def switch_require_grad_state(self, require_grad_state=True):
+        for p in self.detail.parameters():
+            p.requires_grad = require_grad_state
+            
+        for p in self.segment.parameters():
+            p.requires_grad = require_grad_state
+            
+        for p in self.bga.parameters():
+            p.requires_grad = require_grad_state
+        
+        
+        
 
 if __name__ == "__main__":
 
