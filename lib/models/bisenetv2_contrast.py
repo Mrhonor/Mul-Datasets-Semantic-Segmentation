@@ -861,6 +861,9 @@ class BiSeNetV2_Contrast(nn.Module):
     def get_params(self):
         def add_param_to_list(mod, wd_params, nowd_params):
             for param in mod.parameters():
+                if param.requires_grad == False:
+                    continue
+                
                 if param.dim() == 1:
                     nowd_params.append(param)
                 elif param.dim() == 4:

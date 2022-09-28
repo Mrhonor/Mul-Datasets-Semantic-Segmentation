@@ -57,7 +57,7 @@ def is_distributed():
 def parse_args():
     parse = argparse.ArgumentParser()
     parse.add_argument('--local_rank', dest='local_rank', type=int, default=-1,)
-    parse.add_argument('--port', dest='port', type=int, default=16747,)
+    parse.add_argument('--port', dest='port', type=int, default=16748,)
     parse.add_argument('--finetune_from', type=str, default=None,)
     parse.add_argument('--config', dest='config', type=str, default='configs/bisenetv2_city_cam.json',)
     return parse.parse_args()
@@ -309,8 +309,8 @@ def train():
         criteria_aux = [OhemCELoss(0.7) for _ in range(configer.get('loss', 'aux_num'))]
     
     finetune = configer.get('train', 'finetune')
-    # if finetune:
-    #     net.switch_require_grad_state(False)
+    if finetune:
+        net.switch_require_grad_state(False)
     
     ## ddp training
     if is_distributed():
@@ -467,11 +467,11 @@ def train():
             dequeue_and_enqueue(configer, cam_out['key'], lb_cam.detach(),
                                 cam_out['segment_queue'], i, CAM_ID)
 
-        print('before backward')
+        # print('before backward')
         # set_trace()
         scaler.scale(backward_loss).backward()
-        print('after backward')
-        sys.stdout.flush()
+        # print('after backward')
+
 
         # self.configer.plus_one('iters')
 

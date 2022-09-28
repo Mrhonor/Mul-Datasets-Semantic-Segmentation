@@ -9,7 +9,7 @@
       "im_root": "/home/cxh/datasets/",
       "train_im_anns":"datasets/Cityscapes/train.txt",
       "val_im_anns":"datasets/Cityscapes/val.txt", 
-      "ims_per_gpu": 3,
+      "ims_per_gpu": 8,
       "eval_ims_per_gpu": 3
 
     },
@@ -19,7 +19,7 @@
       "im_root": "/home/cxh/datasets/CamVid",
       "train_im_anns":"datasets/CamVid/train.txt",
       "val_im_anns":"datasets/CamVid/test.txt", 
-      "ims_per_gpu": 2,
+      "ims_per_gpu": 4,
       "eval_ims_per_gpu": 2
     },
     "n_bn": 1,
@@ -63,16 +63,16 @@
       "ignore_index": 255
     },
     "lr": {
-      "lr_start": 5e-3,
+      "lr_start": 2e-3,
       "weight_decay": 5e-5,
-      "warmup_iters": 1000,
+      "warmup_iters": 0,
       "max_iter": 100000
     },
     "train": {
       "scales": [0.5, 1.0, 2.0],
       "cropsize": [512, 1024],
       "finetune": true,
-      "finetune_from": "res/pretrain/model_7000.pth"
+      "finetune_from": "res/pretrain/city_cam_pretrain_model_86000.pth"
     },
     "val": {
       "scales": [0.5, 0.75, 1.0, 1.25, 1.5, 1.75],
@@ -88,14 +88,14 @@
       "max_samples": 4096,
       "max_views": 1000,
       "stride": 8,
-      "loss_weight": 0.3,
+      "loss_weight": 0.2,
       "use_rmi": false,
       "use_lovasz": false,
       "with_memory": true,
       "memory_size": 5000,
       "pixel_update_freq": 10,
       "coefficient": 0.99,
-      "upsample": true
+      "upsample": false
     },
     "res_save_pth": "res/pretrain/",
     "network": {
