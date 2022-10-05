@@ -1,6 +1,6 @@
 {
     "model_name": "bisenetv2_contrast",
-    "aux_mode": "train",
+    "aux_mode": "pred_by_emb",
     "n_datasets": 2,
     "num_unify_classes": 19,
     "dataset1": {
@@ -9,7 +9,7 @@
       "im_root": "/home/cxh/datasets/",
       "train_im_anns":"datasets/Cityscapes/train.txt",
       "val_im_anns":"datasets/Cityscapes/val.txt", 
-      "ims_per_gpu": 4,
+      "ims_per_gpu": 10,
       "eval_ims_per_gpu": 3
 
     },
@@ -19,7 +19,7 @@
       "im_root": "/home/cxh/datasets/CamVid",
       "train_im_anns":"datasets/CamVid/train.txt",
       "val_im_anns":"datasets/CamVid/test.txt", 
-      "ims_per_gpu": 3,
+      "ims_per_gpu": 6,
       "eval_ims_per_gpu": 2
     },
     "n_bn": 1,
@@ -63,17 +63,16 @@
       "ignore_index": 255
     },
     "lr": {
-      "lr_start": 5e-3,
-      "weight_decay": 5e-5,
-      "warmup_iters": 1000,
-      "fix_param_iters": 10000,
+      "lr_start": 1e-2,
+      "weight_decay": 4e-5,
+      "warmup_iters": 0,
       "max_iter": 100000
     },
     "train": {
       "scales": [0.5, 1.0, 2.0],
       "cropsize": [512, 1024],
-      "finetune": true,
-      "finetune_from": "res/pretrain/pretrain_model_13000.pth"
+      "finetune": false,
+      "finetune_from": "res/model_16000.pth"
     },
     "val": {
       "scales": [0.5, 0.75, 1.0, 1.25, 1.5, 1.75],
@@ -100,13 +99,13 @@
       "with_ppd": false,
       "ppd_loss_weight": 1
     },
-    "res_save_pth": "res/pretrain/",
+    "res_save_pth": "res/nll_loss/",
     "network": {
       "stride": 8
     },
     "dataset_aux_head": {
       "use_dataset_aux_head": false,
-      "aux_iter": 15000
+      "aux_iter": 10000
     },
     "optim": "AdamW"
 }

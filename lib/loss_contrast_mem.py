@@ -180,38 +180,12 @@ class PixelContrastLoss(nn.Module, ABC):
         predict = predict.contiguous().view(batch_size, -1)
         feats = feats.permute(0, 2, 3, 1)
         feats = feats.contiguous().view(feats.shape[0], -1, feats.shape[-1])
-        
+    
         feats_, labels_ = self._hard_anchor_sampling(feats, labels, predict)
 
         loss = self._contrastive(feats_, labels_, queue=queue)
         return loss
 
-
-
-# class PixelContrastLossWithWeight(PixelContrastLoss):
-#     def __init__(self, configer=None):
-#         super(PixelContrastLossWithWeight, self).__init__(configer)
-        
-#     def forward(self, feats, labels=None, predict=None, queue=None):
-#         labels = labels.unsqueeze(1).float().clone()
-#         labels = torch.nn.functional.interpolate(labels,
-#                                                  (feats.shape[2], feats.shape[3]), mode='nearest')
-#         labels = labels.squeeze(1).long()
-#         assert labels.shape[-1] == feats.shape[-1], '{} {}'.format(labels.shape, feats.shape)
-
-#         batch_size = feats.shape[0]
-
-#         labels = labels.contiguous().view(batch_size, -1)
-#         predict = predict.contiguous().view(batch_size, -1)
-#         feats = feats.permute(0, 2, 3, 1)
-#         feats = feats.contiguous().view(feats.shape[0], -1, feats.shape[-1])
-
-#         loss = self._contrastive(feats, labels, queue=queue)
-#         # feats_, labels_ = self._hard_anchor_sampling(feats, labels, predict)
-
-#         # loss = self._contrastive(feats_, labels_, queue=queue)
-#         return loss
-        
     
 
 class ContrastCELoss(nn.Module, ABC):
@@ -318,4 +292,27 @@ class ContrastAuxCELoss(nn.Module, ABC):
 
         return loss
 
+
+class PixelPrototypeDistanceLoss(nn.Module):
+    def __init__(self, configer=None):
+        super(PixelPrototypeDistanceLoss, self).__init__()
+        
+        self.configer = configer
+        self.ignore_index = self.configer.get('loss', 'ignore_index')
+    
+    def forward(self, emb, lb, segment_queue):
+        shapedEmb = emb.permute(0,2,3,1)[lb!=self.ignore_index,:]
+        # shapedEmb = shapedEmb.contiguous().view(-1, emb.shape[1])
+        simScore = torch.matmul(shapedEmb, segment_queue.T)
+        # simScore = torch.einsum('bc,nc->bn', shapedEmb, segment_queue)
+        # print(simScore)
+        # simScoreTrue = simScore[lb!=self.ignore_index,:]
+        # print(simScore)
+        useful_lb = lb[lb!=self.ignore_index]
+        # print(useful_lb)
+        logits = torch.gather(simScore, 1, useful_lb[:, None].long())
+        # print(logits)
+        loss_ppd = (1 - logits).pow(2).mean()
+
+        return loss_ppd
 

@@ -57,7 +57,7 @@ def is_distributed():
 def parse_args():
     parse = argparse.ArgumentParser()
     parse.add_argument('--local_rank', dest='local_rank', type=int, default=-1,)
-    parse.add_argument('--port', dest='port', type=int, default=16748,)
+    parse.add_argument('--port', dest='port', type=int, default=16854,)
     parse.add_argument('--finetune_from', type=str, default=None,)
     parse.add_argument('--config', dest='config', type=str, default='configs/bisenetv2_city_cam.json',)
     return parse.parse_args()
@@ -171,8 +171,8 @@ def set_optimizer(model, configer):
     else:
         wd_params, non_wd_params = [], []
         for name, param in model.named_parameters():
-            # if param.requires_grad == False:
-            #     continue
+            if param.requires_grad == False:
+                continue
             
             if param.dim() == 1:
                 non_wd_params.append(param)
@@ -182,12 +182,20 @@ def set_optimizer(model, configer):
             {'params': wd_params, },
             {'params': non_wd_params, 'weight_decay': 0},
         ]
-    optim = torch.optim.SGD(
-        params_list,
-        lr=configer.get('lr', 'lr_start'),
-        momentum=0.9,
-        weight_decay=configer.get('lr', 'weight_decay'),
-    )
+    
+    if configer.get('optim') == 'SGD':
+        optim = torch.optim.SGD(
+            params_list,
+            lr=configer.get('lr', 'lr_start'),
+            momentum=0.9,
+            weight_decay=configer.get('lr', 'weight_decay'),
+        )
+    elif configer.get('optim') == 'AdamW':
+        optim = torch.optim.AdamW(
+            params_list,
+            lr=configer.get('lr', 'lr_start'),
+        )
+        
     return optim
 
 def set_model_dist(net):
@@ -252,7 +260,7 @@ def dequeue_and_enqueue(configer, keys, labels,
         # print(nn.functional.normalize(feat.view(-1), p=2, dim=0))
         # print(segment_queue[lb])
             
-        segment_queue[remap_lb] = coefficient * segment_queue[remap_lb] + (1 - coefficient) * nn.functional.normalize(feat, p=2, dim=0)
+        segment_queue[remap_lb] =  nn.functional.normalize((coefficient * segment_queue[remap_lb] + (1 - coefficient) * nn.functional.normalize(feat, p=2, dim=0)), p=2, dim=0)
 
 def reduce_tensor(inp):
     """
@@ -268,6 +276,7 @@ def reduce_tensor(inp):
     return reduced_inp
 
 def train():
+    # torch.autograd.set_detect_anomaly(True)
     n_dataset = configer.get('n_datasets')
     logger = logging.getLogger()
     is_dist = dist.is_initialized()
@@ -302,6 +311,8 @@ def train():
     starti = 0
     use_dataset_aux_head = configer.get('dataset_aux_head', 'use_dataset_aux_head')
     train_aux = use_dataset_aux_head
+    aux_iter = 0
+
     if use_dataset_aux_head:
         aux_iter = configer.get('dataset_aux_head', 'aux_iter')
         net.set_train_dataset_aux(starti < aux_iter)
@@ -309,8 +320,10 @@ def train():
         criteria_aux = [OhemCELoss(0.7) for _ in range(configer.get('loss', 'aux_num'))]
     
     finetune = configer.get('train', 'finetune')
-    if finetune:
-        net.switch_require_grad_state(False)
+    fix_param_iters = 0
+    # if finetune:
+    #     fix_param_iters = configer.get('lr', 'fix_param_iters')
+    #     net.switch_require_grad_state(False)
     
     ## ddp training
     if is_distributed():
@@ -357,7 +370,7 @@ def train():
 
         optim.zero_grad()
         with amp.autocast(enabled=configer.get('use_fp16')):
-            if finetune and i >= contrast_warmup_iters:
+            if finetune and i >= fix_param_iters + aux_iter:
                 finetune = False
                 if is_distributed():
                     net.module.switch_require_grad_state(True)
@@ -421,8 +434,8 @@ def train():
                     cam_out['segment_queue'] = net.segment_queue
                 
                 if i < configer.get('lr', 'warmup_iters') or not configer.get('contrast', 'use_contrast'):
-                    backward_loss0, loss_seg0, loss_aux0 = contrast_losses[0](city_out, lb_city, CITY_ID, True)
-                    backward_loss1, loss_seg1, loss_aux1 = contrast_losses[0](cam_out, lb_cam, CAM_ID, True)
+                    backward_loss0, loss_seg0, loss_aux0 = contrast_losses[CITY_ID](city_out, lb_city, CITY_ID, True)
+                    backward_loss1, loss_seg1, loss_aux1 = contrast_losses[CAM_ID](cam_out, lb_cam, CAM_ID, True)
                     
                     
                     
@@ -469,6 +482,7 @@ def train():
 
         # print('before backward')
         # set_trace()
+        # with torch.autograd.detect_anomaly():
         scaler.scale(backward_loss).backward()
         # print('after backward')
 

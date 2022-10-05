@@ -1,12 +1,15 @@
 from cmath import inf
+from distutils.command.config import config
 from traceback import print_tb
-from lib.loss_contrast_mem import PixelContrastLoss
+from lib.loss_contrast_mem import PixelContrastLoss, PixelPrototypeDistanceLoss
 from lib.loss_helper import NLLPlusLoss, WeightedNLLPlusLoss
 
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from lib.class_remap import ClassRemap
+
+
 
 class CrossDatasetsLoss(nn.Module):
     def __init__(self, configer=None):
@@ -32,6 +35,11 @@ class CrossDatasetsLoss(nn.Module):
         self.use_contrast = self.configer.get('contrast', 'use_contrast')
         if self.use_contrast:
             self.contrast_criterion = PixelContrastLoss(configer=configer)
+        
+            self.with_ppd = self.configer.get('contrast', 'with_ppd')
+            if self.with_ppd:
+                self.ppd_loss_weight = self.configer.get('contrast', 'ppd_loss_weight')
+                self.ppd_criterion = PixelPrototypeDistanceLoss(configer=configer)
         
         self.upsample = self.configer.get('contrast', 'upsample')
         self.network_stride = self.configer.get('network', 'stride')
@@ -83,10 +91,11 @@ class CrossDatasetsLoss(nn.Module):
 
             return loss, loss_seg, loss_aux
         else:
+            # emb_logits = torch.einsum('bchw,nc->bnhw', embedding, segment_queue)
             contrast_lable, weight_mask = self.classRemapper.ContrastRemapping(lb, embedding, segment_queue, dataset_id)
-            # pred = F.interpolate(input=logits, size=(h, w), mode='bilinear', align_corners=True)
+            pred = F.interpolate(input=logits, size=embedding.shape[-2:], mode='bilinear', align_corners=True)
 
-            _, predict = torch.max(logits, 1)
+            _, predict = torch.max(pred, 1)
 
             # if self.configer.get('contrast', 'upsample') is False:
             #     network_stride = self.configer.get('network', 'stride')
@@ -106,9 +115,20 @@ class CrossDatasetsLoss(nn.Module):
                 
                 loss = loss_seg + sum(loss_aux)
                 
+            if self.with_ppd:
+                loss_ppd = self.ppd_criterion(embedding, contrast_lable, segment_queue)
+                loss_contrast = loss_contrast + self.ppd_loss_weight * loss_ppd
+                
             
             return loss + self.loss_weight * loss_contrast, loss_seg, loss_aux, loss_contrast
     
 
-        
+if __name__ == "__main__":
+    loss_fuc = PixelPrototypeDistanceLoss()
+    a = torch.randn(2,4,3,2)
+    print(a)
+    lb = torch.tensor([[[0,1],[2,0],[255,0]],[[2,1],[1,255],[255,255]]])
+    seq = torch.randn(3,4)
+    print(seq)
+    print(loss_fuc(a,lb,seq))
         

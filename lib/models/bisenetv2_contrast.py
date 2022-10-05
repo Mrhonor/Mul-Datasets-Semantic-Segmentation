@@ -600,7 +600,9 @@ class BiSeNetV2_Contrast(nn.Module):
                 
             
         self.use_contrast = self.configer.get('contrast', 'use_contrast')
+
         if self.use_contrast:
+            
             if configer.get('use_sync_bn'):
                 self.projHead = ProjectionHead(dim_in=128, proj_dim=self.proj_dim, up_factor=self.network_stride, bn_type='torchsyncbn', up_sample=self.upsample)
             else:
@@ -636,11 +638,17 @@ class BiSeNetV2_Contrast(nn.Module):
             self.up_sample = nn.Upsample(scale_factor=8, mode='bilinear', align_corners=True)
             
         if self.aux_mode == 'train':
-            self.aux2 = SegmentHead(16, 128, self.num_unify_classes, up_factor=4, aux=True)
-            self.aux3 = SegmentHead(32, 128, self.num_unify_classes, up_factor=8, aux=True)
-            self.aux4 = SegmentHead(64, 128, self.num_unify_classes, up_factor=16, aux=True)
-            self.aux5_4 = SegmentHead(128, 128, self.num_unify_classes, up_factor=32, aux=True)
-        
+            if self.upsample:
+                self.aux2 = SegmentHead(16, 128, self.num_unify_classes, up_factor=4, aux=True)
+                self.aux3 = SegmentHead(32, 128, self.num_unify_classes, up_factor=8, aux=True)
+                self.aux4 = SegmentHead(64, 128, self.num_unify_classes, up_factor=16, aux=True)
+                self.aux5_4 = SegmentHead(128, 128, self.num_unify_classes, up_factor=32, aux=True)
+            else:
+                self.aux2 = SegmentHead(16, 128, self.num_unify_classes, up_factor=1, aux=True)
+                self.aux3 = SegmentHead(32, 128, self.num_unify_classes, up_factor=1, aux=True)
+                self.aux4 = SegmentHead(64, 128, self.num_unify_classes, up_factor=2, aux=True)
+                self.aux5_4 = SegmentHead(128, 128, self.num_unify_classes, up_factor=4, aux=True)
+            
         self.register_buffer("segment_queue", torch.randn(self.num_unify_classes, self.proj_dim))
 
         self.segment_queue = nn.functional.normalize(self.segment_queue, p=2, dim=1)
@@ -725,12 +733,25 @@ class BiSeNetV2_Contrast(nn.Module):
                 
             return logits
         elif self.aux_mode == 'pred':
+            logits = [self.head(feat_head[i]) for i in range(0, len(other_x) + 1)]
             # pred = logits.argmax(dim=1)
             if self.upsample is False:
                 logits = [self.up_sample(logit) for logit in logits] 
-            
+            # print(logits[0].argmax(dim=1).shape)
             pred = [logit.argmax(dim=1) for logit in logits]
             return pred
+        elif self.aux_mode == 'pred_by_emb':
+            emb = [self.projHead(feat_head[i]) for i in range(0, len(other_x) + 1)]
+            # emb = emb.permute(0,2,3,1)
+            print(emb[0].shape)
+            simScore = [torch.einsum('bchw,nc->bnhw', emb[i], self.segment_queue) for i in range(0, len(other_x) + 1)]
+            # if self.upsample is False:
+            #     simScore = [self.up_sample(score) for score in simScore] 
+            # print(simScore[0].argmax(dim=1).shape)
+            
+            MaxSimIndex = [Score.argmax(dim=1) for Score in simScore]
+            return MaxSimIndex
+            
         else:
             raise NotImplementedError
 

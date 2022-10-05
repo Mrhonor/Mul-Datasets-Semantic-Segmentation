@@ -33,14 +33,16 @@ class ClassRemap():
             
         return outLabels
         
+    
     def ContrastRemapping(self, labels, embed, proto, dataset_id):
         is_emb_upsampled = self.configer.get('contrast', 'upsample')
         
         # if is_emb_upsampled:
-        #     contrast_lb = labels
-        # else:
         #     contrast_lb = labels[:, ::self.network_stride, ::self.network_stride]
+        # else:
         contrast_lb = labels
+            
+        # contrast_lb = labels
         B, H, W = contrast_lb.shape
         
         mask = torch.ones_like(contrast_lb) * self.ignore_index
@@ -66,7 +68,7 @@ class ClassRemap():
             else:
                 # 在多映射情况下，找到内积最大的一项的标签
                 
-                shapeEmbed = embed.permute(0,2,3,1)
+                shapeEmbed = embed.permute(0,2,3,1).detach()
                 # shapeEmbed = F.normalize(shapeEmbed, p=2, dim=-1)
                 # print(shapeEmbed[labels==int(k)].shape)
                 # print(proto.shape)
@@ -88,7 +90,7 @@ class ClassRemap():
                 
                 weight_mask[contrast_lb==int(k)] = expend_vector
                 
-        # if is_emb_upsampled is False:
+        # if is_emb_upsampled:
         #     weight_mask = self.Upsample(weight_mask.permute(0,3,1,2)).permute(0,2,3,1)
           
         return mask, weight_mask
@@ -106,7 +108,7 @@ class ClassRemap():
                 weight_vector = weight_vector.cuda()
                 
             for val in v:
-                weight_vector[val] = 1 / map_num
+                weight_vector[val] = 1  # / map_num
                 
             weight_mask[labels==int(k)] = weight_vector
 

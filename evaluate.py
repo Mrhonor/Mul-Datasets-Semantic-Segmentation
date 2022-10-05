@@ -678,13 +678,45 @@ def eval_model_aux(configer, net):
     net.aux_mode = org_aux
     return heads, mious
 
+@torch.no_grad()
+def eval_model_emb(configer, net):
+    org_aux = net.aux_mode
+    net.aux_mode = 'pred_by_emb'
+
+    is_dist = dist.is_initialized()
+    
+    # cfg_city = set_cfg_from_file(configer.get('dataset1'))
+    # cfg_cam  = set_cfg_from_file(configer.get('dataset2'))
+
+    # dl_cam = get_data_loader(cfg_cam, mode='val', distributed=is_dist)
+    _, dl_cam = get_data_loader(configer, aux_mode='eval', distributed=is_dist)
+    dl_city = get_city_loader(configer, aux_mode='eval', distributed=is_dist)
+    
+    net.eval()
+
+    heads, mious = [], []
+    logger = logging.getLogger()
+
+    single_scale = MscEvalV0_Contrast(configer, (1., ), False)
+    
+    mIOU_city = single_scale(net, dl_city, 19, CITY_ID)
+    mIOU_cam = single_scale(net, dl_cam, configer.get('dataset2', 'n_cats'), CAM_ID)
+
+    heads.append('single_scale')
+    mious.append(mIOU_cam)
+    mious.append(mIOU_city)
+    logger.info('Cam single mIOU is: %s\nCityScapes single mIOU is: %s\n', mIOU_cam, mIOU_city)
+
+    net.aux_mode = org_aux
+    return heads, mious
+
 
 def parse_args():
     parse = argparse.ArgumentParser()
     parse.add_argument('--local_rank', dest='local_rank', type=int, default=-1,)
     parse.add_argument('--port', dest='port', type=int, default=16745,)
     parse.add_argument('--finetune_from', type=str, default=None,)
-    parse.add_argument('--config', dest='config', type=str, default='configs/bisenetv2_city_cam.json',)
+    parse.add_argument('--config', dest='config', type=str, default='configs/bisenetv2_eval.json',)
     return parse.parse_args()
 
 
@@ -706,7 +738,7 @@ def main():
     
     logger = logging.getLogger()
     net = model_factory[configer.get('model_name')](configer)
-    state = torch.load('res/upsample_model_final.pth', map_location='cpu')
+    state = torch.load('res/pretrain/semi_upsample_model_17000.pth', map_location='cpu')
     net.load_state_dict(state, strict=False)
     
     net.cuda()
@@ -714,6 +746,8 @@ def main():
     net.eval()
     
     heads, mious = eval_model_contrast(configer, net)
+    
+    # heads, mious = eval_model_emb(configer, net)
     logger.info(tabulate([mious, ], headers=heads, tablefmt='orgtbl'))
     
     
