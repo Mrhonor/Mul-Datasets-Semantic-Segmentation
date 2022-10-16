@@ -19,6 +19,7 @@ from tabulate import tabulate
 
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 import torch.distributed as dist
 from torch.utils.data import DataLoader
 import torch.cuda.amp as amp
@@ -76,61 +77,6 @@ CAM_ID = 1
 
 ClassRemaper = ClassRemap(configer=configer)
 
-def load_pretrained(net):
-    state = torch.load(args.finetune_from, map_location='cpu')
-
-    detail_state = {}
-    detail_state['S1_1.conv.weight'] = state['detail']['S1.0.conv.weight']
-    detail_state['S1_2.conv.weight'] = state['detail']['S1.1.conv.weight']
-    detail_state['S2_1.conv.weight'] = state['detail']['S2.0.conv.weight']
-    detail_state['S2_2.conv.weight'] = state['detail']['S2.1.conv.weight']
-    detail_state['S2_3.conv.weight'] = state['detail']['S2.2.conv.weight']
-    detail_state['S3_1.conv.weight'] = state['detail']['S3.0.conv.weight']
-    detail_state['S3_2.conv.weight'] = state['detail']['S3.1.conv.weight']
-    detail_state['S3_3.conv.weight'] = state['detail']['S3.2.conv.weight']
-
-    segment_state = {}
-    segment_state['S1S2.conv.conv.weight'] = state['segment']['S1S2.conv.conv.weight']
-    segment_state['S1S2.left_1.conv.weight'] = state['segment']['S1S2.left.0.conv.weight']
-    segment_state['S1S2.left_2.conv.weight'] = state['segment']['S1S2.left.1.conv.weight']
-    segment_state['S1S2.fuse.conv.weight'] = state['segment']['S1S2.fuse.conv.weight']
-
-    def loadGELayerS2(srcDict, src_name, targerdict, target_name):
-        targerdict[target_name + '.conv1.conv.weight'] = srcDict[src_name + '.conv1.conv.weight']
-        targerdict[target_name + '.dwconv1.conv.weight'] = srcDict[src_name + '.dwconv1.0.weight']
-        targerdict[target_name + '.dwconv2.conv.weight'] = srcDict[src_name + '.dwconv2.0.weight']
-        targerdict[target_name + '.conv2.conv.weight'] = srcDict[src_name + '.conv2.0.weight']
-        targerdict[target_name + '.shortcut_1.conv.weight'] = srcDict[src_name + '.shortcut.0.weight']
-        targerdict[target_name + '.shortcut_2.conv.weight'] = srcDict[src_name + '.shortcut.2.weight']
-
-    def loadGELayerS1(srcDict, src_name, targerdict, target_name):
-        targerdict[target_name + '.conv1.conv.weight'] = srcDict[src_name + '.conv1.conv.weight']
-        targerdict[target_name + '.dwconv.conv.weight'] = srcDict[src_name + '.dwconv.0.weight']
-        targerdict[target_name + '.conv2.conv.weight'] = srcDict[src_name + '.conv2.0.weight']
-
-    loadGELayerS2(state['segment'], 'S3.0', segment_state, 'S3_1')
-    loadGELayerS1(state['segment'], 'S3.1', segment_state, 'S3_2')
-    loadGELayerS2(state['segment'], 'S4.0', segment_state, 'S4_1')
-    loadGELayerS1(state['segment'], 'S4.1', segment_state, 'S4_2')
-    loadGELayerS2(state['segment'], 'S5_4.0', segment_state, 'S5_4_1')
-    loadGELayerS1(state['segment'], 'S5_4.1', segment_state, 'S5_4_2')
-    loadGELayerS1(state['segment'], 'S5_4.2', segment_state, 'S5_4_3')
-    loadGELayerS1(state['segment'], 'S5_4.3', segment_state, 'S5_4_4')
-    segment_state['S5_5.conv_gap.conv.weight'] = state['segment']['S5_5.conv_gap.conv.weight']
-    segment_state['S5_5.conv_last.conv.weight'] = state['segment']['S5_5.conv_last.conv.weight']
-
-    bga_state = {}
-    bga_state['left1_convbn.conv.weight'] = state['bga']['left1.0.weight']
-    bga_state['left1_conv.weight'] = state['bga']['left1.2.weight']
-    bga_state['left2_convbn.conv.weight'] = state['bga']['left2.0.weight']
-    bga_state['right1.conv.weight'] = state['bga']['right1.0.weight']
-    bga_state['right2_convbn.conv.weight'] = state['bga']['right2.0.weight']
-    bga_state['right2_conv.weight'] = state['bga']['right2.2.weight']
-    bga_state['conv.conv.weight'] = state['bga']['conv.0.weight']
-
-    net.detail.load_state_dict(detail_state, strict=True)
-    net.segment.load_state_dict(segment_state, strict=True)
-    net.bga.load_state_dict(bga_state, strict=True)
 
 def set_model(configer):
     logger = logging.getLogger()
@@ -209,7 +155,8 @@ def set_model_dist(net):
     return net
 
 def set_contrast_loss(configer):
-    return [CrossDatasetsLoss(configer=configer) for _ in range(0,configer.get('n_datasets'))]
+    ClassRemaper = ClassRemap(configer=configer)
+    return [CrossDatasetsLoss(configer, ClassRemaper) for _ in range(0,configer.get('n_datasets'))]
 
 def set_meters(configer):
     time_meter = TimeMeter(configer.get('lr', 'max_iter'))
@@ -221,9 +168,11 @@ def set_meters(configer):
             
     return time_meter, loss_meter, loss_pre_meter, loss_aux_meters, loss_contrast_meter
 
-def dequeue_and_enqueue(configer, keys, labels,
+def dequeue_and_enqueue(configer, seg_out, keys, labels,
                             segment_queue, iter, dataset_id):
     ## 更新memory bank
+    out = seg_out[0]
+    probs = F.softmax(out, dim=1)
     
     batch_size = keys.shape[0]
     feat_dim = keys.shape[1]
@@ -231,6 +180,7 @@ def dequeue_and_enqueue(configer, keys, labels,
     coefficient = configer.get('contrast', 'coefficient')
     warmup_iter = configer.get('lr', 'warmup_iters')
     ignore_index = configer.get('loss', 'ignore_index')
+    update_confidence_thresh = configer.get('contrast', 'update_confidence_thresh')
     if iter < warmup_iter:
         coefficient = coefficient * iter / warmup_iter
     
@@ -244,18 +194,31 @@ def dequeue_and_enqueue(configer, keys, labels,
     this_label = labels.contiguous().view(-1)
     this_label_ids = torch.unique(this_label)
     this_label_ids = [x for x in this_label_ids if x >= 0 and x != ignore_index]
+    
+    this_probs = probs.permute(1, 0, 2, 3)
+    this_probs = probs.contiguous().view(-1)
+
 
     for lb_id in this_label_ids:
         lb = lb_id.item()
-
-        idxs = (this_label == lb).nonzero()
-        # segment enqueue and dequeue
-        feat = torch.mean(this_feat[:, idxs], dim=1).squeeze(1)
-
+        
         if len(classRemapper.getAnyClassRemap(lb, dataset_id)) > 1:
-            remap_lb = lb
+            ## 当一个标签对应多个的情况下，不应该进行更新
+            # remap_lb = lb
+            continue
         else:
             remap_lb = classRemapper.getAnyClassRemap(lb, dataset_id)[0]
+
+        idxs = (this_label == lb).nonzero()
+        feat_idxs = this_feat[:, idxs]
+        
+        # 计算对应置信度是否大于阈值
+        update_id = (this_probs[remap_lb, idxs] > update_confidence_thresh).nonzero()
+        # segment enqueue and dequeue
+        feat = torch.mean(feat_idxs[update_id], dim=1).squeeze(1)
+        
+        # # segment enqueue and dequeue
+        # feat = torch.mean(this_feat[:, idxs], dim=1).squeeze(1)
 
         # print(nn.functional.normalize(feat.view(-1), p=2, dim=0))
         # print(segment_queue[lb])
@@ -474,10 +437,10 @@ def train():
             #                     pixel_queue=net.module.pixel_queue,
             #                     pixel_queue_ptr=net.module.pixel_queue_ptr)
 
-            dequeue_and_enqueue(configer, city_out['key'], lb_city.detach(),
+            dequeue_and_enqueue(configer, city_out['seg'], city_out['key'], lb_city.detach(),
                                 city_out['segment_queue'], i, CITY_ID)
 
-            dequeue_and_enqueue(configer, cam_out['key'], lb_cam.detach(),
+            dequeue_and_enqueue(configer, cam_out['seg'], cam_out['key'], lb_cam.detach(),
                                 cam_out['segment_queue'], i, CAM_ID)
 
         # print('before backward')

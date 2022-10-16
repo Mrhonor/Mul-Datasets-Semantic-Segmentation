@@ -2,12 +2,12 @@ from cmath import inf
 from distutils.command.config import config
 from traceback import print_tb
 from lib.loss_contrast_mem import PixelContrastLoss, PixelPrototypeDistanceLoss
-from lib.loss_helper import NLLPlusLoss, WeightedNLLPlusLoss
+from lib.loss_helper import NLLPlusLoss, WeightedNLLPlusLoss, MultiLabelCrossEntropyLoss
 
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from lib.class_remap import ClassRemap
+from lib.class_remap import ClassRemap, ClassRemapOneHotLabel
 
 
 
@@ -16,7 +16,7 @@ class CrossDatasetsLoss(nn.Module):
         super(CrossDatasetsLoss, self).__init__()
         
         self.configer = configer
-        self.classRemapper = ClassRemap(configer=self.configer)
+        self.classRemapper = eval(self.configer.get('class_remaper'))(configer=self.configer)
         
         # self.ignore_index = -1
         # if self.configer.exists('loss', 'params') and 'ce_ignore_index' in self.configer.get('loss', 'params'):
@@ -25,12 +25,12 @@ class CrossDatasetsLoss(nn.Module):
         self.loss_weight = self.configer.get('contrast', 'loss_weight')    
             
         # self.seg_criterion_warmup = NLLPlusLoss(configer=self.configer)   
-        self.seg_criterion = WeightedNLLPlusLoss(configer=self.configer)   
+        self.seg_criterion = eval(self.configer.get('loss', 'type'))(configer=self.configer)   
             
         self.with_aux = self.configer.get('loss', 'with_aux')
         if self.with_aux:
             self.aux_num = self.configer.get('loss', 'aux_num')
-            self.segLoss_aux = [WeightedNLLPlusLoss(configer=self.configer) for _ in range(self.aux_num)]
+            self.segLoss_aux = [eval(self.configer.get('loss', 'type'))(configer=self.configer) for _ in range(self.aux_num)]
         
         self.use_contrast = self.configer.get('contrast', 'use_contrast')
         if self.use_contrast:

@@ -149,6 +149,24 @@ class ClassRemap():
                 
         return Remap_pred
         
+class ClassRemapOneHotLabel(ClassRemap):
+    def __init__(self, configer=None):
+        super(ClassRemapOneHotLabel, self).__init__(configer)
+
+    def SegRemapping(self, labels, dataset_id):
+        ## 输入 batchsize x H x W 输出 n x batch size x H x W
+        ## 1表示目标类， 0表示非目标类
+        ## dataset_id指定映射方案
+        b, h, w = labels.shape
+        outLabels = torch.zeros(self.num_unify_classes, b, h, w)
+        if labels.iscuda:
+            outLabels = outLabels.cuda()
+        
+        for k, v in self.remapList[dataset_id].items():
+            for i in v:
+                outLabels[i,labels==int(k)] = 1
+
+        return outLabels
         
 if __name__ == "__main__":
     import sys

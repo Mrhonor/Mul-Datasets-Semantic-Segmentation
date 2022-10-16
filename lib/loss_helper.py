@@ -21,9 +21,9 @@ import torch.nn.functional as F
 from torch.autograd import Variable
 # from lib.utils.tools.logger import Logger as Log
 
-from lib.rmi_loss import RMILoss
+# from lib.rmi_loss import RMILoss
 
-from lib.lovasz_loss import lovasz_softmax_flat, flatten_probas
+# from lib.lovasz_loss import lovasz_softmax_flat, flatten_probas
 
 
 class FSCERMILoss(nn.Module):
@@ -474,13 +474,100 @@ class WeightedNLLPlusLoss(NLLPlusLoss):
             
         return loss
 
-if __name__ == "__main__":
-    a = torch.randn(2, 3, 2, 2)
+class CircleLoss(nn.Module):
+    def __init__(self, m: float, gamma: float):
+        super(CircleLoss, self).__init__()
+        self.m = m
+        self.gamma = gamma
+        self.soft_plus = nn.Softplus()
+
+    def forward(self, sp, sn):
+        ap = torch.clamp_min(- sp.detach() + 1 + self.m, min=0.)
+        an = torch.clamp_min(sn.detach() + self.m, min=0.)
+
+        delta_p = 1 - self.m
+        delta_n = self.m
+
+        logit_p = - ap * (sp - delta_p) * self.gamma
+        logit_n = an * (sn - delta_n) * self.gamma
+
+        loss = self.soft_plus(torch.logsumexp(logit_n, dim=0) + torch.logsumexp(logit_p, dim=0))
+
+        return loss
+
+class MultiLabelCrossEntropyLoss(nn.Module):
+    def __init__(self, configer):
+        super(MultiLabelCrossEntropyLoss, self).__init__()
+        self.configer = configer
+        self.m = 0
+        self.gamma = 1
+        if configer:
+            self.m = self.configer.get('loss', 'm')
+            self.gamma = self.configer.get('loss', 'gamma')
+        self.soft_plus = nn.Softplus()
     
-    b = torch.tensor([[[[0,0],[1,1]],[[2,2],[0,0]]]])
-    weighted_mask = torch.tensor([[[[0.5,0,0.5], [0.3,0.7,0]],[[0.3,0.4,0.3], [0,1,0]]],[[[0,0,1], [0,0,1]],[[1,0,0],[1,0,0]]]], dtype=torch.float)
-    loss1 = NLLPlusLoss()
-    loss2 = WeightedNLLPlusLoss()
-    print(loss1(a,b))
-    print(loss2(a,weighted_mask))
-    print(loss2(a,weighted_mask).item())
+    def forward(self, x, labels):
+        # x: batch size x c x h x w
+        # labels: c x batch x h x w, 1表示目标标签，0表示非目标标签
+        # b, c, h, w = x.shape
+        
+        # pred = x.permute(1,0,2,3)
+        # pred = pred.contiguous().view(c, -1)
+        # lb = labels.contiguous().view(c, -1)
+        
+        pred = x
+        lb = labels
+        
+        pos_lb = torch.ones_like(lb)
+        pos_lb[lb == 0] = 0
+        
+        neg_lb = -1 * torch.ones_like(lb)
+        neg_lb[lb == 1] = 0
+        
+        pos_pred = pred * pos_lb
+        ## 保持矩阵形式，忽略为0项
+        pos_pred[pos_pred == 0] = -1e8 
+        pos_pred = pos_pred * self.gamma
+        
+        neg_pred = pred * neg_lb
+        neg_pred[neg_pred == 0] = -1e8
+        neg_pred = (neg_pred + self.m) * self.gamma
+        
+        loss = self.soft_plus(torch.logsumexp(pos_pred, dim=0) + torch.logsumexp(neg_pred, dim=0))
+        
+        loss = torch.mean(loss)
+        
+        return loss
+        
+    
+def test_MultiLabelCrossEntropyLoss():
+    loss_fuc = MultiLabelCrossEntropyLoss(None)
+    x = torch.tensor([[-1, 1],
+                      [2, 3], 
+                      [5, 2]])
+    labels = torch.tensor([[0,1],
+                           [1,0],
+                           [0,1]])
+    print(loss_fuc(x, labels))
+    
+        # print("pred: ")
+        # print(pos_pred)
+        # print(neg_pred)
+        # print("logsumexp: ")
+        # print(torch.logsumexp(pos_pred, dim=0))
+        # print(torch.logsumexp(neg_pred, dim=0))
+        # print(torch.logsumexp(pos_pred, dim=0) + torch.logsumexp(neg_pred, dim=0))
+        # print(self.soft_plus(torch.logsumexp(pos_pred, dim=0) + torch.logsumexp(neg_pred, dim=0)))
+    
+
+if __name__ == "__main__":
+    test_MultiLabelCrossEntropyLoss()
+    # a = torch.randn(2, 3, 2, 2)
+    
+    # b = torch.tensor([[[[0,0],[1,1]],[[2,2],[0,0]]]])
+    # weighted_mask = torch.tensor([[[[0.5,0,0.5], [0.3,0.7,0]],[[0.3,0.4,0.3], [0,1,0]]],[[[0,0,1], [0,0,1]],[[1,0,0],[1,0,0]]]], dtype=torch.float)
+    # loss1 = NLLPlusLoss()
+    # loss2 = WeightedNLLPlusLoss()
+    # print(loss1(a,b))
+    # print(loss2(a,weighted_mask))
+    # print(loss2(a,weighted_mask).item())

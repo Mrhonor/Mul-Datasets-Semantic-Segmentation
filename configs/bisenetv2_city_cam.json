@@ -57,10 +57,14 @@
       "10": [12, 17, 18],
       "11": [3]
     },
+    "class_remaper": "ClassRemap",
     "loss":{
+      "type": "WeightedNLLPlusLoss",
       "with_aux": true,
       "aux_num": 4,
-      "ignore_index": 255
+      "ignore_index": 255,
+      "m": 0,
+      "gamma": 1
     },
     "lr": {
       "lr_start": 5e-3,
@@ -97,6 +101,7 @@
       "pixel_update_freq": 10,
       "coefficient": 0.99,
       "upsample": true,
+      "update_confidence_thresh": 0.5,
       "with_ppd": false,
       "ppd_loss_weight": 1
     },
