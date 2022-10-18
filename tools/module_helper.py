@@ -32,6 +32,11 @@ class ModuleHelper(object):
                 nn.BatchNorm2d(num_features, **kwargs),
                 nn.ReLU()
             )
+        elif bn_type == 'torchbn1d':
+            return nn.Sequential(
+                nn.BatchNorm1d(num_features, **kwargs),
+                nn.ReLU()
+            )
         elif bn_type == 'torchsyncbn':
             return nn.Sequential(
                 nn.SyncBatchNorm(num_features, **kwargs),

@@ -155,8 +155,7 @@ def set_model_dist(net):
     return net
 
 def set_contrast_loss(configer):
-    ClassRemaper = ClassRemap(configer=configer)
-    return [CrossDatasetsLoss(configer, ClassRemaper) for _ in range(0,configer.get('n_datasets'))]
+    return [CrossDatasetsLoss(configer) for _ in range(0,configer.get('n_datasets'))]
 
 def set_meters(configer):
     time_meter = TimeMeter(configer.get('lr', 'max_iter'))
@@ -165,8 +164,9 @@ def set_meters(configer):
     loss_aux_meters = [AvgMeter('loss_aux{}'.format(i))
             for i in range(configer.get('loss', 'aux_num'))]
     loss_contrast_meter = AvgMeter('loss_contrast')
+    loss_domain_meter = AvgMeter('loss_domian')
             
-    return time_meter, loss_meter, loss_pre_meter, loss_aux_meters, loss_contrast_meter
+    return time_meter, loss_meter, loss_pre_meter, loss_aux_meters, loss_contrast_meter, loss_domain_meter
 
 def dequeue_and_enqueue(configer, seg_out, keys, labels,
                             segment_queue, iter, dataset_id):
@@ -260,7 +260,7 @@ def train():
 
 
     ## meters
-    time_meter, loss_meter, loss_pre_meter, loss_aux_meters, loss_contrast_meter = set_meters(configer)
+    time_meter, loss_meter, loss_pre_meter, loss_aux_meters, loss_contrast_meter, loss_domain_meter = set_meters(configer)
     ## lr scheduler
     lr_schdr = WarmupPolyLrScheduler(optim, power=0.9,
         max_iter=configer.get('lr','max_iter'), warmup_iter=configer.get('lr','warmup_iters'),
@@ -295,8 +295,10 @@ def train():
     contrast_warmup_iters = configer.get("lr", "warmup_iters")
     with_memory = configer.exists('contrast', 'with_memory')
     with_aux = configer.get('loss', 'with_aux')
+    with_domain_adversarial = configer.get('network', 'with_domain_adversarial')
 
     for i in range(starti, configer.get('lr','max_iter') + starti):
+        configer.plus_one('iter')
         try:
             im_cam, lb_cam = next(cam_iter)
             if not im_cam.size()[0] == configer.get('dataset2', 'ims_per_gpu'):
@@ -397,14 +399,10 @@ def train():
                     cam_out['segment_queue'] = net.segment_queue
                 
                 if i < configer.get('lr', 'warmup_iters') or not configer.get('contrast', 'use_contrast'):
-                    backward_loss0, loss_seg0, loss_aux0 = contrast_losses[CITY_ID](city_out, lb_city, CITY_ID, True)
-                    backward_loss1, loss_seg1, loss_aux1 = contrast_losses[CAM_ID](cam_out, lb_cam, CAM_ID, True)
+                    backward_loss0, loss_seg0, loss_aux0, loss_domain0 = contrast_losses[CITY_ID](city_out, lb_city, CITY_ID, True)
+                    backward_loss1, loss_seg1, loss_aux1, loss_domain1 = contrast_losses[CAM_ID](cam_out, lb_cam, CAM_ID, True)
                     
                     
-                    
-                    backward_loss =  backward_loss0 + backward_loss1
-                    
-                    loss_seg =  loss_seg0 + loss_seg1
                     if with_aux:
                         loss_aux = [aux0 + aux1 for aux0, aux1 in zip(loss_aux0, loss_aux1)]
                     # print(backward_loss0)
@@ -415,17 +413,20 @@ def train():
                     # print(loss_aux1)
                     # print("***************************")
                 else:
-                    backward_loss0, loss_seg0, loss_aux0, loss_contrast0 = contrast_losses[CITY_ID](city_out, lb_city, CITY_ID, False)
-                    backward_loss1, loss_seg1, loss_aux1, loss_contrast1 = contrast_losses[CAM_ID](cam_out, lb_cam, CAM_ID, False)
+                    backward_loss0, loss_seg0, loss_aux0, loss_contrast0, loss_domain0 = contrast_losses[CITY_ID](city_out, lb_city, CITY_ID, False)
+                    backward_loss1, loss_seg1, loss_aux1, loss_contrast1, loss_domain1 = contrast_losses[CAM_ID](cam_out, lb_cam, CAM_ID, False)
                     
                     
-                    backward_loss =  backward_loss0 + backward_loss1
-                    loss_seg =  loss_seg0 + loss_seg1
+
                     if with_aux:
                         loss_aux = [aux0 + aux1 for aux0, aux1 in zip(loss_aux0, loss_aux1)]
                         
                     loss_contrast = loss_contrast0 + loss_contrast1
-                    
+                   
+                backward_loss =  backward_loss0 + backward_loss1  
+                loss_seg =  loss_seg0 + loss_seg1 
+                if with_domain_adversarial:
+                    loss_domain = loss_domain0 + loss_domain1
                 
             # display_loss = reduce_tensor(backward_loss) / get_world_size()
 
@@ -459,10 +460,14 @@ def train():
         # print('synchronize')
         time_meter.update()
         loss_meter.update(backward_loss.item())
+        
         # loss_pre_meter.update(loss_pre.item())
         
         if not use_dataset_aux_head or i > aux_iter:
             loss_pre_meter.update(loss_seg.item()) 
+            if with_domain_adversarial:
+                loss_domain_meter.update(loss_domain)
+                
             if with_aux:
                 _ = [mter.update(lss.item()) for mter, lss in zip(loss_aux_meters, loss_aux)]
                 
@@ -475,7 +480,7 @@ def train():
             lr = sum(lr) / len(lr)
             print_log_msg(
                 i, cam_epoch, city_epoch, configer.get('lr', 'max_iter')+starti, lr, time_meter, loss_meter,
-                loss_pre_meter, loss_aux_meters, loss_contrast_meter)
+                loss_pre_meter, loss_aux_meters, loss_contrast_meter, loss_domain_meter)
 
         if (i + 1) % 1000 == 0:
             save_pth = osp.join(configer.get('res_save_pth'), 'model_{}.pth'.format(i+1))

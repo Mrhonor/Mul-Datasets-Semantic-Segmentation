@@ -508,15 +508,14 @@ class MultiLabelCrossEntropyLoss(nn.Module):
     
     def forward(self, x, labels):
         # x: batch size x c x h x w
-        # labels: c x batch x h x w, 1表示目标标签，0表示非目标标签
-        # b, c, h, w = x.shape
+        # labels: batch x h x w x c, 1表示目标标签，0表示非目标标签
+        b, c, h, w = x.shape
         
-        # pred = x.permute(1,0,2,3)
-        # pred = pred.contiguous().view(c, -1)
-        # lb = labels.contiguous().view(c, -1)
+        pred = x.permute(1,0,2,3)
+        pred = pred.contiguous().view(c, -1)
+        lb = lb.permute(1,2,3,0)
+        lb = lb.contiguous().view(c, -1)
         
-        pred = x
-        lb = labels
         
         pos_lb = torch.ones_like(lb)
         pos_lb[lb == 0] = 0

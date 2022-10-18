@@ -5,6 +5,8 @@ import torch.nn.functional as F
 import torch.utils.model_zoo as modelzoo
 
 from lib.projection import ProjectionHead
+from lib.domain_classifier_head import DomainClassifierHead
+from lib.functions import ReverseLayerF
 
 # backbone_url = 'https://github.com/CoinCheung/BiSeNet/releases/download/0.0.0/backbone_v2.pth'
 # backbone_url = '/root/autodl-tmp/project/BiSeNet/pth/backbone_v2.pth'
@@ -611,6 +613,10 @@ class BiSeNetV2_Contrast(nn.Module):
             if self.with_memory:
                 self.memory_size = self.configer.get('contrast', 'memory_size')
 
+        self.with_domain_adversarial = self.configer.get('network', 'with_domain_adversarial')
+        if self.with_domain_adversarial:
+            self.DomainClassifierHead = DomainClassifierHead(dim_in, n_domain=self.n_datasets)
+
         # ## TODO: what is the number of mid chan ?
         # self.head = nn.ModuleList([])
         # if self.aux_mode == 'train':
@@ -630,24 +636,15 @@ class BiSeNetV2_Contrast(nn.Module):
         #         self.aux4.append(SegmentHead(64, 128, n, up_factor=16))
         #         self.aux5_4.append(SegmentHead(128, 128, n, up_factor=32))
 
-        # if self.with_memory:
-        if self.upsample:
-            self.head = SegmentHead(128, 1024, self.num_unify_classes, up_factor=8, aux=False)
-        else:
-            self.head = SegmentHead(128, 1024, self.num_unify_classes, up_factor=1, aux=False)
-            self.up_sample = nn.Upsample(scale_factor=8, mode='bilinear', align_corners=True)
+        self.head = SegmentHead(128, 1024, self.num_unify_classes, up_factor=8, aux=False)
+
             
         if self.aux_mode == 'train':
-            if self.upsample:
-                self.aux2 = SegmentHead(16, 128, self.num_unify_classes, up_factor=4, aux=True)
-                self.aux3 = SegmentHead(32, 128, self.num_unify_classes, up_factor=8, aux=True)
-                self.aux4 = SegmentHead(64, 128, self.num_unify_classes, up_factor=16, aux=True)
-                self.aux5_4 = SegmentHead(128, 128, self.num_unify_classes, up_factor=32, aux=True)
-            else:
-                self.aux2 = SegmentHead(16, 128, self.num_unify_classes, up_factor=1, aux=True)
-                self.aux3 = SegmentHead(32, 128, self.num_unify_classes, up_factor=1, aux=True)
-                self.aux4 = SegmentHead(64, 128, self.num_unify_classes, up_factor=2, aux=True)
-                self.aux5_4 = SegmentHead(128, 128, self.num_unify_classes, up_factor=4, aux=True)
+            self.aux2 = SegmentHead(16, 128, self.num_unify_classes, up_factor=4, aux=True)
+            self.aux3 = SegmentHead(32, 128, self.num_unify_classes, up_factor=8, aux=True)
+            self.aux4 = SegmentHead(64, 128, self.num_unify_classes, up_factor=16, aux=True)
+            self.aux5_4 = SegmentHead(128, 128, self.num_unify_classes, up_factor=32, aux=True)
+
             
         self.register_buffer("segment_queue", torch.randn(self.num_unify_classes, self.proj_dim))
 
@@ -693,11 +690,18 @@ class BiSeNetV2_Contrast(nn.Module):
                 return {'seg': [logits, logits_aux2, logits_aux3, logits_aux4, logits_aux5_4]}
    
             emb = [self.projHead(feat_head[i]) for i in range(0, len(other_x) + 1)]
+            
+            domain_pred = None
+            if self.with_domain_adversarial:
+                p = float(self.configer.get('iter')) / self.configer.get('lr', 'max_iter')
+                alpha = 2. / (1. + np.exp(-10 * p)) - 1
+                reverse_feat = [ReverseLayerF.apply(feat_head[i], alpha) for i in range(0, len(other_x)+1)]
+                domain_pred = [self.DomainClassifierHead(reverse_feat[i]) for i in range(0, len(other_x) + 1)]
                 
             if self.with_memory:
-                return {'seg': [logits, logits_aux2, logits_aux3, logits_aux4, logits_aux5_4], 'embed': emb, 'key': [embed.detach() for embed in emb]}
+                return {'seg': [logits, logits_aux2, logits_aux3, logits_aux4, logits_aux5_4], 'embed': emb, 'key': [embed.detach() for embed in emb], 'domain': domain_pred}
             else:
-                return {'seg': [logits, logits_aux2, logits_aux3, logits_aux4, logits_aux5_4], 'embed': emb}
+                return {'seg': [logits, logits_aux2, logits_aux3, logits_aux4, logits_aux5_4], 'embed': emb, 'domain': domain_pred}
                 
             # return logits, logits_aux2, logits_aux3, logits_aux4, logits_aux5_4
         elif self.aux_mode == 'train' and self.train_dataset_aux == True:

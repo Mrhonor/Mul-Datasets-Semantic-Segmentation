@@ -316,3 +316,50 @@ class PixelPrototypeDistanceLoss(nn.Module):
 
         return loss_ppd
 
+class PixelContrastLossOnlyNeg(nn.Module, ABC):
+    def __init__(self, configer):
+        super(PixelContrastLoss, self).__init__()
+
+        self.configer = configer
+        self.temperature = self.configer.get('contrast', 'temperature')
+        self.base_temperature = self.configer.get('contrast', 'base_temperature')
+
+        self.max_samples = self.configer.get('contrast', 'max_samples')
+        self.max_views = self.configer.get('contrast', 'max_views')
+        self.num_unify_classes = self.configer.get('num_unify_classes')
+
+
+    def _contrastive(self, X_anchor, y_anchor, queue=None):
+        anchor_dot_contrast = torch.div(torch.matmul(X_anchor, queue.clone().T), self.temperature)
+        
+        y_anchor = y_anchor.contiguous().view(-1, self.num_unify_classes)
+        
+        neg_logits = torch.exp(anchor_dot_contrast) * neg_mask
+
+        sum_neg_logits = torch.sum(neg_logits, dim=1) + 1
+        
+        loss = torch.log(sum_neg_logits)
+        loss = loss.mean()
+
+        return loss
+
+    def forward(self, feats, labels=None, queue=None):
+        # labels: batch_size x h x w x num_of_class
+        # batch_size = feats.shape[0]
+
+        feats = feats.permute(0, 2, 3, 1)
+        feats = feats.contiguous().view(-1, feats.shape[-1])
+
+        anchor_dot_contrast = torch.div(torch.matmul(feats, queue.clone().T), self.temperature)
+        
+        neg_mask = labels.contiguous().view(-1, self.num_unify_classes)
+        
+        neg_logits = torch.exp(anchor_dot_contrast) * neg_mask
+
+        sum_neg_logits = torch.sum(neg_logits, dim=1) + 1
+        
+        loss = torch.log(sum_neg_logits)
+        loss = loss.mean()
+
+        return loss
+

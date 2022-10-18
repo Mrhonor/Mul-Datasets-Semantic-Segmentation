@@ -61,8 +61,10 @@
     "loss":{
       "type": "WeightedNLLPlusLoss",
       "with_aux": true,
+      "aux_weight": 0.25,
       "aux_num": 4,
       "ignore_index": 255,
+      "domain_loss_weight": 1,
       "m": 0,
       "gamma": 1
     },
@@ -100,18 +102,23 @@
       "memory_size": 5000,
       "pixel_update_freq": 10,
       "coefficient": 0.99,
-      "upsample": true,
-      "update_confidence_thresh": 0.5,
+      "upsample": false,
+      "update_confidence_thresh": 0.2,
+      "update_sim_thresh": 0.3,
       "with_ppd": false,
-      "ppd_loss_weight": 1
+      "ppd_loss_weight": 1,
+      "with_hard_lb_contrast": true,
+      "hard_lb_contrast_loss_weight": 1
     },
     "res_save_pth": "res/pretrain/",
     "network": {
-      "stride": 8
+      "stride": 8,
+      "with_domain_adversarial": true
     },
     "dataset_aux_head": {
       "use_dataset_aux_head": false,
       "aux_iter": 15000
     },
-    "optim": "AdamW"
+    "optim": "AdamW",
+    "iter": 0
 }
