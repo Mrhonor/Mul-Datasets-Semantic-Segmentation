@@ -181,6 +181,7 @@ def dequeue_and_enqueue(configer, seg_out, keys, labels,
     warmup_iter = configer.get('lr', 'warmup_iters')
     ignore_index = configer.get('loss', 'ignore_index')
     update_confidence_thresh = configer.get('contrast', 'update_confidence_thresh')
+    num_unify_classes = configer.get('num_unify_classes')
     if iter < warmup_iter:
         coefficient = coefficient * iter / warmup_iter
     
@@ -196,7 +197,7 @@ def dequeue_and_enqueue(configer, seg_out, keys, labels,
     this_label_ids = [x for x in this_label_ids if x >= 0 and x != ignore_index]
     
     this_probs = probs.permute(1, 0, 2, 3)
-    this_probs = probs.contiguous().view(-1)
+    this_probs = probs.contiguous().view(num_unify_classes, -1)
 
 
     for lb_id in this_label_ids:
@@ -212,11 +213,16 @@ def dequeue_and_enqueue(configer, seg_out, keys, labels,
         idxs = (this_label == lb).nonzero()
         feat_idxs = this_feat[:, idxs]
         
+        
         # 计算对应置信度是否大于阈值
         update_id = (this_probs[remap_lb, idxs] > update_confidence_thresh).nonzero()
         # segment enqueue and dequeue
-        feat = torch.mean(feat_idxs[update_id], dim=1).squeeze(1)
-        
+        feat_idxs = feat_idxs.squeeze(2)
+
+        update_id = update_id[:, 0]
+
+        feat = torch.mean(feat_idxs[:, update_id], dim=1)
+
         # # segment enqueue and dequeue
         # feat = torch.mean(this_feat[:, idxs], dim=1).squeeze(1)
 
@@ -415,7 +421,6 @@ def train():
                 else:
                     backward_loss0, loss_seg0, loss_aux0, loss_contrast0, loss_domain0 = contrast_losses[CITY_ID](city_out, lb_city, CITY_ID, False)
                     backward_loss1, loss_seg1, loss_aux1, loss_contrast1, loss_domain1 = contrast_losses[CAM_ID](cam_out, lb_cam, CAM_ID, False)
-                    
                     
 
                     if with_aux:

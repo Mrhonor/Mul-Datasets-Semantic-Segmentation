@@ -513,29 +513,28 @@ class MultiLabelCrossEntropyLoss(nn.Module):
         
         pred = x.permute(1,0,2,3)
         pred = pred.contiguous().view(c, -1)
-        lb = lb.permute(1,2,3,0)
+        lb = labels.permute(1,2,3,0)
         lb = lb.contiguous().view(c, -1)
         
+        pred = F.sigmoid(pred)
+        pos_lb = lb
         
-        pos_lb = torch.ones_like(lb)
-        pos_lb[lb == 0] = 0
+        neg_lb = 1- lb
         
-        neg_lb = -1 * torch.ones_like(lb)
-        neg_lb[lb == 1] = 0
+        # pos_pred = pred * pos_lb
+        # ## 保持矩阵形式，忽略为0项
+        # pos_pred[pos_pred == 0] = -1e12 
         
-        pos_pred = pred * pos_lb
-        ## 保持矩阵形式，忽略为0项
-        pos_pred[pos_pred == 0] = -1e8 
-        pos_pred = pos_pred * self.gamma
+        pos_pred = torch.exp(-pred * self.gamma) * pos_lb
+        # neg_pred = pred * neg_lb
+        # neg_pred[neg_pred == 0] = -1e12
+        neg_pred = torch.exp((pred + self.m) * self.gamma) * neg_lb
+        # loss = self.soft_plus(torch.logsumexp(pos_pred, dim=0) + torch.logsumexp(neg_pred, dim=0))
+        loss = torch.log(torch.sum(pos_pred, dim=1)*torch.sum(neg_pred, dim=1) + 1)
         
-        neg_pred = pred * neg_lb
-        neg_pred[neg_pred == 0] = -1e8
-        neg_pred = (neg_pred + self.m) * self.gamma
-        
-        loss = self.soft_plus(torch.logsumexp(pos_pred, dim=0) + torch.logsumexp(neg_pred, dim=0))
-        
-        loss = torch.mean(loss)
-        
+        loss = torch.mean(loss) / (b * h * w)
+
+        # print(loss)
         return loss
         
     
@@ -543,11 +542,12 @@ def test_MultiLabelCrossEntropyLoss():
     loss_fuc = MultiLabelCrossEntropyLoss(None)
     x = torch.tensor([[-1, 1],
                       [2, 3], 
-                      [5, 2]])
+                      [4, 4]])
     labels = torch.tensor([[0,1],
                            [1,0],
                            [0,1]])
     print(loss_fuc(x, labels))
+    print("true value: 0.7111")
     
         # print("pred: ")
         # print(pos_pred)

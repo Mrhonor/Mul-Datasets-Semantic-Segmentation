@@ -7,6 +7,7 @@ import torch.utils.model_zoo as modelzoo
 from lib.projection import ProjectionHead
 from lib.domain_classifier_head import DomainClassifierHead
 from lib.functions import ReverseLayerF
+import numpy as np
 
 # backbone_url = 'https://github.com/CoinCheung/BiSeNet/releases/download/0.0.0/backbone_v2.pth'
 # backbone_url = '/root/autodl-tmp/project/BiSeNet/pth/backbone_v2.pth'
@@ -615,7 +616,7 @@ class BiSeNetV2_Contrast(nn.Module):
 
         self.with_domain_adversarial = self.configer.get('network', 'with_domain_adversarial')
         if self.with_domain_adversarial:
-            self.DomainClassifierHead = DomainClassifierHead(dim_in, n_domain=self.n_datasets)
+            self.DomainClassifierHead = DomainClassifierHead(dim_in=128, n_domain=self.n_datasets)
 
         # ## TODO: what is the number of mid chan ?
         # self.head = nn.ModuleList([])
@@ -732,15 +733,15 @@ class BiSeNetV2_Contrast(nn.Module):
                 logits = [self.dataset_aux_head[dataset](feat_head[0])]
             else:    
                 logits = [self.head(feat_head[i]) for i in range(0, len(other_x) + 1)]
-                if self.upsample is False:
-                    logits = [self.up_sample(logit) for logit in logits] 
+                # if self.upsample is False:
+                #     logits = [self.up_sample(logit) for logit in logits] 
                 
             return logits
         elif self.aux_mode == 'pred':
             logits = [self.head(feat_head[i]) for i in range(0, len(other_x) + 1)]
             # pred = logits.argmax(dim=1)
-            if self.upsample is False:
-                logits = [self.up_sample(logit) for logit in logits] 
+            # if self.upsample is False:
+            #     logits = [self.up_sample(logit) for logit in logits] 
             # print(logits[0].argmax(dim=1).shape)
             pred = [logit.argmax(dim=1) for logit in logits]
             return pred

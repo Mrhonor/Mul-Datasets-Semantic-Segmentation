@@ -160,7 +160,7 @@ class ClassRemapOneHotLabel(ClassRemap):
         ## dataset_id指定映射方案
         b, h, w = labels.shape
         outLabels = torch.zeros(self.num_unify_classes, b, h, w)
-        if labels.iscuda:
+        if labels.is_cuda:
             outLabels = outLabels.cuda()
         
         for k, v in self.remapList[dataset_id].items():
@@ -189,7 +189,7 @@ class ClassRemapOneHotLabel(ClassRemap):
         # seg_mask = torch.zeros([B, H, W, self.num_unify_classes], dtype=torch.int)
         temp_mask = torch.zeros([B, H/self.network_stride, W/self.network_stride, self.num_unify_classes], dtype=torch.int)
         hard_lb_mask = torch.zeros([B, H, W, self.num_unify_classes], dtype=torch.int)
-        if labels.iscuda:
+        if labels.is_cuda:
             # seg_mask = seg_mask.cuda()
             temp_mask = temp_mask.cuda()
             hard_lb_mask = hard_lb_mask.cuda()

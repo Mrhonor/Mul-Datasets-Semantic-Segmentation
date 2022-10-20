@@ -19,7 +19,7 @@
       "im_root": "/home/cxh/datasets/CamVid",
       "train_im_anns":"datasets/CamVid/train.txt",
       "val_im_anns":"datasets/CamVid/test.txt", 
-      "ims_per_gpu": 3,
+      "ims_per_gpu": 2,
       "eval_ims_per_gpu": 2
     },
     "n_bn": 1,
@@ -57,16 +57,16 @@
       "10": [12, 17, 18],
       "11": [3]
     },
-    "class_remaper": "ClassRemap",
+    "class_remaper": "ClassRemapOneHotLabel",
     "loss":{
-      "type": "WeightedNLLPlusLoss",
+      "type": "MultiLabelCrossEntropyLoss",
       "with_aux": true,
       "aux_weight": 0.25,
       "aux_num": 4,
       "ignore_index": 255,
-      "domain_loss_weight": 1,
+      "domain_loss_weight": 0.5,
       "m": 0,
-      "gamma": 1
+      "gamma": 24
     },
     "lr": {
       "lr_start": 5e-3,
@@ -78,7 +78,7 @@
     "train": {
       "scales": [0.5, 1.0, 2.0],
       "cropsize": [512, 1024],
-      "finetune": true,
+      "finetune": false,
       "finetune_from": "res/pretrain/pretrain_model_13000.pth"
     },
     "val": {

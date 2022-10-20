@@ -27,7 +27,6 @@ class DomainClassifierHead(nn.Module):
                 nn.Conv2d(256, 512, kernel_size=3, stride=2, padding=1), # out: 8 x 16
                 ModuleHelper.BNReLU(512, bn_type=bn_type),
                 nn.Conv2d(512, n_domain, kernel_size=3, stride=2, padding=1), # out: 4 x 8
-                ModuleHelper.BNReLU(512, bn_type=bn_type),
             )
 
     def forward(self, x):

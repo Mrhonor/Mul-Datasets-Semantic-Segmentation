@@ -168,8 +168,10 @@ class CrossDatasetsLoss(nn.Module):
             self.n_datasets = self.configer.get('n_datasets')
             batch_sizes = torch.tensor([self.configer.get('dataset'+str(i), 'ims_per_gpu') for i in range(1, self.n_datasets+1)])
             batch_size_sum = torch.sum(batch_sizes)
-            weight_vector = F.normalize(torch.tensor(batch_size_sum / batch_sizes), p=1, dim=0)
-            self.domain_loss = torch.nn.CrossEntropyLoss(weigtht = weight_vector)
+            
+            weight_vector = F.normalize(batch_size_sum / batch_sizes, p=1, dim=0).cuda()
+            
+            self.domain_loss = torch.nn.CrossEntropyLoss(weight=weight_vector)
             self.domain_loss_weight = self.configer.get('loss', 'domain_loss_weight')
         
         
@@ -184,7 +186,7 @@ class CrossDatasetsLoss(nn.Module):
         if self.with_domain_adversarial:
             domain_pred = preds['domain']        
 
-        b, h, w = logits[0].shape
+        b, c, h, w = logits.shape
 
         lb = target
         # # 对标签下采样
@@ -215,9 +217,12 @@ class CrossDatasetsLoss(nn.Module):
                 
                 
             if self.with_domain_adversarial:
-                domain_label = torch.ones(b) * dataset_id
-                if target.iscuda:
-                    domain_label = domain_label.cudan()
+                domain_label = torch.ones(b, dtype=torch.long) * dataset_id
+
+                if domain_pred.is_cuda:
+                    domain_label = domain_label.cuda()
+                    
+                    
                 loss_domain = self.domain_loss(domain_pred, domain_label)
                 loss = loss + self.domain_loss_weight * loss_domain
                 
@@ -254,9 +259,10 @@ class CrossDatasetsLoss(nn.Module):
                 loss_contrast = loss_contrast + self.ppd_loss_weight * loss_ppd
                 
             if self.with_domain_adversarial:
-                domain_label = torch.ones(b) * dataset_id
-                if target.iscuda:
-                    domain_label = domain_label.cudan()
+                domain_label = torch.ones(b, dtype=torch.long) * dataset_id
+                if domain_pred.is_cuda:
+                    domain_label = domain_label.cuda()
+                    
                 loss_domain = self.domain_loss(domain_pred, domain_label)
                 loss = loss + self.domain_loss_weight * loss_domain
             
