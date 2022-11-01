@@ -547,6 +547,7 @@ class SegmentHead(nn.Module):
         # 采用多分割头，所以不应该返回list
         feats = self.conv(0, x)
         feat = self.drop(feats[0])
+        feat = feats[0]
 
         if self.aux is True:
             feat = self.up_sample1(feat)
@@ -577,6 +578,7 @@ class BiSeNetV2_Contrast(nn.Module):
         ## unify proj head
         self.proj_dim = self.configer.get('contrast', 'proj_dim')
         self.upsample = self.configer.get('contrast', 'upsample') 
+        self.downsample = self.configer.get('contrast', 'downsample')
         
         # 用于分数据集训练
         self.batch_sizes = [self.configer.get('dataset'+str(i), 'ims_per_gpu') for i in range(1, self.n_datasets+1)]
@@ -607,16 +609,19 @@ class BiSeNetV2_Contrast(nn.Module):
         if self.use_contrast:
             
             if configer.get('use_sync_bn'):
-                self.projHead = ProjectionHead(dim_in=128, proj_dim=self.proj_dim, up_factor=self.network_stride, bn_type='torchsyncbn', up_sample=self.upsample)
+                self.projHead = ProjectionHead(dim_in=128, proj_dim=self.proj_dim, up_factor=self.network_stride, bn_type='torchsyncbn', up_sample=self.upsample, down_sample=self.downsample)
             else:
-                self.projHead = ProjectionHead(dim_in=128, proj_dim=self.proj_dim, up_factor=self.network_stride, bn_type='torchbn', up_sample=self.upsample)
+                self.projHead = ProjectionHead(dim_in=128, proj_dim=self.proj_dim, up_factor=self.network_stride, bn_type='torchbn', up_sample=self.upsample, down_sample=self.downsample)
             self.with_memory = self.configer.exists("contrast", "with_memory")
             if self.with_memory:
                 self.memory_size = self.configer.get('contrast', 'memory_size')
 
         self.with_domain_adversarial = self.configer.get('network', 'with_domain_adversarial')
         if self.with_domain_adversarial:
-            self.DomainClassifierHead = DomainClassifierHead(dim_in=128, n_domain=self.n_datasets)
+            if configer.get('use_sync_bn'):
+                self.DomainClassifierHead = DomainClassifierHead(dim_in=128, n_domain=self.n_datasets, bn_type='torchsyncbn')
+            else:
+                self.DomainClassifierHead = DomainClassifierHead(dim_in=128, n_domain=self.n_datasets, bn_type='torchbn')
 
         # ## TODO: what is the number of mid chan ?
         # self.head = nn.ModuleList([])
@@ -705,7 +710,7 @@ class BiSeNetV2_Contrast(nn.Module):
                 return {'seg': [logits, logits_aux2, logits_aux3, logits_aux4, logits_aux5_4], 'embed': emb, 'domain': domain_pred}
                 
             # return logits, logits_aux2, logits_aux3, logits_aux4, logits_aux5_4
-        elif self.aux_mode == 'train' and self.train_dataset_aux == True:
+        elif self.aux_mode == 'train' and self.train_dataset_aux == True and perm_index != None:
             acc = 0
             sort_index = perm_index.sort()[1]
             recover_index = []
@@ -744,7 +749,12 @@ class BiSeNetV2_Contrast(nn.Module):
             #     logits = [self.up_sample(logit) for logit in logits] 
             # print(logits[0].argmax(dim=1).shape)
             pred = [logit.argmax(dim=1) for logit in logits]
-            return pred
+            
+            
+            logit = F.softmax(logits[0], dim=1)
+            maxV = torch.max(logit, dim=1)[0]
+            
+            return pred, maxV
         elif self.aux_mode == 'pred_by_emb':
             emb = [self.projHead(feat_head[i]) for i in range(0, len(other_x) + 1)]
             # emb = emb.permute(0,2,3,1)

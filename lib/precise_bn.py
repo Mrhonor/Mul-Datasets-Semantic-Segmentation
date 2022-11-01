@@ -170,7 +170,7 @@ def update_bn_stats(
     ):
         ind += 1
         batch_size_per_bn_layer.clear()
-        model(inputs, 1)
+        model(inputs[0].cuda())
 
         for i, bn in enumerate(bn_layers):
             # Accumulates the bn stats.

@@ -27,14 +27,15 @@ from lib.ohem_ce_loss import OhemCELoss
 from lib.lr_scheduler import WarmupPolyLrScheduler
 from lib.meters import TimeMeter, AvgMeter
 from lib.logger import setup_logger, print_log_msg
+from tools.configer import Configer
 
 # import fvcore.nn as fvnn
 from lib.precise_bn import update_bn_stats
 
 from lib.models.bisenetv2 import SegmentBranch, DetailBranch, BGALayer, SegmentHead
-from lib.get_dataloader import get_a2d2_city_loader
+# from lib.get_dataloader import get_a2d2_city_loader
 
-weight_pth = 'res/same_affine_layer.pth'
+weight_pth = 'res/domain/model_81000.pth'
 
 ## fix all random seeds
 #  torch.manual_seed(123)
@@ -44,6 +45,24 @@ weight_pth = 'res/same_affine_layer.pth'
 #  torch.backends.cudnn.deterministic = True
 #  torch.backends.cudnn.benchmark = True
 #  torch.multiprocessing.set_sharing_strategy('file_system')
+
+
+
+def parse_args():
+    parse = argparse.ArgumentParser()
+    parse.add_argument('--local_rank', dest='local_rank', type=int, default=-1,)
+    parse.add_argument('--port', dest='port', type=int, default=16858,)
+    parse.add_argument('--finetune_from', type=str, default=None,)
+    parse.add_argument('--config', dest='config', type=str, default='configs/bisenetv2_eval.json',)
+    return parse.parse_args()
+
+# 使用绝对路径
+args = parse_args()
+configer = Configer(configs=args.config)
+# cfg = set_cfg_from_file(args.config)
+# cfg_a2d2 = set_cfg_from_file('configs/bisenetv2_a2d2.py')
+# cfg_city = set_cfg_from_file('configs/bisenetv2_city.py')
+# cfg_cam = set_cfg_from_file('configs/bisenetv2_cam.py')
 
 class BGAandHead(nn.Module):
 
@@ -105,24 +124,6 @@ class BGAandHead(nn.Module):
             else:
                 raise NotImplementedError
 
-
-def parse_args():
-    parse = argparse.ArgumentParser()
-    parse.add_argument('--local_rank', dest='local_rank', type=int, default=-1,)
-    parse.add_argument('--port', dest='port', type=int, default=12345,)
-    parse.add_argument('--config', dest='config', type=str,
-            default='/configs/bisenetv2.py',)
-    parse.add_argument('--finetune_from', type=str, default=None,)
-    return parse.parse_args()
-
-# 使用绝对路径
-args = parse_args()
-cfg = set_cfg_from_file(args.config)
-cfg_a2d2 = set_cfg_from_file('configs/bisenetv2_a2d2.py')
-cfg_city = set_cfg_from_file('configs/bisenetv2_city.py')
-cfg_cam = set_cfg_from_file('configs/bisenetv2_cam.py')
-
-
 def load_pretrained(net):
     state = torch.load(args.finetune_from, map_location='cpu')
 
@@ -179,29 +180,6 @@ def load_pretrained(net):
     net.segment.load_state_dict(segment_state, strict=True)
     net.bga.load_state_dict(bga_state, strict=True)
 
-
-def set_model(config_file, *config_files):
-    logger = logging.getLogger()
-    # net = NULL
-    # if config_files is NULL:
-    #     net = model_factory[config_file.model_type](config_file.n_cats)
-    # 修改判定
-    if len(config_files) == 0:
-        net = model_factory[config_file.model_type](config_file.n_cats)
-    else:
-        n_classes = [cfg.n_cats for cfg in config_files]
-        # net = model_factory[config_file.model_type](config_file.n_cats, 'train', 2, *n_classes)
-        net = model_factory[config_file.model_type](config_file.n_cats, 'eval', 2, *n_classes)
-
-    if not args.finetune_from is None:
-        logger.info(f'load pretrained weights from {args.finetune_from}')
-        net.load_state_dict(torch.load(args.finetune_from, map_location='cpu'))
-    # if config_file.use_sync_bn: net = nn.SyncBatchNorm.convert_sync_batchnorm(net)
-    # net.cuda()
-    net.train()
-    criteria_pre = OhemCELoss(0.7)
-    criteria_aux = [OhemCELoss(0.7) for _ in range(config_file.num_aux_heads)]
-    return net, criteria_pre, criteria_aux
 
 
 def set_optimizer(model, config_file):
@@ -270,17 +248,35 @@ def get_detail_state(state):
             detail_state[key[7:]] = state[key]
     return(detail_state)
 
+def set_model(configer):
+    logger = logging.getLogger()
+
+    net = model_factory[configer.get('model_name')](configer)
+
+    if configer.get('train', 'finetune'):
+        logger.info(f"load pretrained weights from {configer.get('train', 'finetune_from')}")
+        net.load_state_dict(torch.load(configer.get('train', 'finetune_from'), map_location='cpu'), strict=False)
+
+        
+    if configer.get('use_sync_bn'): 
+        net = nn.SyncBatchNorm.convert_sync_batchnorm(net)
+    net.cuda()
+    net.train()
+    return net
+
 def train_bn():
     n_dataset = 2
     logger = logging.getLogger()
+
     # is_dist = dist.is_initialized()
     ## dataset
-    dl = get_data_loader(cfg, mode='val', distributed=False)
+    dl = get_data_loader(configer, aux_mode='eval', distributed=False)[0]
     # dl_a2d2 = get_data_loader(cfg_a2d2, mode='train', distributed=False)
     # dl = get_a2d2_city_loader(cfg_a2d2, cfg_city, mode='train', distributed=False)
     
     ## model
-    net, criteria_pre, criteria_aux = set_model(cfg_a2d2, cfg_city)
+    net = set_model(configer=configer)
+    # net, criteria_pre, criteria_aux = set_model(cfg_a2d2, cfg_city)
     # net = DetailBranch(n_bn=1)
     # detail_state = get_detail_state(torch.load(weight_pth, map_location='cuda:0'))
     # net = SegmentBranch(n_bn=1)
@@ -300,7 +296,7 @@ def train_bn():
     net.aux_mode = 'eval'
     update_bn_stats(net, dl, len(dl), "tqdm")
     
-    save_pth = osp.join(cfg.respth, 'cam_vid_cityhead.pth')
+    save_pth = osp.join(configer.get('res_save_pth'), 'precise_bn.pth')
     logger.info('\nsave models to {}'.format(save_pth))
     state = net.state_dict()
     torch.save(state, save_pth)
@@ -314,9 +310,10 @@ def main():
     #     world_size=torch.cuda.device_count(),
     #     rank=args.local_rank
     # )
-    if not osp.exists(cfg.respth): os.makedirs(cfg.respth)
 
-    setup_logger(f'{cfg.model_type}-{cfg.dataset.lower()}-train', cfg.respth)
+    if not osp.exists(configer.get('res_save_pth')): os.makedirs(configer.get('res_save_pth'))
+
+    setup_logger(f"{configer.get('model_name')}-train", configer.get('res_save_pth'))
     train_bn()
 
 def test():

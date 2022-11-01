@@ -39,7 +39,7 @@ def print_log_msg(it, Cam_epoch, CityScapes_epoch, max_iter, lr, time_meter, los
         'eta: {eta}',
         'time: {time:.2f}',
         'loss: {loss:.4f}',
-        'loss_pre: {loss_pre:.4f}',
+        'loss_seg: {loss_pre:.4f}',
         'loss_contrast: {loss_contrast:.4f}',
         'loss_domain:  {loss_domain:.4f}'
     ]).format(

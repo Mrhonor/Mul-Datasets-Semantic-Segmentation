@@ -3,6 +3,7 @@ from __future__ import division
 from __future__ import print_function
 
 from abc import ABC
+import this
 
 import torch
 import torch.nn as nn
@@ -34,13 +35,17 @@ class PixelContrastLoss(nn.Module, ABC):
             this_y = y_hat[ii]
             this_classes = torch.unique(this_y)
             
-            this_classes = [x for x in this_classes if x != self.ignore_label]
-            this_classes = [x for x in this_classes if (this_y == x).nonzero().shape[0] > self.max_views]
+            this_classes_ignore = [x for x in this_classes if x != self.ignore_label]
+            this_classes = [x for x in this_classes_ignore if (this_y == x).nonzero().shape[0] > self.max_views]
             
             classes.append(this_classes)
             total_classes += len(this_classes)
 
         if total_classes == 0:
+            print("this_y: ", this_y)
+            print("this_classes: ", this_classes)
+            print("this_classes_ignore: ", this_classes_ignore)
+            print("batch_size: ", batch_size)
             return None, None
 
         ## 每个锚点保留个数
@@ -105,6 +110,9 @@ class PixelContrastLoss(nn.Module, ABC):
         return X_, y_
 
     def _contrastive(self, X_anchor, y_anchor, queue=None):
+        if X_anchor is None:
+            return 0
+            
         anchor_num, n_view = X_anchor.shape[0], X_anchor.shape[1]
 
 
@@ -331,6 +339,7 @@ class PixelContrastLossOnlyNeg(nn.Module, ABC):
 
     def forward(self, feats, labels=None, queue=None):
         # labels: batch_size x h x w x num_of_class
+        # 1表示目标类，0表示非目标类
         # batch_size = feats.shape[0]
         b, c, h, w = feats.shape
 
@@ -339,16 +348,28 @@ class PixelContrastLossOnlyNeg(nn.Module, ABC):
 
         anchor_dot_contrast = torch.div(torch.matmul(feats, queue.clone().T), self.temperature)
         
-        neg_mask = labels.contiguous().view(-1, self.num_unify_classes)
-        pos_mask = 1 - neg_mask
+        pos_mask = labels.contiguous().view(-1, self.num_unify_classes)
+        neg_mask = 1 - pos_mask
         
         neg_logits = torch.exp(anchor_dot_contrast) * neg_mask
-        pos_logits = torch.exp(anchor_dot_contrast) * pos_mask
-
-        sum_logits = torch.sum(neg_logits, dim=1) * torch.sum(pos_logits) + 1
+        pos_logits = torch.exp(-anchor_dot_contrast) * pos_mask
         
+        sum_logits = torch.sum(neg_logits, dim=1) * torch.sum(pos_logits, dim=1) + 1
+        
+        # print("self.temperature: ", self.temperature)
+        # print("feats: ", torch.isnan(feats).any())
+        # print("queue: ", torch.isnan(queue).any())
+        # print("anchor_dot_contrast: ", torch.isnan(anchor_dot_contrast).any())
+        # print("neg_logits: ", torch.isnan(neg_logits).any())
+        # print("pos_logits: ", torch.isnan(pos_logits).any())
+        # print("sum_logits: ", torch.isnan(sum_logits).any())
         loss = torch.log(sum_logits)
-        loss = loss.mean() / (b * h * w)
+        
+        lb_num = torch.sum(loss != 0)
+        if lb_num ==0:
+            return 0
+        
+        loss = torch.sum(loss) / lb_num 
 
         return loss
 

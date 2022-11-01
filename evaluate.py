@@ -141,6 +141,10 @@ class MscEvalV0_Contrast(object):
                     probs += torch.softmax(logits, dim=1)
             preds = torch.argmax(probs, dim=1)
 
+            # if dataset_id == CITY_ID:
+            #     # CityScapes数据集一一对应不需要逆映射
+            #     preds = self.class_Remaper.ReverseSegRemap(preds, dataset_id)
+
             if dataset_id == CAM_ID:
                 # CityScapes数据集一一对应不需要逆映射
                 preds = self.class_Remaper.ReverseSegRemap(preds, dataset_id)
@@ -626,6 +630,8 @@ def eval_model_contrast(configer, net):
     # cfg_city = set_cfg_from_file(configer.get('dataset1'))
     # cfg_cam  = set_cfg_from_file(configer.get('dataset2'))
 
+    n_datasets = configer.get("n_datasets")
+
     # dl_cam = get_data_loader(cfg_cam, mode='val', distributed=is_dist)
     dl_city, dl_cam = get_data_loader(configer, aux_mode='eval', distributed=is_dist)
     net.eval()
@@ -642,6 +648,38 @@ def eval_model_contrast(configer, net):
     mious.append(mIOU_cam)
     mious.append(mIOU_city)
     logger.info('Cam single mIOU is: %s\nCityScapes single mIOU is: %s\n', mIOU_cam, mIOU_city)
+
+    net.aux_mode = org_aux
+    return heads, mious
+
+@torch.no_grad()
+def eval_model_contrast_single(configer, net):
+    org_aux = net.aux_mode
+    net.aux_mode = 'eval'
+
+    is_dist = dist.is_initialized()
+    
+    # cfg_city = set_cfg_from_file(configer.get('dataset1'))
+    # cfg_cam  = set_cfg_from_file(configer.get('dataset2'))
+
+    # n_datasets = configer.get("n_datasets")
+
+    # dl_cam = get_data_loader(cfg_cam, mode='val', distributed=is_dist)
+    dl_city = get_data_loader(configer, aux_mode='eval', distributed=is_dist)[0]
+    net.eval()
+
+    heads, mious = [], []
+    logger = logging.getLogger()
+
+    single_scale = MscEvalV0_Contrast(configer, (1., ), False)
+    
+    mIOU_city = single_scale(net, dl_city, configer.get('dataset1', 'n_cats'), CITY_ID)
+    # mIOU_cam = single_scale(net, dl_cam, configer.get('dataset2', 'n_cats'), CAM_ID)
+
+    heads.append('single_scale')
+    # mious.append(mIOU_cam)
+    mious.append(mIOU_city)
+    logger.info('CityScapes single mIOU is: %s\n', mIOU_city)
 
     net.aux_mode = org_aux
     return heads, mious
@@ -738,12 +776,12 @@ def main():
     
     logger = logging.getLogger()
     net = model_factory[configer.get('model_name')](configer)
-    state = torch.load('res/pretrain/semi_upsample_model_17000.pth', map_location='cpu')
+    state = torch.load('res/domain/model_final.pth', map_location='cpu')
     net.load_state_dict(state, strict=False)
     
     net.cuda()
     net.aux_mode = 'eval'
-    net.eval()
+    # net.eval()
     
     heads, mious = eval_model_contrast(configer, net)
     

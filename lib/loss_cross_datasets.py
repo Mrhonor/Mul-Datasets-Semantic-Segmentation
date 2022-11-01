@@ -187,6 +187,8 @@ class CrossDatasetsLoss(nn.Module):
             domain_pred = preds['domain']        
 
         b, c, h, w = logits.shape
+        # print("logits: ", logits.shape)
+        # _ = [print("logits_aux", str(i), ": ", aux.shape) for i, aux in enumerate(logits_aux)]
 
         lb = target
         # # 对标签下采样
@@ -213,7 +215,7 @@ class CrossDatasetsLoss(nn.Module):
                 loss_aux = [aux_criterion(aux, seg_label) for aux, aux_criterion in zip(pred_aux, self.segLoss_aux)]
                 
 
-                loss = loss_seg + self.aux_num * sum(loss_aux)
+                loss = loss_seg + self.aux_weight * sum(loss_aux)
                 
                 
             if self.with_domain_adversarial:
@@ -238,13 +240,15 @@ class CrossDatasetsLoss(nn.Module):
             # if self.configer.get('contrast', 'upsample') is False:
             #     network_stride = self.configer.get('network', 'stride')
             #     predict = predict[:, ::network_stride, ::network_stride]
-
+            # print("self.contrast_criterion: ", self.contrast_criterion(embedding, contrast_lable, predict, segment_queue))
+            # print("self.hard_lb_contrast_loss: ", self.hard_lb_contrast_loss(embedding, hard_lb_mask, segment_queue))
             loss_contrast = self.contrast_criterion(embedding, contrast_lable, predict, segment_queue) + self.hard_lb_contrast_loss(embedding, hard_lb_mask, segment_queue)
              
-
+            
             loss_seg = self.seg_criterion(logits, seg_mask)
             loss = loss_seg
             loss_aux = None
+            loss_domain = None
             
             if self.with_aux:
                 # aux_weight_mask = self.classRemapper.GetEqWeightMask(lb, dataset_id)
@@ -252,7 +256,7 @@ class CrossDatasetsLoss(nn.Module):
                 loss_aux = [aux_criterion(aux, seg_mask) for aux, aux_criterion in zip(pred_aux, self.segLoss_aux)]
 
                 
-                loss = loss_seg + self.aux_num * sum(loss_aux)
+                loss = loss_seg + self.aux_weight * sum(loss_aux)
                 
             if self.with_ppd:
                 loss_ppd = self.ppd_criterion(embedding, contrast_lable, segment_queue)
@@ -268,6 +272,9 @@ class CrossDatasetsLoss(nn.Module):
             
             
             return loss + self.loss_weight * loss_contrast, loss_seg, loss_aux, loss_contrast, loss_domain
+
+
+
 
 if __name__ == "__main__":
     loss_fuc = PixelPrototypeDistanceLoss()
