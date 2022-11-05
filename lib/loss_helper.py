@@ -504,7 +504,7 @@ class MultiLabelCrossEntropyLoss(nn.Module):
         if configer:
             self.m = self.configer.get('loss', 'm')
             self.gamma = self.configer.get('loss', 'gamma')
-        self.soft_plus = nn.Softplus()
+        
     
     def forward(self, x, labels):
         # x: batch size x c x h x w
@@ -529,10 +529,9 @@ class MultiLabelCrossEntropyLoss(nn.Module):
 
 
         pos_pred = torch.exp(-pred * self.gamma) * pos_lb
-        # neg_pred = pred * neg_lb
-        # neg_pred[neg_pred == 0] = -1e12
+        
         neg_pred = torch.exp((pred + self.m) * self.gamma) * neg_lb
-        # loss = self.soft_plus(torch.logsumexp(pos_pred, dim=0) + torch.logsumexp(neg_pred, dim=0))
+        
         loss = torch.log(torch.sum(pos_pred, dim=0)*torch.sum(neg_pred, dim=0) + 1)
         
         lb_num = torch.sum(loss != 0)

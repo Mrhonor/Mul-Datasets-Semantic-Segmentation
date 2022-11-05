@@ -37,6 +37,10 @@ from lib.class_remap import ClassRemap
 from evaluate import CAM_ID, eval_model_contrast, eval_model_aux, eval_model, eval_model_contrast_single
 
 from ipdb import set_trace
+from tensorboardX import SummaryWriter
+from time import time
+
+
 
 ## fix all random seeds
 #  torch.manual_seed(123)
@@ -267,6 +271,7 @@ def train():
     n_datasets = configer.get('n_datasets')
     logger = logging.getLogger()
     is_dist = dist.is_initialized()
+    writer = SummaryWriter(configer.get('res_save_pth'))
     ## dataset
     # dl = get_data_loader(cfg, mode='train', distributed=is_dist)
     
@@ -475,7 +480,7 @@ def train():
         scaler.scale(backward_loss).backward()
         # print('after backward')
 
-
+        # configer.plus_one('iters')
         # self.configer.plus_one('iters')
 
         # scaler.scale(loss).backward()
@@ -498,13 +503,17 @@ def train():
             if i >= configer.get('lr', 'warmup_iters') and configer.get('contrast', 'use_contrast'):
                 loss_contrast_meter.update(loss_contrast.item())
 
+        
+
         ## print training log message
         if (i + 1) % 100 == 0:
+            writer.add_scalars("loss",{"seg":loss_pre_meter.getWoErase(),"contrast":loss_contrast_meter.getWoErase(), "domain":loss_domain_meter.getWoErase()},configer.get("iter")+1)
             lr = lr_schdr.get_lr()
             lr = sum(lr) / len(lr)
             print_log_msg(
                 i, 0, epoch, configer.get('lr', 'max_iter')+starti, lr, time_meter, loss_meter,
                 loss_pre_meter, loss_aux_meters, loss_contrast_meter, loss_domain_meter)
+            
 
         if (i + 1) % 1000 == 0:
             save_pth = osp.join(configer.get('res_save_pth'), 'model_{}.pth'.format(i+1))
@@ -520,6 +529,9 @@ def train():
                 heads, mious = eval_model_func(configer, net.module)
             else:
                 heads, mious = eval_model_func(configer, net)
+                
+            writer.add_scalars("mious",{"Cityscapes":mious[CITY_ID],"Camvid":mious[CAM_ID]},configer.get("iter")+1)
+            # writer.export_scalars_to_json(osp.join(configer.get('res_save_pth'), str(time())+'_writer.json'))
             logger.info(tabulate([mious, ], headers=heads, tablefmt='orgtbl'))
             net.train()
             
@@ -535,6 +547,7 @@ def train():
     save_pth = osp.join(configer.get('res_save_pth'), 'model_final.pth')
     logger.info('\nsave models to {}'.format(save_pth))
     
+    writer.close()
     if is_distributed():
         state = net.module.state_dict()
     else:
@@ -542,13 +555,13 @@ def train():
 
     if dist.get_rank() == 0: torch.save(state, save_pth)
 
-    logger.info('\nevaluating the final model')
+    # logger.info('\nevaluating the final model')
     torch.cuda.empty_cache()
-    if is_distributed():
-        heads, mious = eval_model_func(configer, net.module)
-    else:
-        heads, mious = eval_model_func(configer, net)
-    logger.info(tabulate([mious, ], headers=heads, tablefmt='orgtbl'))
+    # if is_distributed():
+    #     heads, mious = eval_model_func(configer, net.module)
+    # else:
+    #     heads, mious = eval_model_func(configer, net)
+    # logger.info(tabulate([mious, ], headers=heads, tablefmt='orgtbl'))
 
     return
 

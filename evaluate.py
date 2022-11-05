@@ -741,8 +741,9 @@ def eval_model_emb(configer, net):
     mIOU_cam = single_scale(net, dl_cam, configer.get('dataset2', 'n_cats'), CAM_ID)
 
     heads.append('single_scale')
-    mious.append(mIOU_cam)
     mious.append(mIOU_city)
+    mious.append(mIOU_cam)
+
     logger.info('Cam single mIOU is: %s\nCityScapes single mIOU is: %s\n', mIOU_cam, mIOU_city)
 
     net.aux_mode = org_aux

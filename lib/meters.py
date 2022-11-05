@@ -43,4 +43,11 @@ class AvgMeter(object):
         global_avg = sum(self.global_seq) / len(self.global_seq)
         self.seq = []
         return avg, global_avg
+    
+    def getWoErase(self):
+        if len(self.seq) == 0:
+            return -1
+        
+        avg = sum(self.seq) / len(self.seq)
+        return avg
 

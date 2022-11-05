@@ -107,7 +107,8 @@ def set_optimizer(model, configer):
     if hasattr(model, 'get_params'):
         wd_params, nowd_params, lr_mul_wd_params, lr_mul_nowd_params = model.get_params()
         #  wd_val = cfg.weight_decay
-        wd_val = 0
+        # wd_val = 0
+        wd_val = configer.get('lr', 'weight_decay')
         params_list = [
             {'params': wd_params, },
             {'params': nowd_params, 'weight_decay': wd_val},

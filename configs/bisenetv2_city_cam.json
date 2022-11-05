@@ -9,7 +9,7 @@
       "im_root": "/home/cxh/datasets/",
       "train_im_anns":"datasets/Cityscapes/train.txt",
       "val_im_anns":"datasets/Cityscapes/val.txt", 
-      "ims_per_gpu": 8,
+      "ims_per_gpu": 7,
       "eval_ims_per_gpu": 3
 
     },
@@ -65,21 +65,21 @@
       "aux_num": 4,
       "ignore_index": 255,
       "domain_loss_weight": 1,
-      "m": 0,
+      "m": 0.1,
       "gamma": 14
     },
     "lr": {
-      "lr_start": 3e-3,
-      "weight_decay": 6e-5,
+      "lr_start": 2e-3,
+      "weight_decay": 5e-5,
       "warmup_iters": 0,
       "fix_param_iters": 0,
-      "max_iter": 100000
+      "max_iter": 50000
     },
     "train": {
       "scales": [0.5, 1.0, 2.0],
       "cropsize": [512, 1024],
-      "finetune": false,
-      "finetune_from": "res/Mds/model_4000.pth"
+      "finetune": true,
+      "finetune_from": "res/Mds/model_29000.pth"
     },
     "val": {
       "scales": [0.5, 0.75, 1.0, 1.25, 1.5, 1.75],
@@ -105,7 +105,7 @@
       "upsample": false,
       "downsample": true,
       "update_confidence_thresh": 0.1,
-      "update_sim_thresh": 0.95,
+      "update_sim_thresh": 0.9,
       "with_ppd": false,
       "ppd_loss_weight": 1,
       "with_hard_lb_contrast": true,
