@@ -26,6 +26,8 @@ class ProjectionHead(nn.Module):
                 self.proj = nn.Sequential(
                     nn.Conv2d(dim_in, dim_in*2, kernel_size=3, stride=2, padding=1),
                     ModuleHelper.BNReLU(dim_in*2, bn_type=bn_type),
+                    nn.Conv2d(dim_in*2, dim_in*2, kernel_size=3, stride=2, padding=1),
+                    ModuleHelper.BNReLU(dim_in*2, bn_type=bn_type),
                     nn.Conv2d(dim_in*2, proj_dim, kernel_size=1)
                 )
             else:

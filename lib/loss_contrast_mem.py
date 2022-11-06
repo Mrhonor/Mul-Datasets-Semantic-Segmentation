@@ -349,7 +349,8 @@ class PixelContrastLossOnlyNeg(nn.Module, ABC):
         anchor_dot_contrast = torch.div(torch.matmul(feats, queue.clone().T), self.temperature)
         
         pos_mask = labels.contiguous().view(-1, self.num_unify_classes)
-        neg_mask = 1 - pos_mask
+        # neg_mask = 1 - pos_mask
+        neg_mask = pos_mask.logical_not()
         
         neg_logits = torch.exp(anchor_dot_contrast) * neg_mask
         pos_logits = torch.exp(-anchor_dot_contrast) * pos_mask

@@ -136,13 +136,18 @@ class CrossDatasetsLoss(nn.Module):
         self.loss_weight = self.configer.get('contrast', 'loss_weight')    
             
         # self.seg_criterion_warmup = NLLPlusLoss(configer=self.configer)   
-        self.seg_criterion = eval(self.configer.get('loss', 'type'))(configer=self.configer)   
+        
+        # 处理多标签
+        self.seg_criterion_mul = eval(self.configer.get('loss', 'type'))(configer=self.configer)   
+        # 处理单标签
+        self.seg_criterion_sig = eval(self.configer.get('loss', 'type'))()   
             
         self.with_aux = self.configer.get('loss', 'with_aux')
         if self.with_aux:
             self.aux_num = self.configer.get('loss', 'aux_num')
             self.aux_weight = self.configer.get('loss', 'aux_weight')
-            self.segLoss_aux = [eval(self.configer.get('loss', 'type'))(configer=self.configer) for _ in range(self.aux_num)]
+            self.segLoss_aux_Mul = [eval(self.configer.get('loss', 'type'))(configer=self.configer) for _ in range(self.aux_num)]
+            self.segLoss_aux_Sig = [eval(self.configer.get('loss', 'type'))() for _ in range(self.aux_num)]
         
         self.use_contrast = self.configer.get('contrast', 'use_contrast')
         if self.use_contrast:
@@ -200,22 +205,24 @@ class CrossDatasetsLoss(nn.Module):
         else:
             segment_queue = None
 
-        seg_label = self.classRemapper.SegRemapping(lb, dataset_id)
+        seg_label_mul, seg_label_sig = self.classRemapper.SegRemapping(lb, dataset_id)
     
 
         if is_warmup or not self.use_contrast:
             # pred = F.interpolate(input=logits, size=(h, w), mode='bilinear', align_corners=True)
 
-            loss_seg = self.seg_criterion(logits, seg_label)
+            loss_seg_mul = self.seg_criterion_mul(logits, seg_label_mul)
+            loss_seg_sig = self.seg_criterion_sig(logits, seg_label_sig)
+            loss_seg = loss_seg_mul + loss_seg_sig
             loss = loss_seg
             loss_aux = None
             loss_domain = None
             if self.with_aux:
                 pred_aux = [F.interpolate(input=logit, size=(h, w), mode='bilinear', align_corners=True) for logit in logits_aux]
-                loss_aux = [aux_criterion(aux, seg_label) for aux, aux_criterion in zip(pred_aux, self.segLoss_aux)]
+                loss_aux = [aux_criterion_mul(aux, seg_label_mul) + aux_criterion_sig(aux, seg_label_sig) for aux, aux_criterion_mul, aux_criterion_sig in zip(pred_aux, self.segLoss_aux_Mul, self.segLoss_aux_Sig)]
                 
 
-                loss = loss_seg + self.aux_weight * sum(loss_aux)
+                loss = loss + self.aux_weight * sum(loss_aux)
                 
                 
             if self.with_domain_adversarial:
@@ -232,20 +239,21 @@ class CrossDatasetsLoss(nn.Module):
             return loss, loss_seg, loss_aux, loss_domain
         else:
             # emb_logits = torch.einsum('bchw,nc->bnhw', embedding, segment_queue)
-            contrast_lable, seg_mask, hard_lb_mask = self.classRemapper.ContrastRemapping(lb, embedding, segment_queue, dataset_id)
+            contrast_lable, seg_mask_mul, seg_mask_sig = self.classRemapper.ContrastRemapping(lb, embedding, segment_queue, dataset_id)
             pred = F.interpolate(input=logits, size=embedding.shape[-2:], mode='bilinear', align_corners=True)
 
             _, predict = torch.max(pred, 1)
 
-            # if self.configer.get('contrast', 'upsample') is False:
-            #     network_stride = self.configer.get('network', 'stride')
-            #     predict = predict[:, ::network_stride, ::network_stride]
+            
             # print("self.contrast_criterion: ", self.contrast_criterion(embedding, contrast_lable, predict, segment_queue))
             # print("self.hard_lb_contrast_loss: ", self.hard_lb_contrast_loss(embedding, hard_lb_mask, segment_queue))
-            loss_contrast = self.contrast_criterion(embedding, contrast_lable, predict, segment_queue) + self.hard_lb_contrast_loss(embedding, hard_lb_mask, segment_queue)
+            # loss_contrast = self.contrast_criterion(embedding, contrast_lable, predict, segment_queue) + self.hard_lb_contrast_loss(embedding, hard_lb_mask, segment_queue)
+            loss_contrast = self.hard_lb_contrast_loss(embedding, contrast_lable, segment_queue)
              
             
-            loss_seg = self.seg_criterion(logits, seg_mask)
+            loss_seg_mul = self.seg_criterion_mul(logits, seg_mask_mul)
+            loss_seg_sig = self.seg_criterion_sig(logits, seg_mask_sig)
+            loss_seg = loss_seg_mul + loss_seg_sig
             loss = loss_seg
             loss_aux = None
             loss_domain = None
@@ -253,10 +261,10 @@ class CrossDatasetsLoss(nn.Module):
             if self.with_aux:
                 # aux_weight_mask = self.classRemapper.GetEqWeightMask(lb, dataset_id)
                 pred_aux = [F.interpolate(input=logit, size=(h, w), mode='bilinear', align_corners=True) for logit in logits_aux]
-                loss_aux = [aux_criterion(aux, seg_mask) for aux, aux_criterion in zip(pred_aux, self.segLoss_aux)]
+                loss_aux = [aux_criterion_mul(aux, seg_mask_mul) + aux_criterion_sig(aux, seg_mask_sig) for aux, aux_criterion_mul, aux_criterion_sig in zip(pred_aux, self.segLoss_aux_Mul, self.segLoss_aux_Sig)]
 
                 
-                loss = loss_seg + self.aux_weight * sum(loss_aux)
+                loss = loss + self.aux_weight * sum(loss_aux)
                 
             if self.with_ppd:
                 loss_ppd = self.ppd_criterion(embedding, contrast_lable, segment_queue)

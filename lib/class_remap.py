@@ -78,9 +78,9 @@ class ClassRemap():
                 simScore = torch.div(torch.einsum('nd,cd->nc', shapeEmbed[contrast_lb==int(k)], proto[v]), self.temperature)
                 MaxSimIndex = torch.max(simScore, dim=1)[1]
                 if mask.is_cuda:
-                    mask[contrast_lb==int(k)] = torch.tensor(v, dtype=torch.long)[MaxSimIndex].cuda()
+                    mask[contrast_lb==int(k)] = torch.tensor(v, dtype=torch.bool)[MaxSimIndex].cuda()
                 else:
-                    mask[contrast_lb==int(k)] = torch.tensor(v, dtype=torch.long)[MaxSimIndex]
+                    mask[contrast_lb==int(k)] = torch.tensor(v, dtype=torch.bool)[MaxSimIndex]
                 
                 expend_vector = torch.zeros([simScore.shape[0], self.num_unify_classes], dtype=torch.float32)
                 if weight_mask.is_cuda:
@@ -160,15 +160,20 @@ class ClassRemapOneHotLabel(ClassRemap):
         ## 1表示目标类， 0表示非目标类
         ## dataset_id指定映射方案
         b, h, w = labels.shape
-        outLabels = torch.zeros(self.num_unify_classes, b, h, w)
+        outMultiLabels = torch.zeros(self.num_unify_classes, b, h, w, dtype=torch.bool)
+        outSigLabels = torch.zeros(self.num_unify_classes, b, h, w, dtype=torch.bool)
         if labels.is_cuda:
-            outLabels = outLabels.cuda()
+            outMultiLabels = outMultiLabels.cuda()
+            outSigLabels = outSigLabels.cuda()
         
         for k, v in self.remapList[dataset_id].items():
-            for i in v:
-                outLabels[i,labels==int(k)] = 1
+            if len(v) == 1:
+                outSigLabels[v[0], labels==int(k)] = 1
+            else:
+                for i in v:
+                    outMultiLabels[i,labels==int(k)] = 1
 
-        return outLabels
+        return outMultiLabels, outSigLabels
     
     def ContrastRemapping(self, labels, embed, proto, dataset_id):
         # seg_mask 监督分割头的多类别标签
@@ -185,15 +190,21 @@ class ClassRemapOneHotLabel(ClassRemap):
         # contrast_lb = labels
         B, H, W = labels.shape
         _, h_c, w_c = contrast_lb.shape
-        contrast_mask = torch.ones_like(contrast_lb) * self.ignore_index
+        # contrast_mask = torch.ones_like(contrast_lb) * self.ignore_index
         
-        # seg_mask = torch.zeros([B, H, W, self.num_unify_classes], dtype=torch.int)
-        temp_mask = torch.zeros([B, h_c, w_c, self.num_unify_classes], dtype=torch.long)
-        hard_lb_mask = torch.zeros([B, h_c, w_c, self.num_unify_classes], dtype=torch.long)
+        ## sig_seg_mask : 单标签矩阵
+        ## sig_temp_mask : 在投影头监督下的单标签矩阵，保存置信度高的标签
+        ## hard_lb_mask : 在投影头监督下的单标签矩阵，保存置信度低的标签
+        
+        # sig_seg_mask = torch.zeros([B, H, W, self.num_unify_classes], dtype=torch.bool)
+        Sig_temp_mask = torch.zeros([B, h_c, w_c, self.num_unify_classes], dtype=torch.bool)
+        Multi_temp_mask = torch.zeros([B, h_c, w_c, self.num_unify_classes], dtype=torch.bool)
+        contrast_lb_mask = torch.zeros([B, h_c, w_c, self.num_unify_classes], dtype=torch.bool)
         if labels.is_cuda:
-            # seg_mask = seg_mask.cuda()
-            temp_mask = temp_mask.cuda()
-            hard_lb_mask = hard_lb_mask.cuda()
+            # sig_seg_mask = sig_seg_mask.cuda()
+            Multi_temp_mask = Multi_temp_mask.cuda()
+            Sig_temp_mask = Sig_temp_mask.cuda()
+            contrast_lb_mask = contrast_lb_mask.cuda()
         
         ## 循环两遍，单标签覆盖多标签
         for k, v in self.remapList[dataset_id].items():
@@ -207,25 +218,27 @@ class ClassRemapOneHotLabel(ClassRemap):
                     continue
                 
                 shapeEmbed = embed.permute(0,2,3,1).detach()
-                # shapeEmbed = F.normalize(shapeEmbed, p=2, dim=-1)
-                # print(shapeEmbed[labels==int(k)].shape)
-                # print(proto.shape)
-                # print(proto[v].shape)
+
                 # n: b x h x w, d: dim, c:  num of class
                 simScore = torch.div(torch.einsum('nd,cd->nc', shapeEmbed[contrast_lb==int(k)], proto), self.temperature)
-                # print("simScore")
-                # print(simScore)
+
                 simScore = self.softmax(simScore)
                 
                 MaxSim, MaxSimIndex = torch.max(simScore, dim=1)
                 outputIndex = torch.ones_like(MaxSimIndex) * self.ignore_index
                 
                 # 困难样本
-                hardLbIndex = torch.zeros([MaxSimIndex.shape[0], self.num_unify_classes], dtype=torch.long)
+                hardLbIndex = torch.zeros([MaxSimIndex.shape[0], self.num_unify_classes], dtype=torch.bool)
                 # 筛选出目标类的index。对于最大值不在目标类的情况以及最大值没超过阈值的pixel，标签设置为忽略
+                
+                Multi_expend_vector = torch.zeros([MaxSimIndex.shape[0], self.num_unify_classes], dtype=torch.bool)
+                Sig_expend_vector = torch.zeros([MaxSimIndex.shape[0], self.num_unify_classes], dtype=torch.bool)
                 tensor_v = torch.tensor(v)
                 if labels.is_cuda:
                     tensor_v = tensor_v.cuda()
+                    hardLbIndex = hardLbIndex.cuda()
+                    Multi_expend_vector = Multi_expend_vector.cuda()
+                    Sig_expend_vector = Sig_expend_vector.cuda()
                 
                 targetIndex = MaxSimIndex.unsqueeze(1).eq(tensor_v)
                 targetIndex = torch.unique(targetIndex.nonzero(as_tuple=True)[0])
@@ -233,37 +246,44 @@ class ClassRemapOneHotLabel(ClassRemap):
                 
                 outputIndex[targetIndex] = MaxSimIndex[targetIndex]
                 
-                hardLd = torch.zeros(self.num_unify_classes, dtype=torch.long)
+                hardLd = torch.zeros(self.num_unify_classes, dtype=torch.bool)
                 hardLd[tensor_v] = 1
                
                 hardLbIndex[outputIndex==self.ignore_index] = hardLd
+                hardLbIndex[outputIndex!=self.ignore_index, outputIndex[outputIndex!=self.ignore_index]] = 1
                 
-                if contrast_mask.is_cuda:
-                    contrast_mask[contrast_lb==int(k)] = outputIndex.cuda()
-                    hard_lb_mask[contrast_lb==int(k)] = hardLbIndex.cuda()
-                else:
-                    contrast_mask[contrast_lb==int(k)] = outputIndex
-                    hard_lb_mask[contrast_lb==int(k)] = hardLbIndex
+   
+                # contrast_mask[contrast_lb==int(k)] = outputIndex
+                contrast_lb_mask[contrast_lb==int(k)] = hardLbIndex
+                Sig_expend_vector[outputIndex!=self.ignore_index, outputIndex[outputIndex!=self.ignore_index]] = 1
+
                 
-                expend_vector = torch.zeros([simScore.shape[0], self.num_unify_classes], dtype=torch.long)
-                if temp_mask.is_cuda:
-                    expend_vector = expend_vector.cuda()
+                # for i in range(0, outputIndex.shape[0]):
+                #     if outputIndex[i] == self.ignore_index:
+                #         Multi_expend_vector[i, v] = 1
+                #         # continue
+                #     else:
+                #         Sig_expend_vector[i, outputIndex[i]] = 1
+                #         Multi_expend_vector[i, outputIndex[i]] = 1
                 
-                for i in range(0, outputIndex.shape[0]):
-                    if outputIndex[i] == self.ignore_index:
-                        expend_vector[i, v] = 1
-                        # continue
-                    else:
-                        expend_vector[i, outputIndex[i]] = 1
-                
-                temp_mask[contrast_lb==int(k)] = expend_vector
+                Sig_temp_mask[contrast_lb==int(k)] = Sig_expend_vector
+                # Multi_temp_mask[contrast_lb==int(k)] = Multi_expend_vector
         
-        # print(temp_mask)
-        # 对temp_mask进行上采样
-        seg_mask = temp_mask.permute(0, 3, 1, 2)
-        seg_mask = F.interpolate(seg_mask.float(), size=(H,W), mode='nearest').long()
+
+        # 上采样至分割头大小
+        sig_seg_mask = Sig_temp_mask.permute(0, 3, 1, 2)
+        sig_seg_mask = F.interpolate(sig_seg_mask.float(), size=(H,W), mode='nearest').bool()
+        sig_seg_mask = sig_seg_mask.permute(0, 2, 3, 1)
+        
+        
+        seg_mask = contrast_lb_mask.permute(0, 3, 1, 2)
+        seg_mask = F.interpolate(seg_mask.float(), size=(H,W), mode='nearest').bool()
         seg_mask = seg_mask.permute(0, 2, 3, 1)
-        # print(seg_mask)
+
+        zero_vector = torch.zeros(self.num_unify_classes, dtype=torch.bool)
+        if seg_mask.is_cuda:
+            zero_vector = zero_vector.cuda()
+        
         for k, v in self.remapList[dataset_id].items():
             # 判断是否为空
             if not (labels==int(k)).any():
@@ -271,35 +291,43 @@ class ClassRemapOneHotLabel(ClassRemap):
             
             
             if len(v) == 1: 
-                contrast_mask[contrast_lb==int(k)] = v[0]
+                contrast_lb_mask[contrast_lb==int(k), v] = 1
                 
-                seg_vector = torch.zeros(self.num_unify_classes, dtype=torch.long)
+                seg_vector = torch.zeros(self.num_unify_classes, dtype=torch.bool)
                 if seg_mask.is_cuda:
                     seg_vector = seg_vector.cuda()
                     
                 seg_vector[v[0]] = 1
-                seg_mask[labels==int(k)] = seg_vector
+                sig_seg_mask[labels==int(k)] = seg_vector
+                
+                ## clear error label in seg_mask
+                seg_mask[labels==int(k)] = zero_vector
             else:
-                expend_vector = torch.zeros(self.num_unify_classes, dtype=torch.long)
+                expend_vector = torch.zeros(self.num_unify_classes, dtype=torch.bool)
                 if seg_mask.is_cuda:
                     expend_vector = expend_vector.cuda()
 
                 expend_vector[v] = 1
                 # 寻找为0项
                 lb_k_mask = seg_mask[labels==int(k)]
-                maxValue = torch.max(lb_k_mask, dim=1)[0]
-                lb_k_mask[maxValue==0] = expend_vector
+                # maxValue = torch.max(lb_k_mask, dim=1)[0]
+                # lb_k_mask[maxValue==0] = expend_vector
+                
+                sumValue = torch.sum(lb_k_mask, dim=1)
+                lb_k_mask[sumValue==0] = expend_vector
+                lb_k_mask[sumValue==1] = zero_vector
                 seg_mask[labels==int(k)] = lb_k_mask
     
-        zero_vector = torch.zeros(self.num_unify_classes, dtype=torch.long)
-        if seg_mask.is_cuda:
-            zero_vector = zero_vector.cuda()
+
             
         seg_mask[labels==self.ignore_index] = zero_vector
+        # seg_mask[seg_mask==self.ignore_index] = 0
+        sig_seg_mask[labels==self.ignore_index] = zero_vector
+        
         # if is_emb_upsampled:
         #     weight_mask = self.Upsample(weight_mask.permute(0,3,1,2)).permute(0,2,3,1)
           
-        return contrast_mask, seg_mask, hard_lb_mask
+        return contrast_lb_mask, seg_mask, sig_seg_mask
     
     
 def test_ContrastRemapping():
@@ -310,13 +338,13 @@ def test_ContrastRemapping():
                            [2, 2, 1, 2],
                            [0, 0, 0, 2]]).unsqueeze(0)
     segment_queue = torch.tensor([[-1, 0], [1, 0], [0, 1], [0, -1]], dtype=torch.float) # 19 x 2
-    embed = torch.tensor([[[-0.2, -0.8],[0.9, 0.1]],
+    embed = torch.tensor([[[-0.1, -0.9],[0.9, 0.1]],
                           [[-0.8, 0.2],[-0.1, 0.9]]]).unsqueeze(0)
     # print(embed.shape)
     embed = embed.permute(0, 3, 1, 2)
     # print(embed)
-    contrast_mask, seg_mask, hard_lb_mask = classRemap.ContrastRemapping(labels, embed, segment_queue, 0)
-    print(contrast_mask)
+    contrast_mask, seg_mask, sig_seg_mask = classRemap.ContrastRemapping(labels, embed, segment_queue, 0)
+    print(contrast_mask) 
     
         
 if __name__ == "__main__":

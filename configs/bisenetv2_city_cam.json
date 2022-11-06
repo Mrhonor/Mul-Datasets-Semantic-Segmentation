@@ -9,7 +9,7 @@
       "im_root": "/home/cxh/datasets/",
       "train_im_anns":"datasets/Cityscapes/train.txt",
       "val_im_anns":"datasets/Cityscapes/val.txt", 
-      "ims_per_gpu": 7,
+      "ims_per_gpu": 6,
       "eval_ims_per_gpu": 3
 
     },
@@ -65,20 +65,20 @@
       "aux_num": 4,
       "ignore_index": 255,
       "domain_loss_weight": 1,
-      "m": 0.1,
+      "m": 0,
       "gamma": 14
     },
     "lr": {
-      "lr_start": 2e-3,
+      "lr_start": 5e-3,
       "weight_decay": 5e-5,
       "warmup_iters": 0,
       "fix_param_iters": 0,
-      "max_iter": 50000
+      "max_iter": 30000
     },
     "train": {
       "scales": [0.5, 1.0, 2.0],
       "cropsize": [512, 1024],
-      "finetune": true,
+      "finetune": false,
       "finetune_from": "res/Mds/model_29000.pth"
     },
     "val": {
@@ -93,7 +93,7 @@
       "temperature": 0.07,
       "base_temperature": 0.07,
       "max_samples": 4096,
-      "max_views": 50,
+      "max_views": 24,
       "stride": 16,
       "loss_weight": 1,
       "use_rmi": false,
@@ -105,7 +105,7 @@
       "upsample": false,
       "downsample": true,
       "update_confidence_thresh": 0.1,
-      "update_sim_thresh": 0.9,
+      "update_sim_thresh": 0.8,
       "with_ppd": false,
       "ppd_loss_weight": 1,
       "with_hard_lb_contrast": true,
@@ -113,7 +113,7 @@
     },
     "res_save_pth": "res/Mds/",
     "network": {
-      "stride": 16,
+      "stride": 32,
       "with_domain_adversarial": true
     },
     "dataset_aux_head": {

@@ -496,7 +496,7 @@ class CircleLoss(nn.Module):
         return loss
 
 class MultiLabelCrossEntropyLoss(nn.Module):
-    def __init__(self, configer):
+    def __init__(self, configer=None):
         super(MultiLabelCrossEntropyLoss, self).__init__()
         self.configer = configer
         self.m = 0
@@ -519,7 +519,8 @@ class MultiLabelCrossEntropyLoss(nn.Module):
         pred = F.sigmoid(pred)
         pos_lb = lb
         
-        neg_lb = 1- lb
+        # neg_lb = 1- lb
+        neg_lb = lb.logical_not()
         # print("x: ", x.shape)
         # print("pred: ",pred.shape)
         # print("lb: ", lb.shape)
