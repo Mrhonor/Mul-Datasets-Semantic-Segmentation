@@ -516,7 +516,7 @@ class MultiLabelCrossEntropyLoss(nn.Module):
         lb = labels.permute(3, 0, 1, 2)
         lb = lb.contiguous().view(c, -1)
         
-        pred = F.sigmoid(pred)
+        # pred = F.sigmoid(pred)
         pos_lb = lb
         
         # neg_lb = 1- lb

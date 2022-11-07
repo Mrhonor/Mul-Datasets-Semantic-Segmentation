@@ -343,7 +343,8 @@ def test_ContrastRemapping():
     # print(embed.shape)
     embed = embed.permute(0, 3, 1, 2)
     # print(embed)
-    contrast_mask, seg_mask, sig_seg_mask = classRemap.ContrastRemapping(labels, embed, segment_queue, 0)
+    contrast_mask, seg_mask, sig_seg_mask = classRemap.# *|CURSOR_MARCADOR|*
+    ContrastRemapping(labels, embed, segment_queue, 0)
     print(contrast_mask) 
     
         

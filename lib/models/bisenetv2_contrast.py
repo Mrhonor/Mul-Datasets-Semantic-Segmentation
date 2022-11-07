@@ -7,6 +7,7 @@ import torch.utils.model_zoo as modelzoo
 from lib.projection import ProjectionHead
 from lib.domain_classifier_head import DomainClassifierHead
 from lib.functions import ReverseLayerF
+from lib.ConvNorm import ConvNorm
 import numpy as np
 
 # backbone_url = 'https://github.com/CoinCheung/BiSeNet/releases/download/0.0.0/backbone_v2.pth'
@@ -513,7 +514,7 @@ class BGALayer(nn.Module):
 
 class SegmentHead(nn.Module):
 
-    def __init__(self, in_chan, mid_chan, n_classes, up_factor=8, aux=True):
+    def __init__(self, in_chan, mid_chan, n_classes, up_factor=8, proj='ConvNorm', aux=True):
         super(SegmentHead, self).__init__()
         self.conv = ConvBNReLU(in_chan, mid_chan, 3, stride=1)
         self.drop = nn.Dropout(0.1)
@@ -536,7 +537,12 @@ class SegmentHead(nn.Module):
         self.up_sample1 = nn.Upsample(scale_factor=2)
         self.conv1 = ConvBNReLU(mid_chan, mid_chan2, 3, stride=1)
 
-        self.conv2 = nn.Conv2d(mid_chan2, out_chan, 1, 1, 0, bias=True)
+        if proj == 'convmlp':
+            self.proj = nn.Conv2d(mid_chan2, out_chan, 1, 1, 0, bias=True)
+        elif proj == 'linearNorm': 
+            self.proj = ConvNorm(mid_chan2, out_chan)
+        
+        
         if self.up_factor > 1:
             self.up_sample2 = nn.Upsample(scale_factor=up_factor, mode='bilinear', align_corners=True)
         
