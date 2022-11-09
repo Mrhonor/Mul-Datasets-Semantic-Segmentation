@@ -233,12 +233,14 @@ class ClassRemapOneHotLabel(ClassRemap):
                 
                 Multi_expend_vector = torch.zeros([MaxSimIndex.shape[0], self.num_unify_classes], dtype=torch.bool)
                 Sig_expend_vector = torch.zeros([MaxSimIndex.shape[0], self.num_unify_classes], dtype=torch.bool)
+                hardLd = torch.zeros(self.num_unify_classes, dtype=torch.bool)
                 tensor_v = torch.tensor(v)
                 if labels.is_cuda:
                     tensor_v = tensor_v.cuda()
                     hardLbIndex = hardLbIndex.cuda()
                     Multi_expend_vector = Multi_expend_vector.cuda()
                     Sig_expend_vector = Sig_expend_vector.cuda()
+                    hardLd = hardLd.cuda()
                 
                 targetIndex = MaxSimIndex.unsqueeze(1).eq(tensor_v)
                 targetIndex = torch.unique(targetIndex.nonzero(as_tuple=True)[0])
@@ -246,7 +248,7 @@ class ClassRemapOneHotLabel(ClassRemap):
                 
                 outputIndex[targetIndex] = MaxSimIndex[targetIndex]
                 
-                hardLd = torch.zeros(self.num_unify_classes, dtype=torch.bool)
+                
                 hardLd[tensor_v] = 1
                
                 hardLbIndex[outputIndex==self.ignore_index] = hardLd
@@ -343,9 +345,9 @@ def test_ContrastRemapping():
     # print(embed.shape)
     embed = embed.permute(0, 3, 1, 2)
     # print(embed)
-    contrast_mask, seg_mask, sig_seg_mask = classRemap.# *|CURSOR_MARCADOR|*
-    ContrastRemapping(labels, embed, segment_queue, 0)
-    print(contrast_mask) 
+    contrast_mask, seg_mask, sig_seg_mask = classRemap.ContrastRemapping(labels, embed, segment_queue, 0)
+    print(seg_mask) 
+    print(sig_seg_mask)
     
         
 if __name__ == "__main__":

@@ -540,7 +540,7 @@ class MultiLabelCrossEntropyLoss(nn.Module):
             return 0
         
         # print(torch.max(loss))# / lb_num)
-        loss = torch.sum(loss) / lb_num 
+        loss = torch.sum(loss) / lb_num # (b*h*w) 
         
         # loss = torch.sum(loss) / torch.sum(loss != 0)
     

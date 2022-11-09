@@ -251,9 +251,9 @@ class CrossDatasetsLoss(nn.Module):
             loss_contrast = self.hard_lb_contrast_loss(embedding, contrast_lable, segment_queue)
              
             
-            loss_seg_mul = self.seg_criterion_mul(logits, seg_mask_mul)
-            loss_seg_sig = self.seg_criterion_sig(logits, seg_mask_sig)
-            loss_seg = loss_seg_mul + loss_seg_sig
+            loss_seg_mul = self.seg_criterion_mul(logits, seg_mask_mul + seg_mask_sig)
+            # loss_seg_sig = self.seg_criterion_sig(logits, seg_mask_sig)
+            loss_seg = loss_seg_mul #+ loss_seg_sig
             loss = loss_seg
             loss_aux = None
             loss_domain = None
@@ -261,7 +261,7 @@ class CrossDatasetsLoss(nn.Module):
             if self.with_aux:
                 # aux_weight_mask = self.classRemapper.GetEqWeightMask(lb, dataset_id)
                 pred_aux = [F.interpolate(input=logit, size=(h, w), mode='bilinear', align_corners=True) for logit in logits_aux]
-                loss_aux = [aux_criterion_mul(aux, seg_mask_mul) + aux_criterion_sig(aux, seg_mask_sig) for aux, aux_criterion_mul, aux_criterion_sig in zip(pred_aux, self.segLoss_aux_Mul, self.segLoss_aux_Sig)]
+                loss_aux = [aux_criterion_mul(aux, seg_mask_mul + seg_mask_sig) for aux, aux_criterion_mul, aux_criterion_sig in zip(pred_aux, self.segLoss_aux_Mul, self.segLoss_aux_Sig)]
 
                 
                 loss = loss + self.aux_weight * sum(loss_aux)

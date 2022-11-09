@@ -539,7 +539,7 @@ class SegmentHead(nn.Module):
 
         if proj == 'convmlp':
             self.proj = nn.Conv2d(mid_chan2, out_chan, 1, 1, 0, bias=True)
-        elif proj == 'linearNorm': 
+        elif proj == 'ConvNorm': 
             self.proj = ConvNorm(mid_chan2, out_chan)
         
         
@@ -558,9 +558,9 @@ class SegmentHead(nn.Module):
         if self.aux is True:
             feat = self.up_sample1(feat)
             feats = self.conv1(0, feat)
-            feat = self.conv2(feats[0])
+            feat = self.proj(feats[0])
         else:
-            feat = self.conv2(feat)
+            feat = self.proj(feat)
             
         if self.up_factor > 1:
             feat = self.up_sample2(feat)

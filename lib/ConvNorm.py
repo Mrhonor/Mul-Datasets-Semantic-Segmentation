@@ -11,10 +11,10 @@ class ConvNorm(nn.Module):
         normX = torch.norm(x, dim=1, keepdim=True)
 
         normW = torch.norm(self.conv.weight.squeeze(), dim=1, keepdim=True)
-        normVal = torch.einsum('on,bnhw->bohw', normW, normX)
-
+        normVal = torch.einsum('on,bnhw->bohw', normW, normX) + 1e-8
         
         feat = self.conv(x) / normVal
+
         return feat
         
         

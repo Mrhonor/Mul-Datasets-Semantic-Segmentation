@@ -36,7 +36,6 @@ from tools.configer import Configer
 from lib.class_remap import ClassRemap
 from evaluate import CAM_ID, eval_model_contrast, eval_model_aux, eval_model, eval_model_contrast_single
 
-from ipdb import set_trace
 from tensorboardX import SummaryWriter
 from time import time
 
@@ -568,20 +567,20 @@ def train():
 
 def main():
 
-    local_rank = int(os.environ["LOCAL_RANK"])
-    # torch.cuda.set_device(args.local_rank)
+    # local_rank = int(os.environ["LOCAL_RANK"])
+    torch.cuda.set_device(args.local_rank)
     # dist.init_process_group(
     #     backend='nccl',
     #     init_method='tcp://127.0.0.1:{}'.format(args.port),
     #     world_size=torch.cuda.device_count(),
     #     rank=args.local_rank
     # )
-    torch.cuda.set_device(local_rank)
+    # torch.cuda.set_device(local_rank)
     dist.init_process_group(
         backend='nccl',
         init_method='tcp://127.0.0.1:{}'.format(args.port),
         world_size=torch.cuda.device_count(),
-        rank=local_rank
+        rank=args.local_rank
     )
     
     if not osp.exists(configer.get('res_save_pth')): os.makedirs(configer.get('res_save_pth'))
