@@ -698,11 +698,6 @@ class BiSeNetV2_Contrast(nn.Module):
             logits_aux4 = [self.aux4(feat4[i]) for i in range(0, len(other_x) + 1)]
             logits_aux5_4 = [self.aux5_4(feat5_4[i]) for i in range(0, len(other_x) + 1)]
             
-            if not self.use_contrast:
-                return {'seg': [logits, logits_aux2, logits_aux3, logits_aux4, logits_aux5_4]}
-   
-            emb = [self.projHead(feat_head[i]) for i in range(0, len(other_x) + 1)]
-            
             domain_pred = None
             if self.with_domain_adversarial:
                 p = float(self.configer.get('iter')) / self.configer.get('lr', 'max_iter')
@@ -710,6 +705,13 @@ class BiSeNetV2_Contrast(nn.Module):
                 reverse_feat = [ReverseLayerF.apply(feat_head[i], alpha) for i in range(0, len(other_x)+1)]
                 domain_pred = [self.DomainClassifierHead(reverse_feat[i]) for i in range(0, len(other_x) + 1)]
                 
+            
+            if not self.use_contrast:
+                return {'seg': [logits, logits_aux2, logits_aux3, logits_aux4, logits_aux5_4], 'domain': domain_pred}
+   
+            emb = [self.projHead(feat_head[i]) for i in range(0, len(other_x) + 1)]
+            
+
             if self.with_memory:
                 return {'seg': [logits, logits_aux2, logits_aux3, logits_aux4, logits_aux5_4], 'embed': emb, 'key': [embed.detach() for embed in emb], 'domain': domain_pred}
             else:
@@ -744,11 +746,12 @@ class BiSeNetV2_Contrast(nn.Module):
                 logits = [self.dataset_aux_head[dataset](feat_head[0])]
             else:    
                 logits = [self.head(feat_head[i]) for i in range(0, len(other_x) + 1)]
-                # if self.upsample is False:
-                #     logits = [self.up_sample(logit) for logit in logits] 
+                # logits = [self.head(feat_head[i]) for i in range(0, len(other_x) + 1)]
+
                 
             return logits
         elif self.aux_mode == 'pred':
+            # logits = [self.head(feat_head[i]) for i in range(0, len(other_x) + 1)]
             logits = [self.head(feat_head[i]) for i in range(0, len(other_x) + 1)]
             # pred = logits.argmax(dim=1)
             # if self.upsample is False:
@@ -763,8 +766,7 @@ class BiSeNetV2_Contrast(nn.Module):
             return pred, maxV
         elif self.aux_mode == 'pred_by_emb':
             emb = [self.projHead(feat_head[i]) for i in range(0, len(other_x) + 1)]
-            # emb = emb.permute(0,2,3,1)
-            print(emb[0].shape)
+            
             simScore = [torch.einsum('bchw,nc->bnhw', emb[i], self.segment_queue) for i in range(0, len(other_x) + 1)]
             # if self.upsample is False:
             #     simScore = [self.up_sample(score) for score in simScore] 

@@ -538,7 +538,7 @@ def train():
                 state = net.module.state_dict()
             else:
                 state = net.state_dict()
-            torch.save(state, save_pth)
+            if dist.get_rank() == 0: torch.save(state, save_pth)
 
         lr_schdr.step()
 

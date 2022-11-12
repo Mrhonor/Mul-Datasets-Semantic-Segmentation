@@ -160,18 +160,22 @@ class ClassRemapOneHotLabel(ClassRemap):
         ## 1表示目标类， 0表示非目标类
         ## dataset_id指定映射方案
         b, h, w = labels.shape
-        outMultiLabels = torch.zeros(self.num_unify_classes, b, h, w, dtype=torch.bool)
-        outSigLabels = torch.zeros(self.num_unify_classes, b, h, w, dtype=torch.bool)
+        outMultiLabels = torch.zeros([b, h, w, self.num_unify_classes],dtype=torch.bool)
+        outSigLabels = torch.zeros([b, h, w, self.num_unify_classes], dtype=torch.bool)
         if labels.is_cuda:
             outMultiLabels = outMultiLabels.cuda()
             outSigLabels = outSigLabels.cuda()
         
         for k, v in self.remapList[dataset_id].items():
+
             if len(v) == 1:
-                outSigLabels[v[0], labels==int(k)] = 1
+                # print(outSigLabels.shape)
+                
+                outSigLabels[labels==int(k), v] = 1
             else:
-                for i in v:
-                    outMultiLabels[i,labels==int(k)] = 1
+                # for i in v:
+
+                outMultiLabels[labels==int(k), torch.tensor(v).unsqueeze(1)] = 1
 
         return outMultiLabels, outSigLabels
     

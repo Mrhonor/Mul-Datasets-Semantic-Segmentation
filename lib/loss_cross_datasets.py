@@ -2,7 +2,7 @@ from cmath import inf
 from distutils.command.config import config
 from traceback import print_tb
 from lib.loss_contrast_mem import PixelContrastLoss, PixelPrototypeDistanceLoss, PixelContrastLossOnlyNeg
-from lib.loss_helper import NLLPlusLoss, WeightedNLLPlusLoss, MultiLabelCrossEntropyLoss
+from lib.loss_helper import NLLPlusLoss, WeightedNLLPlusLoss, MultiLabelCrossEntropyLoss, CircleLoss
 
 import torch
 import torch.nn as nn
@@ -211,22 +211,28 @@ class CrossDatasetsLoss(nn.Module):
         if is_warmup or not self.use_contrast:
             # pred = F.interpolate(input=logits, size=(h, w), mode='bilinear', align_corners=True)
 
-            loss_seg_mul = self.seg_criterion_mul(logits, seg_label_mul)
-            loss_seg_sig = self.seg_criterion_sig(logits, seg_label_sig)
+            loss_seg_mul = self.seg_criterion_mul(logits[1], seg_label_mul)
+            loss_seg_sig = self.seg_criterion_sig(logits[0], seg_label_sig)
+            
+            # loss_seg_mul = self.seg_criterion_mul(logits, seg_label_mul + seg_label_sig)
             loss_seg = loss_seg_mul + loss_seg_sig
             loss = loss_seg
             loss_aux = None
             loss_domain = None
             if self.with_aux:
-                pred_aux = [F.interpolate(input=logit, size=(h, w), mode='bilinear', align_corners=True) for logit in logits_aux]
-                loss_aux = [aux_criterion_mul(aux, seg_label_mul) + aux_criterion_sig(aux, seg_label_sig) for aux, aux_criterion_mul, aux_criterion_sig in zip(pred_aux, self.segLoss_aux_Mul, self.segLoss_aux_Sig)]
+                # pred_aux = [F.interpolate(input=logit, size=(h, w), mode='bilinear', align_corners=True) for logit in logits_aux]
+                pred_aux = [[F.interpolate(input=logit[0], size=(h, w), mode='bilinear', align_corners=True), 
+                             F.interpolate(input=logit[1], size=(h, w), mode='bilinear', align_corners=True)]
+                            for logit in logits_aux]
+                loss_aux = [aux_criterion_sig(aux[0], seg_label_sig) + aux_criterion_mul(aux[1], seg_label_mul) for aux, aux_criterion_mul, aux_criterion_sig in zip(pred_aux, self.segLoss_aux_Mul, self.segLoss_aux_Sig)]
+                # loss_aux = [aux_criterion_mul(aux, seg_label_mul+ seg_label_sig) for aux, aux_criterion_mul, aux_criterion_sig in zip(pred_aux, self.segLoss_aux_Mul, self.segLoss_aux_Sig)]
                 
 
                 loss = loss + self.aux_weight * sum(loss_aux)
                 
                 
             if self.with_domain_adversarial:
-                domain_label = torch.ones(b, dtype=torch.long) * dataset_id
+                domain_label = torch.ones(b, dtype=torch.int) * dataset_id
 
                 if domain_pred.is_cuda:
                     domain_label = domain_label.cuda()
@@ -240,9 +246,9 @@ class CrossDatasetsLoss(nn.Module):
         else:
             # emb_logits = torch.einsum('bchw,nc->bnhw', embedding, segment_queue)
             contrast_lable, seg_mask_mul, seg_mask_sig = self.classRemapper.ContrastRemapping(lb, embedding, segment_queue, dataset_id)
-            pred = F.interpolate(input=logits, size=embedding.shape[-2:], mode='bilinear', align_corners=True)
+            # pred = F.interpolate(input=logits, size=embedding.shape[-2:], mode='bilinear', align_corners=True)
 
-            _, predict = torch.max(pred, 1)
+            # _, predict = torch.max(pred, 1)
 
             
             # print("self.contrast_criterion: ", self.contrast_criterion(embedding, contrast_lable, predict, segment_queue))
@@ -251,17 +257,20 @@ class CrossDatasetsLoss(nn.Module):
             loss_contrast = self.hard_lb_contrast_loss(embedding, contrast_lable, segment_queue)
              
             
-            loss_seg_mul = self.seg_criterion_mul(logits, seg_mask_mul + seg_mask_sig)
-            # loss_seg_sig = self.seg_criterion_sig(logits, seg_mask_sig)
-            loss_seg = loss_seg_mul #+ loss_seg_sig
+            loss_seg_mul = self.seg_criterion_mul(logits[1], seg_mask_mul + seg_mask_sig)
+            # loss_seg_sig = self.seg_criterion_sig(logits[0], seg_mask_sig)
+            loss_seg = loss_seg_mul # + loss_seg_sig
             loss = loss_seg
             loss_aux = None
             loss_domain = None
             
             if self.with_aux:
                 # aux_weight_mask = self.classRemapper.GetEqWeightMask(lb, dataset_id)
-                pred_aux = [F.interpolate(input=logit, size=(h, w), mode='bilinear', align_corners=True) for logit in logits_aux]
-                loss_aux = [aux_criterion_mul(aux, seg_mask_mul + seg_mask_sig) for aux, aux_criterion_mul, aux_criterion_sig in zip(pred_aux, self.segLoss_aux_Mul, self.segLoss_aux_Sig)]
+                pred_aux = [[F.interpolate(input=logit[0], size=(h, w), mode='bilinear', align_corners=True), 
+                             F.interpolate(input=logit[1], size=(h, w), mode='bilinear', align_corners=True)]
+                            for logit in logits_aux]
+                # loss_aux = [aux_criterion_sig(aux[0], seg_mask_sig) + aux_criterion_mul(aux[1], seg_mask_mul) for aux, aux_criterion_mul, aux_criterion_sig in zip(pred_aux, self.segLoss_aux_Mul, self.segLoss_aux_Sig)]
+                loss_aux = [aux_criterion_mul(aux[1], seg_mask_mul + seg_mask_sig) for aux, aux_criterion_mul, aux_criterion_sig in zip(pred_aux, self.segLoss_aux_Mul, self.segLoss_aux_Sig)]
 
                 
                 loss = loss + self.aux_weight * sum(loss_aux)

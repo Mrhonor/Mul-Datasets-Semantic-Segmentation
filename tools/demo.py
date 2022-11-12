@@ -20,9 +20,9 @@ np.random.seed(123)
 
 # args
 parse = argparse.ArgumentParser()
-parse.add_argument('--weight_path', type=str, default='res/Mds/model_1000.pth',)
+parse.add_argument('--weight_path', type=str, default='res/Mds/model_final.pth',)
 parse.add_argument('--config', dest='config', type=str, default='configs/bisenetv2_eval.json',)
-parse.add_argument('--img_path', dest='img_path', type=str, default='0001TP_007380.png',)
+parse.add_argument('--img_path', dest='img_path', type=str, default='leverkusen_000017_000019_leftImg8bit.png',)
 args = parse.parse_args()
 # cfg = set_cfg_from_file(args.config)
 configer = Configer(configs=args.config)
@@ -104,7 +104,7 @@ for i in range(1):
     t0 = time()
     # input_im = to_tensor(dict(im=im, lb=None))['im'].unsqueeze(0).cuda()
     input_im = cv2.resize(im, (960, 768))
-    # input_im = im
+    input_im = im
     
     input_im = torch.tensor(input_im.astype(np.float32).copy()).unsqueeze(0) #.cuda()
     # print(input_im)

@@ -499,12 +499,15 @@ class MultiLabelCrossEntropyLoss(nn.Module):
     def __init__(self, configer=None):
         super(MultiLabelCrossEntropyLoss, self).__init__()
         self.configer = configer
+        
+        self.soft_plus = nn.Softplus()
         self.m = 0
-        self.gamma = 1
+        self.gamma = 1  
+        
         if configer:
             self.m = self.configer.get('loss', 'm')
             self.gamma = self.configer.get('loss', 'gamma')
-        
+
     
     def forward(self, x, labels):
         # x: batch size x c x h x w
@@ -521,6 +524,64 @@ class MultiLabelCrossEntropyLoss(nn.Module):
         
         # neg_lb = 1- lb
         neg_lb = lb.logical_not()
+
+
+        # pos_pred = torch.exp(-pred * self.gamma) * pos_lb
+        
+        # neg_pred = torch.exp((pred + self.m) * self.gamma) * neg_lb
+        
+        # loss = torch.log(torch.sum(pos_pred, dim=0)*torch.sum(neg_pred, dim=0) + 1)
+        
+        pos_pred = -pred * self.gamma #* pos_lb
+        neg_pred = (pred + self.m) * self.gamma #* neg_lb
+        pos_pred[neg_lb] = 1e-12
+        neg_pred[pos_lb] = 1e-12
+        loss = self.soft_plus(torch.logsumexp(neg_pred, dim=0) + torch.logsumexp(pos_pred, dim=0))
+        
+        
+        lb_num = torch.sum(loss != 0)
+        if lb_num ==0:
+            return 0
+        
+        # print(torch.max(loss))# / lb_num)
+        loss = torch.sum(loss) / (b*h*w)
+        
+        # loss = torch.sum(loss) / torch.sum(loss != 0)
+    
+        # print(loss)
+        return loss
+        
+class CircleLoss(nn.Module):
+    def __init__(self, configer=None):
+        super(CircleLoss, self).__init__()
+        self.configer = configer
+        self.m = 0
+        self.gamma = 1
+        if configer:
+            self.m = self.configer.get('loss', 'm')
+            self.gamma = self.configer.get('loss', 'gamma')
+        
+        self.Op = 1 + self.m
+        self.On = -self.m
+        self.deltap = 1 - self.m
+        self.deltan = self.m
+        
+    
+    def forward(self, x, labels):
+        # x: batch size x c x h x w
+        # labels: batch x h x w x c, 1表示目标标签，0表示非目标标签
+        b, c, h, w = x.shape
+        
+        pred = x.permute(1,0,2,3)
+        pred = pred.contiguous().view(c, -1)
+        lb = labels.detach().permute(3, 0, 1, 2)
+        lb = lb.contiguous().view(c, -1)
+        
+        # pred = F.sigmoid(pred)
+        pos_lb = lb
+        
+        # neg_lb = 1- lb
+        neg_lb = lb.logical_not()
         # print("x: ", x.shape)
         # print("pred: ",pred.shape)
         # print("lb: ", lb.shape)
@@ -528,10 +589,12 @@ class MultiLabelCrossEntropyLoss(nn.Module):
         # ## 保持矩阵形式，忽略为0项
         # pos_pred[pos_pred == 0] = -1e12 
 
+        alphap = torch.clamp_min(self.Op - pred.detach(), min=0.)
+        alphan = torch.clamp_min(-self.On + pred.detach(), min=0.)
 
-        pos_pred = torch.exp(-pred * self.gamma) * pos_lb
+        pos_pred = torch.exp(-(pred-self.deltap) * alphap * self.gamma) * pos_lb
         
-        neg_pred = torch.exp((pred + self.m) * self.gamma) * neg_lb
+        neg_pred = torch.exp((pred - self.deltan) * alphan * self.gamma) * neg_lb
         
         loss = torch.log(torch.sum(pos_pred, dim=0)*torch.sum(neg_pred, dim=0) + 1)
         
@@ -545,8 +608,8 @@ class MultiLabelCrossEntropyLoss(nn.Module):
         # loss = torch.sum(loss) / torch.sum(loss != 0)
     
         # print(loss)
-        return loss
-        
+        return loss        
+
     
 def test_MultiLabelCrossEntropyLoss():
     loss_fuc = MultiLabelCrossEntropyLoss(None)
