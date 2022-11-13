@@ -63,7 +63,7 @@ def parse_args():
     parse.add_argument('--local_rank', dest='local_rank', type=int, default=-1,)
     parse.add_argument('--port', dest='port', type=int, default=16852,)
     parse.add_argument('--finetune_from', type=str, default=None,)
-    parse.add_argument('--config', dest='config', type=str, default='configs/bisenetv2_city_cam.json',)
+    parse.add_argument('--config', dest='config', type=str, default='configs/bisenetv2_city_cam_ori.json',)
     return parse.parse_args()
 
 # 使用绝对路径
@@ -340,7 +340,8 @@ def train():
 
         im = im.cuda()
         lb = lb.cuda()
-        dataset_lbs = torch.tensor(dataset_lbs).cuda()
+        # dataset_lbs = torch.tensor(dataset_lbs).cuda()
+        dataset_lbs = dataset_lbs.cuda()
         # print(dataset_lbs)
 
 

@@ -518,9 +518,10 @@ class MultiLabelCrossEntropyLoss(nn.Module):
         pred = pred.contiguous().view(c, -1)
         lb = labels.permute(3, 0, 1, 2)
         lb = lb.contiguous().view(c, -1)
+
         
         # pred = F.sigmoid(pred)
-        pos_lb = lb
+        pos_lb = lb.bool()
         
         # neg_lb = 1- lb
         neg_lb = lb.logical_not()
@@ -529,13 +530,13 @@ class MultiLabelCrossEntropyLoss(nn.Module):
         # pos_pred = torch.exp(-pred * self.gamma) * pos_lb
         
         # neg_pred = torch.exp((pred + self.m) * self.gamma) * neg_lb
-        
+
         # loss = torch.log(torch.sum(pos_pred, dim=0)*torch.sum(neg_pred, dim=0) + 1)
         
         pos_pred = -pred * self.gamma #* pos_lb
         neg_pred = (pred + self.m) * self.gamma #* neg_lb
-        pos_pred[neg_lb] = 1e-12
-        neg_pred[pos_lb] = 1e-12
+        pos_pred[neg_lb] = -1e12
+        neg_pred[pos_lb] = -1e12
         loss = self.soft_plus(torch.logsumexp(neg_pred, dim=0) + torch.logsumexp(pos_pred, dim=0))
         
         
@@ -544,12 +545,14 @@ class MultiLabelCrossEntropyLoss(nn.Module):
             return 0
         
         # print(torch.max(loss))# / lb_num)
-        loss = torch.sum(loss) / (b*h*w)
+        loss = torch.sum(loss) / lb_num # (b*h*w)
         
         # loss = torch.sum(loss) / torch.sum(loss != 0)
     
         # print(loss)
         return loss
+        
+
         
 class CircleLoss(nn.Module):
     def __init__(self, configer=None):
@@ -613,13 +616,15 @@ class CircleLoss(nn.Module):
     
 def test_MultiLabelCrossEntropyLoss():
     loss_fuc = MultiLabelCrossEntropyLoss(None)
+    loss_fuc2 = MultiLabelCrossEntropyLossMock(None)
     x = torch.tensor([[-1, 1],
                       [2, 3], 
-                      [4, 4]])
+                      [4, 4]], dtype=torch.float32)
     labels = torch.tensor([[0,1],
                            [1,0],
-                           [0,1]])
+                           [0,1]], dtype=torch.bool)
     print(loss_fuc(x, labels))
+    print(loss_fuc2(x, labels))
     # print("true value: 0.7111")
     
         # print("pred: ")
