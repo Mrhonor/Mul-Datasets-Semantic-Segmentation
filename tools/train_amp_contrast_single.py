@@ -32,9 +32,10 @@ from lib.lr_scheduler import WarmupPolyLrScheduler
 from lib.meters import TimeMeter, AvgMeter
 from lib.logger import setup_logger, print_log_msg
 from lib.loss_cross_datasets import CrossDatasetsLoss
-from tools.configer import Configer
 from lib.class_remap import ClassRemap
-from evaluate import CAM_ID, eval_model_contrast, eval_model_aux, eval_model, eval_model_contrast_single
+
+from tools.configer import Configer
+from evaluate import eval_model_contrast, eval_model_aux, eval_model, eval_model_contrast_single
 
 from tensorboardX import SummaryWriter
 from time import time
@@ -63,7 +64,7 @@ def parse_args():
     parse.add_argument('--local_rank', dest='local_rank', type=int, default=-1,)
     parse.add_argument('--port', dest='port', type=int, default=16852,)
     parse.add_argument('--finetune_from', type=str, default=None,)
-    parse.add_argument('--config', dest='config', type=str, default='configs/bisenetv2_city_cam_ori.json',)
+    parse.add_argument('--config', dest='config', type=str, default='configs/bisenetv2_city_cam.json',)
     return parse.parse_args()
 
 # 使用绝对路径
@@ -157,7 +158,7 @@ def set_model_dist(net):
     return net
 
 def set_contrast_loss(configer):
-    return [CrossDatasetsLoss(configer) for _ in range(0,configer.get('n_datasets'))]
+    return CrossDatasetsLoss(configer)
 
 def set_meters(configer):
     time_meter = TimeMeter(configer.get('lr', 'max_iter'))
@@ -265,6 +266,8 @@ def reduce_tensor(inp):
         dist.reduce(reduced_inp, dst=0)
     return reduced_inp
 
+
+
 def train():
     # torch.autograd.set_detect_anomaly(True)
     n_datasets = configer.get('n_datasets')
@@ -320,7 +323,6 @@ def train():
         net = set_model_dist(net)
 
     contrast_warmup_iters = configer.get("lr", "warmup_iters")
-    with_memory = configer.exists('contrast', 'with_memory')
     with_aux = configer.get('loss', 'with_aux')
     with_domain_adversarial = configer.get('network', 'with_domain_adversarial')
 
@@ -378,100 +380,48 @@ def train():
             # emb = out['embed']
             
             with_embed = True if i >= contrast_warmup_iters else False
-            
-            
-            city_out = {}
-            cam_out = {}
+
+            adaptive_out = {}
             for k, v in out.items():
                 if v is None:
-                    city_out[k] = None
-                    cam_out[k] = None
-                elif k == 'seg':
-                    city_logits_list = []
-                    cam_logits_list = []
+                    adaptive_out[k] = None
+                elif k == 'seg' or k == 'domain':
+                    logits_list = []
                     for logit in v:
-                        city_logits_list.append(logit[0][dataset_lbs==CITY_ID])
-                        cam_logits_list.append(logit[0][dataset_lbs==CAM_ID]) 
+                        logits_list.append(logit[0])
                                         
-                    city_out[k] = city_logits_list
-                    cam_out[k] = cam_logits_list
+                    adaptive_out[k] = logits_list
                 else:
-                    city_out[k] = v[0][dataset_lbs==CITY_ID]
-                    cam_out[k] = v[0][dataset_lbs==CAM_ID]
+                    adaptive_out[k] = v[0]
 
             if is_distributed():
-                city_out['segment_queue'] = net.module.segment_queue
-                cam_out['segment_queue'] = net.module.segment_queue
+                adaptive_out['prototypes'] = net.module.prototypes
+            
             else:
-                city_out['segment_queue'] = net.segment_queue
-                cam_out['segment_queue'] = net.segment_queue
+                adaptive_out['prototypes'] = net.prototypes
                 
-            backward_loss = torch.tensor(0, dtype=torch.float).cuda()
-            loss_seg = torch.tensor(0, dtype=torch.float).cuda()
-            loss_aux = [torch.tensor(0, dtype=torch.float).cuda() for i in range(0, configer.get('loss', 'aux_num'))]
-            loss_domain = torch.tensor(0, dtype=torch.float).cuda()
-            loss_contrast = torch.tensor(0, dtype=torch.float).cuda()
+                
+
             if i < configer.get('lr', 'warmup_iters') or not configer.get('contrast', 'use_contrast'):
-                if lb_city.numel() != 0:
-                    backward_loss0, loss_seg0, loss_aux0, loss_domain0 = contrast_losses[CITY_ID](city_out, lb_city, CITY_ID, True)
-                    backward_loss += backward_loss0
-                    loss_seg += loss_seg0
-                    loss_domain += loss_domain0
-                    if with_aux:
-                        loss_aux = [aux+aux0 for aux, aux0 in zip(loss_aux, loss_aux0)]
+                is_warmup = True
                         
-                if lb_cam.numel() != 0:
-                    backward_loss0, loss_seg0, loss_aux0, loss_domain0 = contrast_losses[CAM_ID](cam_out, lb_cam, CAM_ID, True)
-                    backward_loss += backward_loss0
-                    loss_seg += loss_seg0
-                    loss_domain += loss_domain0
-                    if with_aux:
-                        loss_aux = [aux+aux0 for aux, aux0 in zip(loss_aux, loss_aux0)]
-                # print(backward_loss0)
-                # print(backward_loss1)
-                # print(loss_seg0)
-                # print(loss_seg1)
-                # print(loss_aux0)
-                # print(loss_aux1)
-                # print("***************************")
             else:
-                if lb_city.numel() != 0:
-                    backward_loss0, loss_seg0, loss_aux0, loss_contrast0, loss_domain0 = contrast_losses[CITY_ID](city_out, lb_city, CITY_ID, False)
-                    backward_loss += backward_loss0
-                    loss_seg += loss_seg0
-                    loss_domain += loss_domain0
-                    loss_contrast += loss_contrast0
-                    if with_aux:
-                        loss_aux = [aux+aux0 for aux, aux0 in zip(loss_aux, loss_aux0)]
-                        
-                if lb_cam.numel() != 0:
-                    backward_loss0, loss_seg0, loss_aux0, loss_contrast0, loss_domain0 = contrast_losses[CAM_ID](cam_out, lb_cam, CAM_ID, False)
-                    backward_loss += backward_loss0
-                    loss_seg += loss_seg0
-                    loss_domain += loss_domain0
-                    loss_contrast += loss_contrast0
-                    if with_aux:
-                        loss_aux = [aux+aux0 for aux, aux0 in zip(loss_aux, loss_aux0)]
+                is_warmup = False
                 
-
                 
-            
-            
-            
-        # display_loss = reduce_tensor(backward_loss) / get_world_size()
+            backward_loss, loss_seg, loss_aux, loss_contrast, loss_domain, new_proto = contrast_losses(adaptive_out, lb, dataset_lbs, is_warmup)
 
-
-        if with_memory and 'key' in out:
-            # dequeue_and_enqueue(configer, out['key'], out['lb_key'],
-            #                     segment_queue=net.module.segment_queue,
-            #                     segment_queue_ptr=net.module.segment_queue_ptr,
-            #                     pixel_queue=net.module.pixel_queue,
-            #                     pixel_queue_ptr=net.module.pixel_queue_ptr)
-
-            dequeue_and_enqueue(configer, city_out['seg'], city_out['key'], lb_city.detach(),
-                                city_out['segment_queue'], i, CITY_ID)
-            dequeue_and_enqueue(configer, cam_out['seg'], cam_out['key'], lb_cam.detach(),
-                                cam_out['segment_queue'], i, CAM_ID)
+        if is_distributed():
+            net.module.PrototypesUpdate(new_proto)
+        else:
+            net.PrototypesUpdate(new_proto)        
+        
+            
+        # if with_memory and 'key' in out:
+        #     dequeue_and_enqueue(configer, city_out['seg'], city_out['key'], lb_city.detach(),
+        #                         city_out['segment_queue'], i, CITY_ID)
+        #     dequeue_and_enqueue(configer, cam_out['seg'], cam_out['key'], lb_cam.detach(),
+        #                         cam_out['segment_queue'], i, CAM_ID)
 
 
         # print('before backward')

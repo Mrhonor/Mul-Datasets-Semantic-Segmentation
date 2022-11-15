@@ -6,21 +6,21 @@
   "dataset1": {
     "n_cats": 18,
     "data_reader": "CityScapes",
-    "im_root": "/home/cxh/datasets/",
+    "im_root": "/usr/home/cxh/project/datasets/cityscapes",
     "train_im_anns":"datasets/Cityscapes/train.txt",
     "val_im_anns":"datasets/Cityscapes/val.txt", 
-    "ims_per_gpu": 8,
-    "eval_ims_per_gpu": 3
+    "ims_per_gpu": 3,
+    "eval_ims_per_gpu": 2
 
   },
   "dataset2": {
     "n_cats": 12, 
     "data_reader": "CamVid",
-    "im_root": "/home/cxh/datasets/CamVid",
+    "im_root": "/usr/home/cxh/project/datasets/CamVid",
     "train_im_anns":"datasets/CamVid/train.txt",
     "val_im_anns":"datasets/CamVid/test.txt", 
-    "ims_per_gpu": 2,
-    "eval_ims_per_gpu": 2
+    "ims_per_gpu": 1,
+    "eval_ims_per_gpu": 1
   },
   "n_bn": 1,
   "class_remap1":{
@@ -69,8 +69,8 @@
     "gamma": 14
   },
   "lr": {
-    "lr_start": 3e-5,
-    "weight_decay": 6e-5,
+    "lr_start": 5e-3,
+    "weight_decay": 5e-5,
     "warmup_iters": 0,
     "fix_param_iters": 0,
     "max_iter": 100000
@@ -79,7 +79,7 @@
     "scales": [0.5, 1.0, 2.0],
     "cropsize": [512, 1024],
     "finetune": false,
-    "finetune_from": "res/Mds/model_4000.pth"
+    "finetune_from": "res/Mds/model_1000.pth"
   },
   "val": {
     "scales": [0.5, 0.75, 1.0, 1.25, 1.5, 1.75],
@@ -88,7 +88,7 @@
   "use_fp16": false,
   "use_sync_bn": false,
   "contrast": {
-    "use_contrast": false,
+    "use_contrast": true,
     "proj_dim": 256,
     "temperature": 0.07,
     "base_temperature": 0.07,
@@ -96,16 +96,15 @@
     "max_views": 50,
     "stride": 16,
     "loss_weight": 1,
-    "use_rmi": false,
-    "use_lovasz": false,
+    "num_prototype": 3,
     "with_memory": true,
     "memory_size": 5000,
     "pixel_update_freq": 10,
     "coefficient": 0.99,
     "upsample": false,
     "downsample": true,
-    "update_confidence_thresh": 0.3,
-    "update_sim_thresh": 0.5,
+    "update_confidence_thresh": 0.1,
+    "update_sim_thresh": 0.8,
     "with_ppd": false,
     "ppd_loss_weight": 1,
     "with_hard_lb_contrast": true,
@@ -113,7 +112,7 @@
   },
   "res_save_pth": "res/Mds/",
   "network": {
-    "stride": 16,
+    "stride": 32,
     "with_domain_adversarial": true
   },
   "dataset_aux_head": {

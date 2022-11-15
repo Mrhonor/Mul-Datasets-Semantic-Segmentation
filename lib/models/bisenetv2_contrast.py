@@ -2,13 +2,21 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-import torch.utils.model_zoo as modelzoo
 
 from lib.projection import ProjectionHead
 from lib.domain_classifier_head import DomainClassifierHead
 from lib.functions import ReverseLayerF
 from lib.ConvNorm import ConvNorm
+
 import numpy as np
+from timm.models.layers import trunc_normal_
+
+from lib.sinkhorn import distributed_sinkhorn
+from lib.momentum_update import momentum_update
+from timm.models.layers import trunc_normal_
+from einops import rearrange, repeat
+import torch.distributed as dist
+
 
 # backbone_url = 'https://github.com/CoinCheung/BiSeNet/releases/download/0.0.0/backbone_v2.pth'
 # backbone_url = '/root/autodl-tmp/project/BiSeNet/pth/backbone_v2.pth'
@@ -337,36 +345,7 @@ class GELayerS2(nn.Module):
         super(GELayerS2, self).__init__()
         mid_chan = in_chan * exp_ratio
         self.conv1 = ConvBNReLU(in_chan, in_chan, 3, stride=1, n_bn=n_bn)
-        # self.dwconv1 = nn.Sequential(
-        #     nn.Conv2d(
-        #         in_chan, mid_chan, kernel_size=3, stride=2,
-        #         padding=1, groups=in_chan, bias=False),
-        #     nn.BatchNorm2d(mid_chan),
-        # )
-        # self.dwconv2 = nn.Sequential(
-        #     nn.Conv2d(
-        #         mid_chan, mid_chan, kernel_size=3, stride=1,
-        #         padding=1, groups=mid_chan, bias=False),
-        #     nn.BatchNorm2d(mid_chan),
-        #     nn.ReLU(inplace=True), # not shown in paper
-        # )
-        # self.conv2 = nn.Sequential(
-        #     nn.Conv2d(
-        #         mid_chan, out_chan, kernel_size=1, stride=1,
-        #         padding=0, bias=False),
-        #     nn.BatchNorm2d(out_chan),
-        # )
-        # self.conv2[1].last_bn = True
-        # self.shortcut = nn.Sequential(
-        #         nn.Conv2d(
-        #             in_chan, in_chan, kernel_size=3, stride=2,
-        #             padding=1, groups=in_chan, bias=False),
-        #         nn.BatchNorm2d(in_chan),
-        #         nn.Conv2d(
-        #             in_chan, out_chan, kernel_size=1, stride=1,
-        #             padding=0, bias=False),
-        #         nn.BatchNorm2d(out_chan),
-        # )
+
         self.dwconv1 = ConvBN(in_chan, mid_chan, ks=3, stride=2, 
                             padding=1, groups=in_chan, bias=False, n_bn=n_bn)
         self.dwconv2 = ConvBN(mid_chan, mid_chan, ks=3, stride=1, 
@@ -433,37 +412,7 @@ class BGALayer(nn.Module):
 
     def __init__(self, n_bn=1):
         super(BGALayer, self).__init__()
-        # self.left1 = nn.Sequential(
-        #     nn.Conv2d(
-        #         128, 128, kernel_size=3, stride=1,
-        #         padding=1, groups=128, bias=False),
-        #     nn.BatchNorm2d(128),
-        #     nn.Conv2d(
-        #         128, 128, kernel_size=1, stride=1,
-        #         padding=0, bias=False),
-        # )
-        # self.left2 = nn.Sequential(
-        #     nn.Conv2d(
-        #         128, 128, kernel_size=3, stride=2,
-        #         padding=1, bias=False),
-        #     nn.BatchNorm2d(128),
-        #     nn.AvgPool2d(kernel_size=3, stride=2, padding=1, ceil_mode=False)
-        # )
-        # self.right1 = nn.Sequential(
-        #     nn.Conv2d(
-        #         128, 128, kernel_size=3, stride=1,
-        #         padding=1, bias=False),
-        #     nn.BatchNorm2d(128),
-        # )
-        # self.right2 = nn.Sequential(
-        #     nn.Conv2d(
-        #         128, 128, kernel_size=3, stride=1,
-        #         padding=1, groups=128, bias=False),
-        #     nn.BatchNorm2d(128),
-        #     nn.Conv2d(
-        #         128, 128, kernel_size=1, stride=1,
-        #         padding=0, bias=False),
-        # )
+
         self.left1_convbn = ConvBN(128, 128, ks=3, groups=128, n_bn=n_bn)
         self.left1_conv = nn.Conv2d(128, 128, kernel_size=1, stride=1, padding=0, bias=False)
 
@@ -585,6 +534,8 @@ class BiSeNetV2_Contrast(nn.Module):
         self.proj_dim = self.configer.get('contrast', 'proj_dim')
         self.upsample = self.configer.get('contrast', 'upsample') 
         self.downsample = self.configer.get('contrast', 'downsample')
+        self.num_prototype = self.configer.get('contrast', 'num_prototype')
+        self.coefficient = self.configer.get('contrast', 'coefficient')
         
         # 用于分数据集训练
         self.batch_sizes = [self.configer.get('dataset'+str(i), 'ims_per_gpu') for i in range(1, self.n_datasets+1)]
@@ -618,16 +569,16 @@ class BiSeNetV2_Contrast(nn.Module):
                 self.projHead = ProjectionHead(dim_in=128, proj_dim=self.proj_dim, up_factor=self.network_stride, bn_type='torchsyncbn', up_sample=self.upsample, down_sample=self.downsample)
             else:
                 self.projHead = ProjectionHead(dim_in=128, proj_dim=self.proj_dim, up_factor=self.network_stride, bn_type='torchbn', up_sample=self.upsample, down_sample=self.downsample)
-            self.with_memory = self.configer.exists("contrast", "with_memory")
-            if self.with_memory:
-                self.memory_size = self.configer.get('contrast', 'memory_size')
-
+            
+            
         self.with_domain_adversarial = self.configer.get('network', 'with_domain_adversarial')
         if self.with_domain_adversarial:
             if configer.get('use_sync_bn'):
-                self.DomainClassifierHead = DomainClassifierHead(dim_in=128, n_domain=self.n_datasets, bn_type='torchsyncbn')
+                self.DomainClassifierHead1 = DomainClassifierHead(dim_in=128, n_domain=self.n_datasets, classifier='convmlp_small', bn_type='torchsyncbn')
+                self.DomainClassifierHead2 = DomainClassifierHead(dim_in=128, n_domain=self.n_datasets, classifier='convmlp', bn_type='torchsyncbn')
             else:
-                self.DomainClassifierHead = DomainClassifierHead(dim_in=128, n_domain=self.n_datasets, bn_type='torchbn')
+                self.DomainClassifierHead1 = DomainClassifierHead(dim_in=128, n_domain=self.n_datasets, classifier='convmlp_small', bn_type='torchbn')
+                self.DomainClassifierHead2 = DomainClassifierHead(dim_in=128, n_domain=self.n_datasets, classifier='convmlp', bn_type='torchsyncbn')
 
         # ## TODO: what is the number of mid chan ?
         # self.head = nn.ModuleList([])
@@ -658,11 +609,10 @@ class BiSeNetV2_Contrast(nn.Module):
             self.aux5_4 = SegmentHead(128, 128, self.num_unify_classes, up_factor=32, aux=True)
 
             
-        self.register_buffer("segment_queue", torch.randn(self.num_unify_classes, self.proj_dim))
+        self.prototypes = nn.Parameter(torch.zeros(self.num_unify_classes, self.num_prototype, self.proj_dim),
+                                       requires_grad=False)
 
-        self.segment_queue = nn.functional.normalize(self.segment_queue, p=2, dim=1)
-
-
+        trunc_normal_(self.prototypes, std=0.02)
         self.init_weights()
 
     def forward(self, x, dataset=0, perm_index=None, *other_x):
@@ -698,24 +648,24 @@ class BiSeNetV2_Contrast(nn.Module):
             logits_aux4 = [self.aux4(feat4[i]) for i in range(0, len(other_x) + 1)]
             logits_aux5_4 = [self.aux5_4(feat5_4[i]) for i in range(0, len(other_x) + 1)]
             
-            domain_pred = None
+            domain_pred1 = None
+            domain_pred2 = None
             if self.with_domain_adversarial:
                 p = float(self.configer.get('iter')) / self.configer.get('lr', 'max_iter')
                 alpha = 2. / (1. + np.exp(-10 * p)) - 1
-                reverse_feat = [ReverseLayerF.apply(feat_head[i], alpha) for i in range(0, len(other_x)+1)]
-                domain_pred = [self.DomainClassifierHead(reverse_feat[i]) for i in range(0, len(other_x) + 1)]
+                reverse_feat1 = [ReverseLayerF.apply(feat_s[i], alpha) for i in range(0, len(other_x)+1)]
+                domain_pred1 = [self.DomainClassifierHead1(reverse_feat1[i]) for i in range(0, len(other_x) + 1)]
+                
+                reverse_feat2 = [ReverseLayerF.apply(feat_head[i], alpha) for i in range(0, len(other_x)+1)]
+                domain_pred2 = [self.DomainClassifierHead2(reverse_feat2[i]) for i in range(0, len(other_x) + 1)]
                 
             
             if not self.use_contrast:
-                return {'seg': [logits, logits_aux2, logits_aux3, logits_aux4, logits_aux5_4], 'domain': domain_pred}
+                return {'seg': [logits, logits_aux2, logits_aux3, logits_aux4, logits_aux5_4], 'domain': [domain_pred1, domain_pred2]}
    
-            emb = [self.projHead(feat_head[i]) for i in range(0, len(other_x) + 1)]
+            emb = [self.projHead(feat_s[i]) for i in range(0, len(other_x) + 1)]
             
-
-            if self.with_memory:
-                return {'seg': [logits, logits_aux2, logits_aux3, logits_aux4, logits_aux5_4], 'embed': emb, 'key': [embed.detach() for embed in emb], 'domain': domain_pred}
-            else:
-                return {'seg': [logits, logits_aux2, logits_aux3, logits_aux4, logits_aux5_4], 'embed': emb, 'domain': domain_pred}
+            return {'seg': [logits, logits_aux2, logits_aux3, logits_aux4, logits_aux5_4], 'embed': emb, 'domain': [domain_pred1, domain_pred2]}
                 
             # return logits, logits_aux2, logits_aux3, logits_aux4, logits_aux5_4
         elif self.aux_mode == 'train' and self.train_dataset_aux == True and perm_index != None:
@@ -936,8 +886,15 @@ class BiSeNetV2_Contrast(nn.Module):
         for p in self.bga.parameters():
             p.requires_grad = require_grad_state
         
-        
-        
+    def PrototypesUpdate(self, new_proto):
+        self.prototypes = nn.Parameter(F.normalize(new_proto, p=2, dim=-1),
+                                        requires_grad=False)
+
+        if dist.is_available() and dist.is_initialized():
+            protos = self.prototypes.data.clone()
+            dist.all_reduce(protos.div_(dist.get_world_size()))
+            self.prototypes = nn.Parameter(protos, requires_grad=False)
+            
 
 if __name__ == "__main__":
 

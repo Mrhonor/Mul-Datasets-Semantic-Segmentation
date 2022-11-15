@@ -1,126 +1,26 @@
 from cmath import inf
 from distutils.command.config import config
 from traceback import print_tb
-from lib.loss_contrast_mem import PixelContrastLoss, PixelPrototypeDistanceLoss, PixelContrastLossOnlyNeg
+from lib.loss_contrast_mem import PixelContrastLoss, PixelPrototypeDistanceLoss, PixelContrastLossOnlyNeg, PixelContrastLossMulProto
 from lib.loss_helper import NLLPlusLoss, WeightedNLLPlusLoss, MultiLabelCrossEntropyLoss, CircleLoss
 
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from lib.class_remap import ClassRemap, ClassRemapOneHotLabel
+from lib.prototype_learning import prototype_learning
+
+from einops import rearrange, repeat
 
 
-
-# class CrossDatasetsLoss(nn.Module):
-#     def __init__(self, configer=None):
-#         super(CrossDatasetsLoss, self).__init__()
+def LabelToOneHot(LabelVector, nClass, ignore_index=-1):
+    ## 输入的label应该是一维tensor向量
+    OutOneHot = torch.zeros(len(LabelVector), nClass, dtype=torch.bool)
+    if LabelVector.is_cuda:
+        OutOneHot = OutOneHot.cuda()
         
-#         self.configer = configer
-#         self.classRemapper = eval(self.configer.get('class_remaper'))(configer=self.configer)
-        
-#         # self.ignore_index = -1
-#         # if self.configer.exists('loss', 'params') and 'ce_ignore_index' in self.configer.get('loss', 'params'):
-#         #     self.ignore_index = self.configer.get('loss', 'params')['ce_ignore_index']
-            
-#         self.loss_weight = self.configer.get('contrast', 'loss_weight')    
-            
-#         # self.seg_criterion_warmup = NLLPlusLoss(configer=self.configer)   
-#         self.seg_criterion = eval(self.configer.get('loss', 'type'))(configer=self.configer)   
-            
-#         self.with_aux = self.configer.get('loss', 'with_aux')
-#         if self.with_aux:
-#             self.aux_num = self.configer.get('loss', 'aux_num')
-#             self.segLoss_aux = [eval(self.configer.get('loss', 'type'))(configer=self.configer) for _ in range(self.aux_num)]
-        
-#         self.use_contrast = self.configer.get('contrast', 'use_contrast')
-#         if self.use_contrast:
-#             self.contrast_criterion = PixelContrastLoss(configer=configer)
-        
-#             self.with_ppd = self.configer.get('contrast', 'with_ppd')
-#             if self.with_ppd:
-#                 self.ppd_loss_weight = self.configer.get('contrast', 'ppd_loss_weight')
-#                 self.ppd_criterion = PixelPrototypeDistanceLoss(configer=configer)
-        
-#         self.upsample = self.configer.get('contrast', 'upsample')
-#         self.network_stride = self.configer.get('network', 'stride')
-        
-#     def forward(self, preds, target, dataset_id, is_warmup=False):
-#         assert "seg" in preds
-        
-        
-#         logits, *logits_aux = preds['seg']
-#         if self.use_contrast:
-#             embedding = preds['embed']
-        
-
-#         b, h, w = logits[0].shape
-
-#         lb = target
-#         # 对标签下采样
-#         if not self.upsample:
-#             lb = lb[:, ::self.network_stride, ::self.network_stride]
-
-#         if "segment_queue" in preds:
-#             segment_queue = preds['segment_queue']
-#         else:
-#             segment_queue = None
-
-#         seg_label = self.classRemapper.SegRemapping(lb, dataset_id)
-    
-
-#         if is_warmup or not self.use_contrast:
-#             # warm up不计算contrast 损失
-#             weight_mask = self.classRemapper.GetEqWeightMask(lb, dataset_id)
-
-#             # pred = F.interpolate(input=logits, size=(h, w), mode='bilinear', align_corners=True)
-
-#             loss_seg = self.seg_criterion(logits, weight_mask)
-#             loss = loss_seg
-#             loss_aux = None
-#             if self.with_aux:
-#                 pred_aux = [F.interpolate(input=logit, size=(h, w), mode='bilinear', align_corners=True) for logit in logits_aux]
-#                 loss_aux = [aux_criterion(aux, weight_mask) for aux, aux_criterion in zip(pred_aux, self.segLoss_aux)]
-                
-#                 # if torch.isnan(loss_aux[0]):
-#                 #     # print(pred_aux)
-#                 #     # print(seg_label)
-#                 #     # print(loss_aux)
-#                 #     print("***************")
-#                 loss = loss_seg + sum(loss_aux)
-
-#             return loss, loss_seg, loss_aux
-#         else:
-#             # emb_logits = torch.einsum('bchw,nc->bnhw', embedding, segment_queue)
-#             contrast_lable, weight_mask = self.classRemapper.ContrastRemapping(lb, embedding, segment_queue, dataset_id)
-#             pred = F.interpolate(input=logits, size=embedding.shape[-2:], mode='bilinear', align_corners=True)
-
-#             _, predict = torch.max(pred, 1)
-
-#             # if self.configer.get('contrast', 'upsample') is False:
-#             #     network_stride = self.configer.get('network', 'stride')
-#             #     predict = predict[:, ::network_stride, ::network_stride]
-
-#             loss_contrast = self.contrast_criterion(embedding, contrast_lable, predict, segment_queue)
-
-#             loss_seg = self.seg_criterion(logits, weight_mask)
-#             loss = loss_seg
-#             loss_aux = None
-            
-#             if self.with_aux:
-#                 aux_weight_mask = self.classRemapper.GetEqWeightMask(lb, dataset_id)
-#                 pred_aux = [F.interpolate(input=logit, size=(h, w), mode='bilinear', align_corners=True) for logit in logits_aux]
-#                 loss_aux = [aux_criterion(aux, aux_weight_mask) for aux, aux_criterion in zip(pred_aux, self.segLoss_aux)]
-
-                
-#                 loss = loss_seg + sum(loss_aux)
-                
-#             if self.with_ppd:
-#                 loss_ppd = self.ppd_criterion(embedding, contrast_lable, segment_queue)
-#                 loss_contrast = loss_contrast + self.ppd_loss_weight * loss_ppd
-                
-            
-#             return loss + self.loss_weight * loss_contrast, loss_seg, loss_aux, loss_contrast
-    
+    OutOneHot[LabelVector!=ignore_index, LabelVector[LabelVector!=ignore_index]]=1
+    return OutOneHot
 
 class CrossDatasetsLoss(nn.Module):
     def __init__(self, configer=None):
@@ -128,6 +28,8 @@ class CrossDatasetsLoss(nn.Module):
         
         self.configer = configer
         self.classRemapper = eval(self.configer.get('class_remaper'))(configer=self.configer)
+        self.num_unify_classes = self.configer.get('num_unify_classes')
+        self.num_prototype = self.configer.get('contrast', 'num_prototype')
         
         # self.ignore_index = -1
         # if self.configer.exists('loss', 'params') and 'ce_ignore_index' in self.configer.get('loss', 'params'):
@@ -135,7 +37,6 @@ class CrossDatasetsLoss(nn.Module):
             
         self.loss_weight = self.configer.get('contrast', 'loss_weight')    
             
-        # self.seg_criterion_warmup = NLLPlusLoss(configer=self.configer)   
         
         # 处理多标签
         self.seg_criterion_mul = eval(self.configer.get('loss', 'type'))(configer=self.configer)   
@@ -161,7 +62,7 @@ class CrossDatasetsLoss(nn.Module):
             self.with_hard_lb_contrast = self.configer.get('contrast', 'with_hard_lb_contrast')
             if self.with_hard_lb_contrast:
                 self.hard_lb_contrast_loss_weight = self.configer.get('contrast', 'hard_lb_contrast_loss_weight')
-                self.hard_lb_contrast_loss = PixelContrastLossOnlyNeg(configer=configer)
+                self.hard_lb_contrast_loss = PixelContrastLossMulProto(configer=configer)
             
             
         
@@ -176,48 +77,62 @@ class CrossDatasetsLoss(nn.Module):
             
             weight_vector = F.normalize(batch_size_sum / batch_sizes, p=1, dim=0).cuda()
             
-            self.domain_loss = torch.nn.CrossEntropyLoss(weight=weight_vector)
+            self.domain_loss1 = torch.nn.CrossEntropyLoss(weight=weight_vector)
+            self.domain_loss2 = torch.nn.CrossEntropyLoss(weight=weight_vector)
             self.domain_loss_weight = self.configer.get('loss', 'domain_loss_weight')
         
         
-    def forward(self, preds, target, dataset_id, is_warmup=False):
+    def forward(self, preds, target, dataset_ids, is_warmup=False):
         assert "seg" in preds
         
+    
         
         logits, *logits_aux = preds['seg']
         if self.use_contrast:
             embedding = preds['embed']
         
         if self.with_domain_adversarial:
-            domain_pred = preds['domain']        
+            domain_pred1, domain_pred2 = preds['domain']        
 
         b, c, h, w = logits.shape
-        # print("logits: ", logits.shape)
-        # _ = [print("logits_aux", str(i), ": ", aux.shape) for i, aux in enumerate(logits_aux)]
 
         lb = target
-        # # 对标签下采样
-        # if not self.upsample:
-        #     lb = lb[:, ::self.network_stride, ::self.network_stride]
+ 
 
-        if "segment_queue" in preds:
-            segment_queue = preds['segment_queue']
+        if "prototypes" in preds:
+            prototypes = preds['prototypes']
         else:
-            segment_queue = None
+            prototypes = None
 
-        seg_label_mul = self.classRemapper.SegRemapping(lb, dataset_id)
-    
+        contrast_lb = lb[:, ::self.network_stride, ::self.network_stride]
+        
+        new_proto = None
+        if self.use_contrast:
+            rearr_emb = rearrange(embedding, 'b c h w -> (b h w) c')
+            proto_mask = self.AdaptiveSingleSegRemapping(contrast_lb, dataset_ids)
+
+            ## n: num of class; k: num of prototype per class
+            ## proto_logits: (b h_c w_c) * (nk) 每个通道输出分别与prototype的内积
+            ## proto_target: 每个通道输出所分配到的prototype的index
+            proto_logits, proto_target, new_proto = prototype_learning(self.configer, prototypes, rearr_emb, logits, proto_mask, update_prototype=True)
+
+                            
+            proto_targetOntHot = LabelToOneHot(proto_target, self.num_unify_classes*self.num_prototype)
+            proto_targetOntHot = rearrange(proto_targetOntHot, '(b h w) n -> b h w n', b=contrast_lb.shape[0], h=contrast_lb.shape[1], w=contrast_lb.shape[2])
+
+
+        loss_aux = None
+        loss_domain = None
+        loss_contrast = None
 
         if is_warmup or not self.use_contrast:
             # pred = F.interpolate(input=logits, size=(h, w), mode='bilinear', align_corners=True)
-
+            seg_label_mul = self.AdaptiveSegRemapping(lb, dataset_ids)
             loss_seg_mul = self.seg_criterion_mul(logits, seg_label_mul)
             
             # loss_seg_mul = self.seg_criterion_mul(logits, seg_label_mul + seg_label_sig)
             loss_seg = loss_seg_mul
             loss = loss_seg
-            loss_aux = None
-            loss_domain = None
             if self.with_aux:
                 # pred_aux = [F.interpolate(input=logit, size=(h, w), mode='bilinear', align_corners=True) for logit in logits_aux]
                 pred_aux = [F.interpolate(input=logit, size=(h, w), mode='bilinear', align_corners=True)
@@ -228,72 +143,115 @@ class CrossDatasetsLoss(nn.Module):
 
                 loss = loss + self.aux_weight * sum(loss_aux)
                 
-                
-            if self.with_domain_adversarial:
-                domain_label = torch.ones(b, dtype=torch.int) * dataset_id
-
-                if domain_pred.is_cuda:
-                    domain_label = domain_label.cuda()
-                    
-                    
-                loss_domain = self.domain_loss(domain_pred, domain_label)
-                loss = loss + self.domain_loss_weight * loss_domain
-                
-
-            return loss, loss_seg, loss_aux, loss_domain
-        else:
-            # emb_logits = torch.einsum('bchw,nc->bnhw', embedding, segment_queue)
-            contrast_lable, seg_mask_mul = self.classRemapper.ContrastRemapping(lb, embedding, segment_queue, dataset_id)
-            # pred = F.interpolate(input=logits, size=embedding.shape[-2:], mode='bilinear', align_corners=True)
-
-            # _, predict = torch.max(pred, 1)
-
             
-            # print("self.contrast_criterion: ", self.contrast_criterion(embedding, contrast_lable, predict, segment_queue))
-            # print("self.hard_lb_contrast_loss: ", self.hard_lb_contrast_loss(embedding, hard_lb_mask, segment_queue))
-            # loss_contrast = self.contrast_criterion(embedding, contrast_lable, predict, segment_queue) + self.hard_lb_contrast_loss(embedding, hard_lb_mask, segment_queue)
-            loss_contrast = self.hard_lb_contrast_loss(embedding, contrast_lable, segment_queue)
-             
+                
+        else:
+
+            contrast_mask_label, seg_mask_mul = self.AdaptiveMultiProtoRemapping(lb, proto_logits, dataset_ids)
+
+            # loss_contrast = self.contrast_criterion(embedding, contrast_mask_label, predict, segment_queue) + self.hard_lb_contrast_loss(embedding, hard_lb_mask, segment_queue)
+            loss_contrast = self.hard_lb_contrast_loss(proto_logits, contrast_mask_label+proto_targetOntHot)
             
             loss_seg_mul = self.seg_criterion_mul(logits, seg_mask_mul)
             loss_seg = loss_seg_mul 
             loss = loss_seg
-            loss_aux = None
-            loss_domain = None
+
             
             if self.with_aux:
                 # aux_weight_mask = self.classRemapper.GetEqWeightMask(lb, dataset_id)
                 pred_aux = [F.interpolate(input=logit, size=(h, w), mode='bilinear', align_corners=True) for logit in logits_aux]
                 # loss_aux = [aux_criterion_sig(aux[0], seg_mask_sig) + aux_criterion_mul(aux[1], seg_mask_mul) for aux, aux_criterion_mul, aux_criterion_sig in zip(pred_aux, self.segLoss_aux_Mul, self.segLoss_aux_Sig)]
                 loss_aux = [aux_criterion_mul(aux, seg_mask_mul) for aux, aux_criterion_mul in zip(pred_aux, self.segLoss_aux_Mul)]
-
                 
                 loss = loss + self.aux_weight * sum(loss_aux)
                 
-            if self.with_ppd:
-                loss_ppd = self.ppd_criterion(embedding, contrast_lable, segment_queue)
-                loss_contrast = loss_contrast + self.ppd_loss_weight * loss_ppd
+            # if self.with_ppd:
+            #     loss_ppd = self.ppd_criterion(embedding, contrast_mask_label, segment_queue)
+            #     loss_contrast = loss_contrast + self.ppd_loss_weight * loss_ppd
                 
-            if self.with_domain_adversarial:
-                domain_label = torch.ones(b, dtype=torch.long) * dataset_id
-                if domain_pred.is_cuda:
-                    domain_label = domain_label.cuda()
-                    
-                loss_domain = self.domain_loss(domain_pred, domain_label)
-                loss = loss + self.domain_loss_weight * loss_domain
+            loss += self.loss_weight * loss_contrast
             
             
-            return loss + self.loss_weight * loss_contrast, loss_seg, loss_aux, loss_contrast, loss_domain
+
+
+        if self.with_domain_adversarial:
+            domain_label = torch.ones(b, dtype=torch.int) 
+
+            if domain_pred1.is_cuda:
+                domain_label = domain_label.cuda()
+                
+            domain_label = domain_label * dataset_ids
+                
+            
+            loss_domain1 = self.domain_loss1(domain_pred1, domain_label)
+            loss_domain2 = self.domain_loss2(domain_pred2, domain_label)
+            loss_domain = loss_domain1 + loss_domain2
+            loss = loss + self.domain_loss_weight * loss_domain
+            
+            
+        return loss, loss_seg, loss_aux, loss_contrast, loss_domain, new_proto
 
 
 
+    def AdaptiveSingleSegRemapping(self, lb, dataset_ids):
+
+        proto_mask = torch.zeros_like(lb)
+            
+        for i in range(0, self.n_datasets):
+            if not (dataset_ids == i).any():
+                continue
+            
+            proto_mask[dataset_ids==i] = self.classRemapper.SingleSegRemapping(lb[dataset_ids==i], i)
+        
+        return proto_mask.contiguous().view(-1)
+    
+    def AdaptiveSegRemapping(self, lb, dataset_ids):
+        b, h, w = lb.shape
+        seg_label_mul = torch.zeros(b,h,w,self.num_unify_classes, dtype=torch.bool)
+        if lb.is_cuda:
+            seg_label_mul = seg_label_mul.cuda()
+            
+        for i in range(0, self.n_datasets):
+            if not (dataset_ids == i).any():
+                continue
+            
+            seg_label_mul[dataset_ids] = self.classRemapper.SegRemapping(lb[dataset_ids==i], i)
+            
+        return seg_label_mul
+
+    def AdaptiveMultiProtoRemapping(self, lb, proto_logits, dataset_ids):
+        b, h, w = lb.shape
+        seg_mask_mul = torch.zeros(b,h,w,self.num_unify_classes, dtype=torch.bool)
+        contrast_mask_label = torch.zeros(b, int(h/self.network_stride), int(w/self.network_stride), self.num_unify_classes*self.num_prototype, dtype=torch.bool)
+        if lb.is_cuda:
+            seg_mask_mul = seg_mask_mul.cuda()
+            contrast_mask_label = contrast_mask_label.cuda()
+            
+        for i in range(0, self.n_datasets):
+            if not (dataset_ids == i).any():
+                continue
+            re_proto_logits = rearrange(proto_logits, '(b h w) n -> b h w n', b=contrast_mask_label.shape[0], h=contrast_mask_label.shape[1], w=contrast_mask_label.shape[2])
+            this_proto_logits = rearrange(re_proto_logits[dataset_ids==i], 'b h w n -> (b h w) n')
+            out_contrast_mask, out_seg_mask = self.classRemapper.MultiProtoRemapping(lb[dataset_ids==i], this_proto_logits, i)
+            contrast_mask_label[dataset_ids==i] = out_contrast_mask
+            seg_mask_mul[dataset_ids==i] = out_seg_mask
+            
+        return contrast_mask_label, seg_mask_mul
+        
+
+
+def test_LabelToOneHot():
+    lb = torch.tensor([2, 1,2,-1])
+    print(LabelToOneHot(lb, 3))
+    
 
 if __name__ == "__main__":
-    loss_fuc = PixelPrototypeDistanceLoss()
-    a = torch.randn(2,4,3,2)
-    print(a)
-    lb = torch.tensor([[[0,1],[2,0],[255,0]],[[2,1],[1,255],[255,255]]])
-    seq = torch.randn(3,4)
-    print(seq)
-    print(loss_fuc(a,lb,seq))
+    test_LabelToOneHot()
+    # loss_fuc = PixelPrototypeDistanceLoss()
+    # a = torch.randn(2,4,3,2)
+    # print(a)
+    # lb = torch.tensor([[[0,1],[2,0],[255,0]],[[2,1],[1,255],[255,255]]])
+    # seq = torch.randn(3,4)
+    # print(seq)
+    # print(loss_fuc(a,lb,seq))
         

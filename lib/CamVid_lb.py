@@ -20,7 +20,7 @@ labels_info = [
     {"name": "Sky", "id": 0, "color": [128, 128, 128], "trainId": 0},
     {"name": "Bridge", "id": 1, "color": [0, 128, 64], "trainId": 1},
     {"name": "Building", "id": 2, "color": [128, 0, 0], "trainId": 1},
-    {"name": "Wall", "id": 3, "color": [64, 192, 0], "trainId": 1},
+    {"name": "Wall", "id": 3, "color": [64, 192, 0], "trainId": 11},
     {"name": "Tunnel", "id": 4, "color": [64, 0, 64], "trainId": 1},
     {"name": "Archway", "id": 5, "color": [192, 0, 128], "trainId": 1},
     {"name": "Column_Pole", "id": 6, "color": [192, 192, 128], "trainId": 2},
@@ -48,7 +48,7 @@ labels_info = [
     {"name": "Animal", "id": 28, "color": [64, 128, 64], "trainId": 9},
     {"name": "Bicyclist", "id": 29, "color": [0, 128, 192], "trainId": 10},
     {"name": "MotorcycleScooter", "id": 30, "color": [192, 0, 192], "trainId": 10},
-    {"name": "Void", "id": 31, "color": [0, 0, 0], "trainId": 255}
+    {"name": "Void", "id": 31, "color": [0, 0, 0], "trainId": -1}
 ]
 
 ## {unify id} : {unify name} [{city trainId}, {Camvid trainId}]
@@ -71,13 +71,13 @@ class CamVid(Dataset):
 
         self.mode = mode
         self.trans_func = trans_func
-        self.n_cats = 11
+        self.n_cats = 12
         self.lb_map = np.arange(256).astype(np.uint8)
 
         for el in labels_info:
             self.lb_map[el['id']] = el['trainId']
 
-        self.ignore_lb = 255
+        self.ignore_lb = -1
 
         with open(annpath, 'r') as fr:
             pairs = fr.read().splitlines()

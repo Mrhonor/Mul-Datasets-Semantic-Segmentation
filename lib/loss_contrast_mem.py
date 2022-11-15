@@ -374,3 +374,51 @@ class PixelContrastLossOnlyNeg(nn.Module, ABC):
 
         return loss
 
+class PixelContrastLossMulProto(nn.Module, ABC):
+    def __init__(self, configer):
+        super(PixelContrastLossMulProto, self).__init__()
+
+        self.configer = configer
+        self.temperature = self.configer.get('contrast', 'temperature')
+        
+        self.num_unify_classes = self.configer.get('num_unify_classes')
+        
+        self.soft_plus = nn.Softplus()
+
+
+    def forward(self, feats, labels=None):
+        # labels: batch_size x h x w x n
+        # 1表示目标类，0表示非目标类
+        # batch_size = feats.shape[0]
+        b, n = feats.shape
+
+        # feats = feats.contiguous().view(-1, n)
+
+        anchor_dot_contrast = torch.div(feats, self.temperature)
+        
+        pos_mask = labels.detach().contiguous().view(-1, n).bool()
+        # neg_mask = 1 - pos_mask
+        neg_mask = pos_mask.logical_not()
+        
+        pos_pred = -anchor_dot_contrast
+        neg_pred = anchor_dot_contrast
+        # pos_pred = -pred * self.gamma #* pos_lb
+        # neg_pred = (pred + self.m) * self.gamma #* neg_lb
+        pos_pred[neg_mask] = -1e12
+        neg_pred[pos_mask] = -1e12
+        loss = self.soft_plus(torch.logsumexp(neg_pred, dim=0) + torch.logsumexp(pos_pred, dim=0))
+        
+        # neg_logits = torch.exp(anchor_dot_contrast) * neg_mask
+        # pos_logits = torch.exp(-anchor_dot_contrast) * pos_mask
+        
+        # sum_logits = torch.sum(neg_logits, dim=1) * torch.sum(pos_logits, dim=1) + 1
+    
+        # loss = torch.log(sum_logits)
+        
+        lb_num = torch.sum(loss != 0)
+        if lb_num ==0:
+            return 0
+        
+        loss = torch.sum(loss) / lb_num 
+
+        return loss

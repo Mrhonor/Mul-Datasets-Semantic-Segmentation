@@ -2,6 +2,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+
 class ClassRemap():
     def __init__(self, configer=None):
         self.configer = configer
@@ -12,9 +13,25 @@ class ClassRemap():
         self.num_unify_classes = self.configer.get('num_unify_classes')
         self.softmax = nn.Softmax(dim=1)
         self.network_stride = self.configer.get('network', 'stride')
+        self.num_prototype = self.configer.get('contrast', 'num_prototype')
         self.Upsample = nn.Upsample(scale_factor=self.network_stride, mode='nearest')
         self._unpack()
         
+    def SingleSegRemapping(self, labels, dataset_id):
+        ## 只输出 唯一映射部分
+        ## dataset_id指定映射方案
+        outLabels = []
+        
+        mask = torch.ones_like(labels) * self.ignore_index
+        
+        for k, v in self.remapList[dataset_id].items():
+            if len(v) > 1: 
+                continue
+
+            mask[labels==int(k)] = v[0]
+
+            
+        return mask    
         
     def SegRemapping(self, labels, dataset_id):
         ## 输入 batchsize x H x W 输出 k x batch size x H x W
@@ -149,6 +166,16 @@ class ClassRemap():
                 Remap_pred[preds == int(lb)] = int(k)
                 
         return Remap_pred
+    
+    def ExpendRemapByPrototypeNum(self, v):
+        
+        outV = torch.Tensor()
+        for i in v:
+
+            outV = torch.cat((outV, torch.arange(i*self.num_prototype, (i+1)*self.num_prototype))).long()
+            
+        return outV
+    
         
 class ClassRemapOneHotLabel(ClassRemap):
     def __init__(self, configer=None):
@@ -295,6 +322,121 @@ class ClassRemapOneHotLabel(ClassRemap):
         return contrast_lb_mask, seg_mask
     
     
+    def MultiProtoRemapping(self, labels, proto_logits, dataset_id):
+        contrast_lb = labels[:, ::self.network_stride, ::self.network_stride]
+        
+        B, H, W = labels.shape
+        _, h_c, w_c = contrast_lb.shape
+        
+        ## sig_seg_mask : 单标签矩阵
+        ## Seg_temp_mask : 在投影头监督下的单标签矩阵，保存置信度高的标签
+        ## hard_lb_mask : 在投影头监督下的单标签矩阵，保存置信度低的标签
+        
+        # Seg_temp_mask = torch.zeros([B, h_c, w_c, self.num_unify_classes], dtype=torch.bool)
+        contrast_lb_mask = torch.zeros([B, h_c, w_c, self.num_unify_classes*self.num_prototype], dtype=torch.bool)
+        seg_mask = torch.zeros([B, h_c, w_c, self.num_unify_classes], dtype=torch.bool)
+        if labels.is_cuda:
+            contrast_lb_mask = contrast_lb_mask.cuda()
+            seg_mask = seg_mask.cuda()
+        
+        # simScore :  (b h_c w_c) * (n k)
+        simScore = torch.div(proto_logits.detach(), self.temperature)
+        simScore = self.softmax(simScore)
+        OneColContrastLb = contrast_lb.contiguous().view(-1)
+        
+        ## 循环两遍，单标签覆盖多标签
+        for k, v in self.remapList[dataset_id].items():
+            # 判断是否为空
+            if not (labels==int(k)).any():
+                continue
+            
+            if len(v) != 1: 
+                # 在多映射情况下，找到内积最大的一项的标签
+                if not (contrast_lb==int(k)).any():
+                    continue
+                       
+                MaxSim, MaxSimIndex = torch.max(simScore[OneColContrastLb == k], dim=1)
+                outputIndex = torch.ones_like(MaxSimIndex) * self.ignore_index
+                
+                # 新标签样本
+                RemapLbIndex = torch.zeros([MaxSimIndex.shape[0], self.num_unify_classes*self.num_prototype], dtype=torch.bool)
+                # 筛选出目标类的index。对于最大值不在目标类的情况以及最大值没超过阈值的pixel，标签设置为忽略
+
+                hardLd = torch.zeros(self.num_unify_classes*self.num_prototype, dtype=torch.bool)
+                Expendtensor_v = self.ExpendRemapByPrototypeNum(v)
+                if labels.is_cuda:
+                    Expendtensor_v = Expendtensor_v.cuda()
+                    RemapLbIndex = RemapLbIndex.cuda()
+                    hardLd = hardLd.cuda()
+                
+                targetIndex = MaxSimIndex.unsqueeze(1).eq(Expendtensor_v)
+                targetIndex = torch.unique(targetIndex.nonzero(as_tuple=True)[0])
+                MaxSimIndex[MaxSim < self.update_sim_thresh] = self.ignore_index
+                
+                outputIndex[targetIndex] = MaxSimIndex[targetIndex]
+
+                hardLd[Expendtensor_v] = 1
+               
+                RemapLbIndex[outputIndex==self.ignore_index] = hardLd
+                RemapLbIndex[outputIndex!=self.ignore_index, outputIndex[outputIndex!=self.ignore_index]] = 1
+                
+   
+                # contrast_mask[contrast_lb==int(k)] = outputIndex
+                contrast_lb_mask[contrast_lb==int(k)] = RemapLbIndex
+        
+        for i in range(0, self.num_prototype):
+            seg_mask += contrast_lb_mask[:,:,:,i::self.num_prototype]
+
+        seg_mask = seg_mask.permute(0, 3, 1, 2)
+        seg_mask = F.interpolate(seg_mask.float(), size=(H,W), mode='nearest').bool()
+        seg_mask = seg_mask.permute(0, 2, 3, 1)
+
+        zero_vector = torch.zeros(self.num_unify_classes, dtype=torch.bool)
+        if seg_mask.is_cuda:
+            zero_vector = zero_vector.cuda()
+        
+        for k, v in self.remapList[dataset_id].items():
+            # 判断是否为空
+            if not (labels==int(k)).any():
+                continue
+            
+            
+            if len(v) == 1: 
+                # contrast_lb_mask[contrast_lb==int(k), v] = 1
+                
+                seg_vector = torch.zeros(self.num_unify_classes, dtype=torch.bool)
+                if seg_mask.is_cuda:
+                    seg_vector = seg_vector.cuda()
+                    
+                seg_vector[v[0]] = 1
+
+                seg_mask[labels==int(k)] = seg_vector
+            else:
+                expend_vector = torch.zeros(self.num_unify_classes, dtype=torch.bool)
+                if seg_mask.is_cuda:
+                    expend_vector = expend_vector.cuda()
+
+                expend_vector[v] = 1
+                # 寻找为0项
+                lb_k_mask = seg_mask[labels==int(k)]
+                # maxValue = torch.max(lb_k_mask, dim=1)[0]
+                # lb_k_mask[maxValue==0] = expend_vector
+                
+                sumValue = torch.sum(lb_k_mask, dim=1)
+                lb_k_mask[sumValue==0] = expend_vector
+                # lb_k_mask[sumValue==1] = zero_vector
+                seg_mask[labels==int(k)] = lb_k_mask
+
+        seg_mask[labels==self.ignore_index] = zero_vector
+        # seg_mask[seg_mask==self.ignore_index] = 0
+        
+        # if is_emb_upsampled:
+        #     weight_mask = self.Upsample(weight_mask.permute(0,3,1,2)).permute(0,2,3,1)
+          
+        return contrast_lb_mask, seg_mask
+    
+        
+    
 def test_ContrastRemapping():
     configer = Configer(configs='configs/test.json')
     classRemap = ClassRemapOneHotLabel(configer)
@@ -305,13 +447,19 @@ def test_ContrastRemapping():
     segment_queue = torch.tensor([[-1, 0], [1, 0], [0, 1], [0, -1]], dtype=torch.float) # 19 x 2
     embed = torch.tensor([[[-0.1, -0.9],[0.9, 0.1]],
                           [[-0.8, 0.2],[-0.1, 0.9]]]).unsqueeze(0)
-    # print(embed.shape)
+    # 
     embed = embed.permute(0, 3, 1, 2)
+    Shapedembed = embed.contiguous().view(-1, 2)
+
+    proto_logits = torch.mm(Shapedembed, segment_queue.T)
     # print(embed)
-    contrast_mask, seg_mask = classRemap.ContrastRemapping(labels, embed, segment_queue, 0)
+    # contrast_mask, seg_mask = classRemap.ContrastRemapping(labels, embed, segment_queue, 0)
+    contrast_mask, seg_mask = classRemap.MultiProtoRemapping(labels, proto_logits, 0)
+    print(contrast_mask)
     print(seg_mask) 
     # print(sig_seg_mask)
     
+
         
 if __name__ == "__main__":
     import sys

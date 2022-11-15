@@ -26,16 +26,29 @@ class DomainClassifierHead(nn.Module):
                 ModuleHelper.BNReLU(192, bn_type=bn_type),
                 nn.Conv2d(192, 256, kernel_size=3, stride=2, padding=1), # out: 8 x 16
                 ModuleHelper.BNReLU(256, bn_type=bn_type),
-                nn.Conv2d(256, n_domain, kernel_size=3, stride=2, padding=1), # out: 4 x 8
+                nn.Conv2d(256, n_domain, kernel_size=1), # out: 8 x 16
             )
+        elif self.classifier == 'convmlp_small':
+            self.classifierHead = nn.Sequential(
+                nn.Dropout(0.1),
+                nn.Conv2d(dim_in, 256, kernel_size=3, stride=2, padding=1), # out: 8 X 16
+                ModuleHelper.BNReLU(256, bn_type=bn_type),
+                nn.Conv2d(256, 512, kernel_size=3, stride=2, padding=1), # out: 4 x 8
+                ModuleHelper.BNReLU(512, bn_type=bn_type),
+                nn.Conv2d(512, 1024, kernel_size=3, stride=2, padding=1), # out: 2 x 4
+                ModuleHelper.BNReLU(1024, bn_type=bn_type),
+                nn.Conv2d(1024, n_domain, kernel_size=1), # out: 2 x 4
+            )
+            
 
     def forward(self, x):
         feat = self.classifierHead(x)
 
-        if self.classifier == 'convmlp':
+        if self.classifier == 'convmlp' or self.classifier == 'convmlp_small':
             feat = torch.mean(feat, dim=[2,3])
-
+        
             
         # feat = self.proj(feat)
 
         return feat
+    
