@@ -890,10 +890,10 @@ class BiSeNetV2_Contrast(nn.Module):
         self.prototypes = nn.Parameter(F.normalize(new_proto, p=2, dim=-1),
                                         requires_grad=False)
 
-        if dist.is_available() and dist.is_initialized():
-            protos = self.prototypes.data.clone()
-            dist.all_reduce(protos.div_(dist.get_world_size()))
-            self.prototypes = nn.Parameter(protos, requires_grad=False)
+        # if dist.is_available() and dist.is_initialized():
+        #     protos = self.prototypes.data.clone()
+        #     dist.all_reduce(protos.div_(dist.get_world_size()))
+        #     self.prototypes = nn.Parameter(protos, requires_grad=False)
             
 
 if __name__ == "__main__":

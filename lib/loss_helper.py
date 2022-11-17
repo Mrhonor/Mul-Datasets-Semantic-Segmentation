@@ -514,10 +514,10 @@ class MultiLabelCrossEntropyLoss(nn.Module):
         # labels: batch x h x w x c, 1表示目标标签，0表示非目标标签
         b, c, h, w = x.shape
         
-        pred = x.permute(1,0,2,3)
-        pred = pred.contiguous().view(c, -1)
-        lb = labels.permute(3, 0, 1, 2)
-        lb = lb.contiguous().view(c, -1)
+        pred = x.permute(0,2,3,1)
+        pred = pred.contiguous().view(-1, c)
+        # lb = labels.permute(3, 0, 1, 2)
+        lb = labels.contiguous().view(-1, c)
 
         
         # pred = F.sigmoid(pred)
@@ -537,7 +537,7 @@ class MultiLabelCrossEntropyLoss(nn.Module):
         neg_pred = (pred + self.m) * self.gamma #* neg_lb
         pos_pred[neg_lb] = -1e12
         neg_pred[pos_lb] = -1e12
-        loss = self.soft_plus(torch.logsumexp(neg_pred, dim=0) + torch.logsumexp(pos_pred, dim=0))
+        loss = self.soft_plus(torch.logsumexp(neg_pred, dim=1) + torch.logsumexp(pos_pred, dim=1))
         
         
         lb_num = torch.sum(loss != 0)

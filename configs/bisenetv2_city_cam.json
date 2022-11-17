@@ -20,7 +20,7 @@
       "train_im_anns":"datasets/CamVid/train.txt",
       "val_im_anns":"datasets/CamVid/test.txt", 
       "ims_per_gpu": 1,
-      "eval_ims_per_gpu": 1
+      "eval_ims_per_gpu": 2
     },
     "n_bn": 1,
     "class_remap1":{

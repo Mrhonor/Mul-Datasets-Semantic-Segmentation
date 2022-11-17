@@ -634,7 +634,8 @@ def eval_model_contrast(configer, net):
 
     # dl_cam = get_data_loader(cfg_cam, mode='val', distributed=is_dist)
     dl_city, dl_cam = get_data_loader(configer, aux_mode='eval', distributed=is_dist)
-    net.eval()
+    # net.eval()
+    net.train()
 
     heads, mious = [], []
     logger = logging.getLogger()

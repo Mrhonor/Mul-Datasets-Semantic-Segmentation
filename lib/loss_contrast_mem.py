@@ -406,7 +406,7 @@ class PixelContrastLossMulProto(nn.Module, ABC):
         # neg_pred = (pred + self.m) * self.gamma #* neg_lb
         pos_pred[neg_mask] = -1e12
         neg_pred[pos_mask] = -1e12
-        loss = self.soft_plus(torch.logsumexp(neg_pred, dim=0) + torch.logsumexp(pos_pred, dim=0))
+        loss = self.soft_plus(torch.logsumexp(neg_pred, dim=1) + torch.logsumexp(pos_pred, dim=1))
         
         # neg_logits = torch.exp(anchor_dot_contrast) * neg_mask
         # pos_logits = torch.exp(-anchor_dot_contrast) * pos_mask
@@ -422,3 +422,29 @@ class PixelContrastLossMulProto(nn.Module, ABC):
         loss = torch.sum(loss) / lb_num 
 
         return loss
+
+def test_PixelContrastLossMulProto():
+
+    
+    feat = torch.randn(3,16,4,4)
+    queue = torch.randn(4,16)
+    lb = torch.rand(3,4,4,4)
+    lb[lb < 0.5] = 0
+    lb[lb >= 0.5] = 1
+    lb = lb.bool()
+    print(lb)
+    
+    ft = rearrange(feat, 'b c h w -> (b h w) c')
+    logit = torch.mm(ft, queue.T)
+    configer = Configer(configs='configs/test.json')
+    loss1 = PixelContrastLossMulProto(configer)
+    loss2 = PixelContrastLossOnlyNeg(configer)
+    print(loss1(logit, lb))
+    print(loss2(feat, lb, queue))
+    
+    
+
+if __name__ == "__main__":
+    from einops import rearrange
+    from tools.configer import *
+    test_PixelContrastLossMulProto()

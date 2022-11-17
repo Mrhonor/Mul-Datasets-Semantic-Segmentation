@@ -14,6 +14,7 @@ from einops import rearrange, repeat
 
 
 def LabelToOneHot(LabelVector, nClass, ignore_index=-1):
+    
     ## 输入的label应该是一维tensor向量
     OutOneHot = torch.zeros(len(LabelVector), nClass, dtype=torch.bool)
     if LabelVector.is_cuda:
@@ -115,10 +116,12 @@ class CrossDatasetsLoss(nn.Module):
             ## proto_logits: (b h_c w_c) * (nk) 每个通道输出分别与prototype的内积
             ## proto_target: 每个通道输出所分配到的prototype的index
             proto_logits, proto_target, new_proto = prototype_learning(self.configer, prototypes, rearr_emb, logits, proto_mask, update_prototype=True)
-
+            
                             
             proto_targetOntHot = LabelToOneHot(proto_target, self.num_unify_classes*self.num_prototype)
+            
             proto_targetOntHot = rearrange(proto_targetOntHot, '(b h w) n -> b h w n', b=contrast_lb.shape[0], h=contrast_lb.shape[1], w=contrast_lb.shape[2])
+
 
 
         loss_aux = None
@@ -150,6 +153,7 @@ class CrossDatasetsLoss(nn.Module):
             contrast_mask_label, seg_mask_mul = self.AdaptiveMultiProtoRemapping(lb, proto_logits, dataset_ids)
 
             # loss_contrast = self.contrast_criterion(embedding, contrast_mask_label, predict, segment_queue) + self.hard_lb_contrast_loss(embedding, hard_lb_mask, segment_queue)
+
             loss_contrast = self.hard_lb_contrast_loss(proto_logits, contrast_mask_label+proto_targetOntHot)
             
             loss_seg_mul = self.seg_criterion_mul(logits, seg_mask_mul)
