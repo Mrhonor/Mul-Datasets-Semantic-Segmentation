@@ -6,7 +6,7 @@ import torch.nn.functional as F
 from lib.projection import ProjectionHead
 from lib.domain_classifier_head import DomainClassifierHead
 from lib.functions import ReverseLayerF
-from lib.ConvNorm import ConvNorm
+from lib.module.ConvNorm import ConvNorm
 
 import numpy as np
 from timm.models.layers import trunc_normal_
@@ -15,6 +15,7 @@ from lib.sinkhorn import distributed_sinkhorn
 from lib.momentum_update import momentum_update
 from timm.models.layers import trunc_normal_
 from einops import rearrange, repeat
+from lib.module.module_helper import ConvBNReLU, ConvBN
 import torch.distributed as dist
 
 
@@ -23,130 +24,7 @@ import torch.distributed as dist
 backbone_url = './res/backbone_v2.pth'
 # backbone_url = './res/model_3000.pth'
 
-class ConvBNReLU(nn.Module):
 
-    def __init__(self, in_chan, out_chan, ks=3, stride=1, padding=1,
-                 dilation=1, groups=1, bias=False, n_bn=1):
-        ## n_bn bn层数量，对应混合的数据集数量
-        super(ConvBNReLU, self).__init__()
-        self.conv = nn.Conv2d(
-                in_chan, out_chan, kernel_size=ks, stride=stride,
-                padding=padding, dilation=dilation,
-                groups=groups, bias=bias)
-        
-        self.n_bn = n_bn
-        self.bn = nn.ModuleList([nn.BatchNorm2d(out_chan, affine=True) for i in range(0, self.n_bn)])
-        ## 采用共享的affine parameter
-        # self.affine_weight = nn.Parameter(torch.empty(out_chan))
-        # self.affine_bias = nn.Parameter(torch.empty(out_chan))
-        
-        self.relu = nn.ReLU(inplace=True)
-
-    def forward(self, dataset, x, *other_x):
-        ## TODO 此处可以优化，不同数据集的图像过卷积层可以拼接到一起，过BN层再分离
-        ## 处理多数据集情况
-        
-        if len(other_x) != 0:
-            batch_size = [x.shape[0]]
-            for i in range(0, len(other_x)):
-                batch_size.append(other_x[i].shape[0])
-                x = torch.cat((x, other_x[i]), 0)
-            feat = self.conv(x)
-            feats = []
-            begin_index = 0
-            for i in range(0, len(other_x) + 1):
-                end_index = begin_index + batch_size[i]
-                feat_ = self.bn[i](feat[begin_index: end_index])
-                
-                # ## affine param
-                # feat_ = feat_ * self.affine_weight.reshape(1,-1,1,1) + self.affine_bias.reshape(1,-1,1,1)
-                
-                feat_ = self.relu(feat_)
-                feats.append(feat_)
-                begin_index = end_index
-            ## 在relu时再拼接后分离，测试发现fps反而有所下降
-            # feats_out = torch.cat((feats[0], feats[1]))
-            # for i in range(1, len(other_x)):
-            #     feats_out = torch.cat((feats_out, feats[i]), 0)
-            # feats_out = self.relu(feats_out)
-            # feats = []
-            # for i in range(0, len(other_x) + 1):
-            #     feats.append(feats_out[i * batch_size: (i + 1) * batch_size])
-        else:
-            if dataset >= self.n_bn or dataset < 0:
-                dataset = 0
-            
-            feat = self.conv(x)
-            feat = self.bn[dataset](feat)
-            
-            # ## affine param
-            # feat = feat * self.affine_weight.reshape(1,-1,1,1) + self.affine_bias.reshape(1,-1,1,1)
-            
-            feat = self.relu(feat)
-            feats = [feat]
-        # for i, xs in enumerate(other_x):
-        #     feat = self.conv(xs)
-        #     feat = self.bn[i+1](feat)
-        #     feat = self.relu(feat)
-        #     feats.append(feat)
-
-        return feats
-
-class ConvBN(nn.Module):
-    ## ConvBNReLU类去掉ReLu层
-    def __init__(self, in_chan, out_chan, ks=3, stride=1, padding=1,
-                 dilation=1, groups=1, bias=False, n_bn=1):
-        ## n_bn bn层数量，对应混合的数据集数量
-        super(ConvBN, self).__init__()
-        self.conv = nn.Conv2d(
-                in_chan, out_chan, kernel_size=ks, stride=stride,
-                padding=padding, dilation=dilation,
-                groups=groups, bias=bias)
-        self.n_bn = n_bn
-        self.bn = nn.ModuleList([nn.BatchNorm2d(out_chan, affine=True) for i in range(0, self.n_bn)])
-        
-        ## 采用共享的affine parameter
-        # self.affine_weight = nn.Parameter(torch.empty(out_chan))
-        # self.affine_bias = nn.Parameter(torch.empty(out_chan))
-        
-
-    def forward(self, dataset, x, *other_x):
-        ## TODO 此处可以优化，不同数据集的图像过卷积层可以拼接到一起，过BN层再分离
-        if len(other_x) != 0:
-            batch_size = [x.shape[0]]
-            for i in range(0, len(other_x)):
-                batch_size.append(other_x[i].shape[0])
-                x = torch.cat((x, other_x[i]), 0)
-            feat = self.conv(x)
-            feats = []
-            begin_index = 0
-            for i in range(0, len(other_x) + 1):
-                end_index = begin_index + batch_size[i]
-                feat_ = self.bn[i](feat[begin_index: end_index])
-                
-                # ## affine param
-                # feat_ = feat_ * self.affine_weight.reshape(1,-1,1,1) + self.affine_bias.reshape(1,-1,1,1)
-                
-                feats.append(feat_)
-                begin_index = end_index
-        else:
-            if dataset >= self.n_bn or dataset < 0:
-                dataset = 0
-            
-            feat = self.conv(x)
-            feat = self.bn[dataset](feat)
-            
-            # ## affine param
-            # feat = feat * self.affine_weight.reshape(1,-1,1,1) + self.affine_bias.reshape(1,-1,1,1)
-            
-            feats = [feat]
-        return feats
-
-    def SetLastBNAttr(self, attr):
-        # self.affine_weight.last_bn = attr
-        # self.affine_bias.last_bn = attr
-        for bn in self.bn:
-            bn.last_bn = attr
 
 
 
@@ -451,8 +329,8 @@ class BGALayer(nn.Module):
 
         right1 = [self.up1(x) for x in right1]
 
-        left = [left1[i] * F.sigmoid(right1[i]) for i, x in enumerate(left1)]
-        right = [left2[i] * F.sigmoid(right2[i]) for i, x in enumerate(left2)]
+        left = [left1[i] * torch.sigmoid(right1[i]) for i, x in enumerate(left1)]
+        right = [left2[i] * torch.sigmoid(right2[i]) for i, x in enumerate(left2)]
         right = [self.up2(x) for x in right]
 
         feats = [left[i] + right[i] for i, x in enumerate(left)]
@@ -615,7 +493,7 @@ class BiSeNetV2_Contrast(nn.Module):
         trunc_normal_(self.prototypes, std=0.02)
         self.init_weights()
 
-    def forward(self, x, dataset=0, perm_index=None, *other_x):
+    def forward(self, x, *other_x, dataset=0, perm_index=None):
         # perm_index用于恢复batch size中数据集来源信息，临时使用
         
         # x = x.cuda()
@@ -733,12 +611,12 @@ class BiSeNetV2_Contrast(nn.Module):
             if isinstance(module, (nn.Conv2d, nn.Linear)):
                 nn.init.kaiming_normal_(module.weight, mode='fan_out')
                 if not module.bias is None: nn.init.constant_(module.bias, 0)
-            elif isinstance(module, nn.modules.batchnorm._BatchNorm):
-                if hasattr(module, 'last_bn') and module.last_bn:
-                    nn.init.zeros_(module.weight)
-                else:
-                    nn.init.ones_(module.weight)
-                nn.init.zeros_(module.bias)
+            # elif isinstance(module, nn.modules.batchnorm._BatchNorm):
+            #     if hasattr(module, 'last_bn') and module.last_bn:
+            #         nn.init.zeros_(module.weight)
+            #     else:
+            #         nn.init.ones_(module.weight)
+            #     nn.init.zeros_(module.bias)
         for name, param in self.named_parameters():
             if name.find('affine_weight') != -1:
                 if hasattr(param, 'last_bn') and param.last_bn:
