@@ -57,6 +57,27 @@
     "10": [12, 17, 18],
     "11": [3]
   },
+  "class_weight":{
+    "0": 1, 
+    "1": 1,
+    "2": 1, 
+    "3": 0.25,
+    "4": 0.25,
+    "5": 1,
+    "6": 0.25,
+    "7": 0.25,
+    "8": 1,
+    "9": 1,
+    "10": 1,
+    "11": 1,
+    "12": 1,
+    "13": 1,
+    "14": 1.25,
+    "15": 1.25,
+    "16": 1.25,
+    "17": 1, 
+    "18": 1
+  },
   "class_remaper": "ClassRemapOneHotLabel",
   "loss":{
     "type": "MultiLabelCrossEntropyLoss",
@@ -79,7 +100,7 @@
     "scales": [0.5, 1.0, 2.0],
     "cropsize": [512, 1024],
     "finetune": false,
-    "finetune_from": "res/Mds/model_4000.pth"
+    "finetune_from": "res/Mds/model_100000.pth"
   },
   "val": {
     "scales": [0.5, 0.75, 1.0, 1.25, 1.5, 1.75],
@@ -88,7 +109,7 @@
   "use_fp16": false,
   "use_sync_bn": false,
   "contrast": {
-    "use_contrast": false,
+    "use_contrast": true,
     "proj_dim": 256,
     "temperature": 0.07,
     "base_temperature": 0.07,
@@ -105,7 +126,7 @@
     "upsample": false,
     "downsample": true,
     "update_confidence_thresh": 0.3,
-    "update_sim_thresh": 0.5,
+    "update_sim_thresh": 0.3,
     "with_ppd": false,
     "ppd_loss_weight": 1,
     "with_hard_lb_contrast": true,
@@ -113,7 +134,7 @@
   },
   "res_save_pth": "res/Mds/",
   "network": {
-    "stride": 16,
+    "stride": 32,
     "with_domain_adversarial": true
   },
   "dataset_aux_head": {

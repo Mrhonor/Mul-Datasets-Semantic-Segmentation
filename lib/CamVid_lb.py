@@ -20,7 +20,7 @@ labels_info = [
     {"name": "Sky", "id": 0, "color": [128, 128, 128], "trainId": 0},
     {"name": "Bridge", "id": 1, "color": [0, 128, 64], "trainId": 1},
     {"name": "Building", "id": 2, "color": [128, 0, 0], "trainId": 1},
-    {"name": "Wall", "id": 3, "color": [64, 192, 0], "trainId": 1},
+    {"name": "Wall", "id": 3, "color": [64, 192, 0], "trainId": 11},
     {"name": "Tunnel", "id": 4, "color": [64, 0, 64], "trainId": 1},
     {"name": "Archway", "id": 5, "color": [192, 0, 128], "trainId": 1},
     {"name": "Column_Pole", "id": 6, "color": [192, 192, 128], "trainId": 2},
@@ -71,7 +71,7 @@ class CamVid(Dataset):
 
         self.mode = mode
         self.trans_func = trans_func
-        self.n_cats = 11
+        self.n_cats = 12
         self.lb_map = np.arange(256).astype(np.uint8)
 
         for el in labels_info:
@@ -92,10 +92,15 @@ class CamVid(Dataset):
         self.len = len(self.img_paths)
 
         self.to_tensor = T.ToTensor(
-            mean=(0.3257, 0.3690, 0.3223),  # city, rgb
-            std=(0.2112, 0.2148, 0.2115),
+            mean=(0.3038, 0.3383, 0.3034),  # city, rgb
+            std=(0.2071, 0.2088, 0.2090),
         )
 
+        # self.to_tensor = T.ToTensor(
+        #     mean=(0.3257, 0.3690, 0.3223),  # city, rgb
+        #     std=(0.2112, 0.2148, 0.2115),
+        # )
+        
         self.colors = []
 
         for el in labels_info:

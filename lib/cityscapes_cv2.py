@@ -140,14 +140,14 @@ class CityScapes(BaseDataset):
                 dataroot, annpath, trans_func, mode)
     
         if mode == 'train':
-            self.n_cats = 19
+            self.n_cats = 18
         elif mode == 'eval':
             self.n_cats = 19
         
         self.lb_ignore = 255
         self.lb_map = np.arange(256).astype(np.uint8)
         if mode == 'train':
-            self.labels_info = labels_info_eval
+            self.labels_info = labels_info_train
         elif mode == 'eval':
             self.labels_info = labels_info_eval
             
@@ -155,9 +155,14 @@ class CityScapes(BaseDataset):
             self.lb_map[el['id']] = el['trainId']
 
         self.to_tensor = T.ToTensor(
-            mean=(0.3257, 0.3690, 0.3223), # city, rgb
-            std=(0.2112, 0.2148, 0.2115),
+            mean=(0.3038, 0.3383, 0.3034), # city, rgb
+            std=(0.2071, 0.2088, 0.2090),
         )
+
+        # self.to_tensor = T.ToTensor(
+        #     mean=(0.3257, 0.3690, 0.3223), # city, rgb
+        #     std=(0.2112, 0.2148, 0.2115),
+        # )
 
 ## Only return img without label
 class CityScapesIm(BaseDatasetIm):

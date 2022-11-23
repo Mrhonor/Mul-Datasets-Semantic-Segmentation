@@ -311,3 +311,42 @@ Traceback (most recent call last):
   File "/home/cxh/anaconda3/envs/bisenet/lib/python3.8/site-packages/torch/distributed/elastic/multiprocessing/api.py", line 60, in _terminate_process_handler
     raise SignalException(f"Process {os.getpid()} got signal: {sigval}", sigval=sigval)
 torch.distributed.elastic.multiprocessing.api.SignalException: Process 50739 got signal: 1
+[W 2022-11-20 10:23:28.486 LabApp] 'ip' has moved from NotebookApp to ServerApp. This config will be passed to ServerApp. Be sure to update your config before our next release.
+[W 2022-11-20 10:23:28.486 LabApp] 'password' has moved from NotebookApp to ServerApp. This config will be passed to ServerApp. Be sure to update your config before our next release.
+[W 2022-11-20 10:23:28.486 LabApp] 'password' has moved from NotebookApp to ServerApp. This config will be passed to ServerApp. Be sure to update your config before our next release.
+[W 2022-11-20 10:23:28.486 LabApp] 'port' has moved from NotebookApp to ServerApp. This config will be passed to ServerApp. Be sure to update your config before our next release.
+[W 2022-11-20 10:23:28.486 LabApp] 'allow_remote_access' has moved from NotebookApp to ServerApp. This config will be passed to ServerApp. Be sure to update your config before our next release.
+[I 2022-11-20 10:23:28.501 ServerApp] jupyterlab | extension was successfully linked.
+[I 2022-11-20 10:23:28.517 ServerApp] nbclassic | extension was successfully linked.
+[I 2022-11-20 10:23:28.831 ServerApp] notebook_shim | extension was successfully linked.
+[W 2022-11-20 10:23:28.900 ServerApp] WARNING: The Jupyter server is listening on all IP addresses and not using encryption. This is not recommended.
+[I 2022-11-20 10:23:28.902 ServerApp] notebook_shim | extension was successfully loaded.
+[I 2022-11-20 10:23:28.903 LabApp] JupyterLab extension loaded from /home/cxh/anaconda3/envs/bisenet/lib/python3.8/site-packages/jupyterlab
+[I 2022-11-20 10:23:28.903 LabApp] JupyterLab application directory is /home/cxh/anaconda3/envs/bisenet/share/jupyter/lab
+[I 2022-11-20 10:23:28.907 ServerApp] jupyterlab | extension was successfully loaded.
+[I 2022-11-20 10:23:28.911 ServerApp] nbclassic | extension was successfully loaded.
+[I 2022-11-20 10:23:28.912 ServerApp] The port 14923 is already in use, trying another port.
+[I 2022-11-20 10:23:28.912 ServerApp] Serving notebooks from local directory: /home/cxh/mr/BiSeNet
+[I 2022-11-20 10:23:28.912 ServerApp] Jupyter Server 1.18.1 is running at:
+[I 2022-11-20 10:23:28.912 ServerApp] http://localhost:14924/lab
+[I 2022-11-20 10:23:28.912 ServerApp]  or http://127.0.0.1:14924/lab
+[I 2022-11-20 10:23:28.913 ServerApp] Use Control-C to stop this server and shut down all kernels (twice to skip confirmation).
+[I 2022-11-20 10:23:56.509 ServerApp] 302 GET / (::1) 1.72ms
+[W 2022-11-20 10:23:58.115 LabApp] Could not determine jupyterlab build status without nodejs
+[I 2022-11-20 10:23:58.490 ServerApp] New terminal with automatic name: 1
+[I 2022-11-20 11:46:26.550 ServerApp] 302 GET / (::1) 1.03ms
+[W 2022-11-20 11:46:28.274 LabApp] Could not determine jupyterlab build status without nodejs
+[I 2022-11-21 10:43:25.325 ServerApp] 302 GET / (::1) 2.08ms
+[W 2022-11-21 10:43:27.198 LabApp] Could not determine jupyterlab build status without nodejs
+[I 2022-11-21 20:20:10.860 ServerApp] 302 GET / (::1) 0.99ms
+[W 2022-11-21 20:20:12.760 LabApp] Could not determine jupyterlab build status without nodejs
+[I 2022-11-22 09:46:50.556 ServerApp] 302 GET / (::1) 1.55ms
+[W 2022-11-22 09:46:52.135 LabApp] Could not determine jupyterlab build status without nodejs
+[I 2022-11-22 16:26:27.432 ServerApp] 302 GET / (::1) 1.11ms
+[I 2022-11-22 16:26:27.433 ServerApp] 302 GET / (::1) 0.72ms
+[I 2022-11-22 16:26:27.437 ServerApp] 302 GET / (::1) 0.45ms
+[W 2022-11-22 16:26:29.032 LabApp] Could not determine jupyterlab build status without nodejs
+[I 2022-11-22 19:01:03.823 ServerApp] 302 GET / (::1) 0.61ms
+[W 2022-11-22 19:01:05.817 LabApp] Could not determine jupyterlab build status without nodejs
+[I 2022-11-22 22:57:39.027 ServerApp] 302 GET / (::1) 0.76ms
+[W 2022-11-22 22:57:40.706 LabApp] Could not determine jupyterlab build status without nodejs
