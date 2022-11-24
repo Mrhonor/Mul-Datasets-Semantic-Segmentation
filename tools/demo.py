@@ -20,7 +20,8 @@ np.random.seed(123)
 
 # args
 parse = argparse.ArgumentParser()
-parse.add_argument('--weight_path', type=str, default='res/Mds/model_final.pth',)
+
+parse.add_argument('--weight_path', type=str, default='res/Mds/model_38000.pth',)
 parse.add_argument('--config', dest='config', type=str, default='configs/bisenetv2_eval.json',)
 parse.add_argument('--img_path', dest='img_path', type=str, default='berlin_000543_000019_leftImg8bit.png',)
 args = parse.parse_args()
@@ -48,7 +49,7 @@ labels_info_eval = [
     {"name": "train", "ignoreInEval": False, "id": 31, "color": [0, 80, 100], "trainId": 16},
     {"name": "motorcycle", "ignoreInEval": False, "id": 32, "color": [0, 0, 230], "trainId": 17},
     {"name": "bicycle", "ignoreInEval": False, "id": 33, "color": [119, 11, 32], "trainId": 18},
-    {"name": "void", "ignoreInEval": False, "id": 34, "color": [255, 255, 255], "trainId": 19}
+    {"name": "void", "ignoreInEval": False, "id": 34, "color": [0, 0, 0], "trainId": 19}
 ]
 
 def buildPalette(labels_info):
@@ -65,8 +66,8 @@ class E2EModel(torch.nn.Module):
     def __init__(self, configer, weight_path) -> None:
         super().__init__()
         
-        self.mean = torch.tensor([0.3257, 0.3690, 0.3223])[:, None, None] #.cuda()
-        self.std = torch.tensor([0.2112, 0.2148, 0.2115])[:, None, None] #.cuda()
+        self.mean = torch.tensor([0.3038, 0.3383, 0.3034])[:, None, None] #.cuda()
+        self.std = torch.tensor([0.2071, 0.2088, 0.2090])[:, None, None] #.cuda()
         
         # self.net = model_factory[cfg.model_type](cfg.n_cats, aux_mode="pred")
         self.net = model_factory[configer.get('model_name')](configer)
@@ -82,6 +83,7 @@ class E2EModel(torch.nn.Module):
         out = self.net(x)
         return out
     
+## mean: [0.3038, 0.3383, 0.3034] std: [0.2071, 0.2088, 0.2090]    
 net = E2EModel(configer, args.weight_path)
 # net.load_state_dict(torch.load('res/model_50000.pth', map_location='cpu'), strict=False)
 
@@ -104,14 +106,15 @@ for i in range(1):
     t0 = time()
     # input_im = to_tensor(dict(im=im, lb=None))['im'].unsqueeze(0).cuda()
     input_im = cv2.resize(im, (960, 768))
-    input_im = im
+    # input_im = im
     
     input_im = torch.tensor(input_im.astype(np.float32).copy()).unsqueeze(0) #.cuda()
     # print(input_im)
     # inference
     # out1 = net1(input_im).squeeze().detach().cpu().numpy()
     # out2 = net(input_im).long().squeeze().detach().cpu().numpy()
-    out2 = net(input_im)[0]
+    out2 = net(input_im)
+    # print(out2.shape)
     out2 = out2[0].long().squeeze().detach().cpu().numpy()
     
     # # print(maxV)

@@ -155,9 +155,14 @@ class CityScapes(BaseDataset):
             self.lb_map[el['id']] = el['trainId']
 
         self.to_tensor = T.ToTensor(
-            mean=(0.3257, 0.3690, 0.3223), # city, rgb
-            std=(0.2112, 0.2148, 0.2115),
+            mean=(0.3038, 0.3383, 0.3034), # city, rgb
+            std=(0.2071, 0.2088, 0.2090),
         )
+
+        # self.to_tensor = T.ToTensor(
+        #     mean=(0.3257, 0.3690, 0.3223), # city, rgb
+        #     std=(0.2112, 0.2148, 0.2115),
+        # )
 
 ## Only return img without label
 class CityScapesIm(BaseDatasetIm):

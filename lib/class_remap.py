@@ -10,6 +10,7 @@ class ClassRemap():
         self.temperature = self.configer.get('contrast', 'temperature')
         self.remapList = []
         self.maxMapNums = [] # 最大映射类别数
+        # self.class_weight = self.configer.get("class_weight")
         self.num_unify_classes = self.configer.get('num_unify_classes')
         self.softmax = nn.Softmax(dim=1)
         self.network_stride = self.configer.get('network', 'stride')
@@ -141,6 +142,12 @@ class ClassRemap():
         else:
             raise NotImplementedError("read json errror! no  n_datasets")    
 
+        self.class_weight = []
+        for i in range(0, self.num_unify_classes):
+            self.class_weight.append(self.configer.get('class_weight')[str(i)])
+            
+        self.class_weight = torch.tensor(self.class_weight)
+
         # 读取class remap info
         for i in range(1, self.n_datasets+1):
             if not self.configer.exists('class_remap' + str(i)):
@@ -175,6 +182,13 @@ class ClassRemap():
             outV = torch.cat((outV, torch.arange(i*self.num_prototype, (i+1)*self.num_prototype))).long()
             
         return outV
+    
+    def get_class_weight(self,cur_class_id,dataset_id):
+        tgt_classes = self.remapList[dataset_id][cur_class_id]        
+        # weight_vec = torch.ones(len(tgt_classes), dtype=torch.float)
+        weight_vec = self.class_weight[tgt_classes]
+        return weight_vec
+        
     
         
 class ClassRemapOneHotLabel(ClassRemap):
@@ -237,10 +251,17 @@ class ClassRemapOneHotLabel(ClassRemap):
                 
                 shapeEmbed = embed.permute(0,2,3,1).detach()
 
-                # n: b x h x w, d: dim, c:  num of class
-                simScore = torch.div(torch.einsum('nd,cd->nc', shapeEmbed[contrast_lb==int(k)], proto), self.temperature)
+                # # n: b x h x w, d: dim, c:  num of class
+                # weight_vec = self.get_class_weight(k, dataset_id)
+                # if proto.is_cuda:
+                #     weight_vec = weight_vec.cuda()
+                
+                
+                # weighted_proto = torch.einsum('c,cd->cd', weight_vec, proto)
+                simScore = torch.einsum('nd,cd->nc', shapeEmbed[contrast_lb==int(k)], proto)
 
-                simScore = self.softmax(simScore)
+                
+                # simScore = self.softmax(simScore)
                 
                 MaxSim, MaxSimIndex = torch.max(simScore, dim=1)
                 outputIndex = torch.ones_like(MaxSimIndex) * self.ignore_index
@@ -261,16 +282,32 @@ class ClassRemapOneHotLabel(ClassRemap):
                 MaxSimIndex[MaxSim < self.update_sim_thresh] = self.ignore_index
                 
                 outputIndex[targetIndex] = MaxSimIndex[targetIndex]
+                for class_id in v:
+                    this_classes = MaxSim[outputIndex==class_id]
+                    len_this_classes = this_classes.shape[0]
+                    if len_this_classes == 0:
+                        continue
+                    else:
+                        len_this_classes = max(int(len_this_classes * 0.25), 1)
+                        
+                    out_vector = torch.ones_like(this_classes) * self.ignore_index
+                    
+                    
+                    topkindex = torch.topk(this_classes, len_this_classes, sorted=False)[1]
+                    out_vector[topkindex] = class_id
+                    outputIndex[outputIndex==class_id] = out_vector.long()
                 
                 
                 hardLd[tensor_v] = 1
                
-                RemapLbIndex[outputIndex==self.ignore_index] = hardLd
-                RemapLbIndex[outputIndex!=self.ignore_index, outputIndex[outputIndex!=self.ignore_index]] = 1
                 
+                RemapLbIndex[outputIndex!=self.ignore_index, outputIndex[outputIndex!=self.ignore_index]] = 1
    
                 # contrast_mask[contrast_lb==int(k)] = outputIndex
+                RemapLbIndex[outputIndex==self.ignore_index] = hardLd
                 contrast_lb_mask[contrast_lb==int(k)] = RemapLbIndex
+    
+                
 
 
         seg_mask = contrast_lb_mask.permute(0, 3, 1, 2)
@@ -320,7 +357,7 @@ class ClassRemapOneHotLabel(ClassRemap):
         #     weight_mask = self.Upsample(weight_mask.permute(0,3,1,2)).permute(0,2,3,1)
           
         return contrast_lb_mask, seg_mask
-    
+  
     
     def MultiProtoRemapping(self, labels, proto_logits, dataset_id):
         contrast_lb = labels[:, ::self.network_stride, ::self.network_stride]
@@ -457,7 +494,7 @@ def test_ContrastRemapping():
     contrast_mask, seg_mask = classRemap.MultiProtoRemapping(labels, proto_logits, 0)
     print(contrast_mask)
     print(seg_mask) 
-    # print(sig_seg_mask)
+    print(contrast_mask)
     
 
         

@@ -4,13 +4,16 @@ import torchvision.datasets as datasets
 import torchvision.transforms as tansformes
 from torch.utils.data import DataLoader
 from torchvision.transforms import transforms
+
+import sys
+sys.path.insert(0, '.')
 from lib.MultiSetReader import MultiSetReader
 from lib.cityscapes_cv2 import CityScapes
 from lib.CamVid_lb import CamVid
 
 # train_dataset = datasets.CIFAR10(root="CIFAR/",train=True,transform=tansformes.ToTensor(),download=True)
-city_datasets=CityScapes(dataroot="/usr/home/cxh/project/datasets/cityscapes", annpath="datasets/Cityscapes/train.txt")
-cam_datasets=CityScapes(dataroot="/usr/home/cxh/project/datasets/CamVid", annpath="datasets/CamVid/train.txt")
+city_datasets=CityScapes(dataroot="/home/cxh/datasets", annpath="datasets/Cityscapes/train.txt")
+cam_datasets=CamVid(dataroot="/home/cxh/datasets/CamVid", annpath="datasets/CamVid/train.txt")
 Mds = MultiSetReader([city_datasets, cam_datasets])
 batchsizes = 32
 train_loader1 = DataLoader(dataset=city_datasets,batch_size=batchsizes,shuffle=True, drop_last=True)
@@ -18,16 +21,23 @@ train_loader2 = DataLoader(dataset=cam_datasets,batch_size=batchsizes,shuffle=Tr
 
 def get_mean_std(loader1, loader2):
     # Var[x] = E[X**2]-E[X]**2
+    
     channels_sum,channels_squared_sum,num_batches = 0,0,0
     for data, _ in loader1:
+        
         channels_sum += torch.mean(data, dim=[0,2,3])
         channels_squared_sum += torch.mean(data**2, dim=[0,2,3])
         num_batches += 1
+        
+        if num_batches % 10 == 0:
+            print(num_batches)
     
     for data, _ in loader2:
         channels_sum += torch.mean(data, dim=[0,2,3])
         channels_squared_sum += torch.mean(data**2, dim=[0,2,3])
         num_batches += 1
+        if num_batches % 50 == 0:
+            print(num_batches)
 
     print(num_batches)
     print(channels_sum)
@@ -73,33 +83,51 @@ class _PopulationVarianceEstimator:
 
 def get_mean_std2(loader1, loader2):
     estimator = _PopulationVarianceEstimator(torch.randn(3), torch.randn(3))
+    num_batches = 0
     for data, _ in loader1:
         running_mean = torch.mean(data, dim=[0,2,3])
         running_var = torch.var(data, dim=[0,2,3], unbiased=False)
         estimator.update(running_mean, running_var, batchsizes)
         
+        num_batches += 1
+        if num_batches % 50 == 0:
+            print(num_batches)
+        
     for data, _ in loader2:
         running_mean = torch.mean(data, dim=[0,2,3])
         running_var = torch.var(data, dim=[0,2,3], unbiased=False)
         estimator.update(running_mean, running_var, batchsizes)
-
+        
+        num_batches += 1
+        if num_batches % 50 == 0:
+            print(num_batches)
+        
 
     return estimator.pop_mean, estimator.pop_var
 
 def get_mean_std3(loader1, loader2):
     means = []
     vars = []
+    num_batches = 0
     for data, _ in loader1:
         running_mean = torch.mean(data, dim=[0,2,3])
         running_var = torch.var(data, dim=[0,2,3], unbiased=False)
         means.append(running_mean)
         vars.append(running_var)
         
+        num_batches += 1
+        if num_batches % 50 == 0:
+            print(num_batches)
+        
     for data, _ in loader2:
         running_mean = torch.mean(data, dim=[0,2,3])
         running_var = torch.var(data, dim=[0,2,3], unbiased=False)
         means.append(running_mean)
         vars.append(running_var)    
+        
+        num_batches += 1
+        if num_batches % 50 == 0:
+            print(num_batches)
         
     means = torch.tensor(means)
     vars = torch.tensor(vars)        
@@ -109,7 +137,8 @@ def get_mean_std3(loader1, loader2):
         
     return torch.mean(means), pop_var
 
-print(get_mean_std(train_loader1, train_loader2))
-print(get_mean_std2(train_loader1, train_loader2))
+# print(get_mean_std(train_loader1, train_loader2))
+# print(get_mean_std2(train_loader1, train_loader2))
 print(get_mean_std3(train_loader1, train_loader2))
 
+## mean: [0.3038, 0.3383, 0.3034] std: [0.2071, 0.2088, 0.2090]

@@ -6,7 +6,12 @@ import torch.nn.functional as F
 from lib.projection import ProjectionHead
 from lib.domain_classifier_head import DomainClassifierHead
 from lib.functions import ReverseLayerF
+<<<<<<< HEAD
 from lib.module.ConvNorm import ConvNorm
+=======
+from lib.ConvNorm import ConvNorm
+from lib.class_remap import ClassRemap
+>>>>>>> ssl
 
 import numpy as np
 from timm.models.layers import trunc_normal_
@@ -580,27 +585,42 @@ class BiSeNetV2_Contrast(nn.Module):
             return logits
         elif self.aux_mode == 'pred':
             # logits = [self.head(feat_head[i]) for i in range(0, len(other_x) + 1)]
-            logits = [self.head(feat_head[i]) for i in range(0, len(other_x) + 1)]
+            logits = self.head(feat_head[dataset])
             # pred = logits.argmax(dim=1)
             # if self.upsample is False:
             #     logits = [self.up_sample(logit) for logit in logits] 
             # print(logits[0].argmax(dim=1).shape)
-            pred = [logit.argmax(dim=1) for logit in logits]
+            pred = logits.argmax(dim=1)
             
             
-            logit = F.softmax(logits[0], dim=1)
+            logit = F.softmax(logits[dataset], dim=1)
             maxV = torch.max(logit, dim=1)[0]
             
-            return pred, maxV
+            return pred
         elif self.aux_mode == 'pred_by_emb':
-            emb = [self.projHead(feat_head[i]) for i in range(0, len(other_x) + 1)]
+            emb = self.projHead(feat_head[dataset])
             
-            simScore = [torch.einsum('bchw,nc->bnhw', emb[i], self.segment_queue) for i in range(0, len(other_x) + 1)]
+            simScore = torch.einsum('bchw,nc->bnhw', emb, self.segment_queue)
             # if self.upsample is False:
             #     simScore = [self.up_sample(score) for score in simScore] 
             # print(simScore[0].argmax(dim=1).shape)
             
-            MaxSimIndex = [Score.argmax(dim=1) for Score in simScore]
+            MaxVal, MaxSimIndex = simScore.max(dim=1)
+            update_sim_thresh = self.configer.get('contrast', 'update_sim_thresh')
+            OutIndex = torch.ones_like(MaxSimIndex) * 15
+            OutIndex[simScore[:, 15, :, :] < 0.3] = self.num_unify_classes
+            
+            # ClassRemaper = ClassRemap(self.configer)
+            
+            # for k, v in ClassRemaper.remapList[dataset].items():
+            #     for class_id in v:
+            #         this_classes = MaxSimIndex[MaxSimIndex==class_id]
+            #         out_vector = torch.ones_like(this_classes) * self.num_unify_classes
+            #         len_this_classes = this_classes.shape[0]
+                    
+            #         topkindex = torch.topk(this_classes, int(len_this_classes * 0.25), sorted=False)[1]
+            #         out_vector[topkindex] = this_classes[topkindex]
+            #         MaxSimIndex[MaxSimIndex==class_id] = out_vector
             return MaxSimIndex
             
         else:
