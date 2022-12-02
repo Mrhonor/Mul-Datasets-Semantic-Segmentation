@@ -62,7 +62,7 @@ def is_distributed():
 def parse_args():
     parse = argparse.ArgumentParser()
     parse.add_argument('--local_rank', dest='local_rank', type=int, default=-1,)
-    parse.add_argument('--port', dest='port', type=int, default=16852,)
+    parse.add_argument('--port', dest='port', type=int, default=16853,)
     parse.add_argument('--finetune_from', type=str, default=None,)
     parse.add_argument('--config', dest='config', type=str, default='configs/bisenetv2_city_cam.json',)
     return parse.parse_args()
@@ -397,7 +397,10 @@ def train():
                 elif k == 'seg' or k == 'domain':
                     logits_list = []
                     for logit in v:
-                        tot_out = torch.cat((logit[0], logit[1]), 0)
+                        if logit is None:
+                            tot_out = None
+                        else:
+                            tot_out = torch.cat((logit[0], logit[1]), 0)
                         logits_list.append(tot_out)
                                         
                     adaptive_out[k] = logits_list
@@ -498,9 +501,11 @@ def train():
             
             if is_distributed():
                 state = net.module.state_dict()
+                if dist.get_rank() == 0: torch.save(state, save_pth)
             else:
                 state = net.state_dict()
-            if dist.get_rank() == 0: torch.save(state, save_pth)
+                torch.save(state, save_pth)
+            
 
         lr_schdr.step()
 
@@ -511,10 +516,11 @@ def train():
     writer.close()
     if is_distributed():
         state = net.module.state_dict()
+        if dist.get_rank() == 0: torch.save(state, save_pth)
     else:
         state = net.state_dict()
-
-    if dist.get_rank() == 0: torch.save(state, save_pth)
+        torch.save(state, save_pth)
+            
 
     # logger.info('\nevaluating the final model')
     torch.cuda.empty_cache()
@@ -530,20 +536,20 @@ def train():
 def main():
 
     # local_rank = int(os.environ["LOCAL_RANK"])
-    torch.cuda.set_device(args.local_rank)
+    # # torch.cuda.set_device(args.local_rank)
+    # # dist.init_process_group(
+    # #     backend='nccl',
+    # #     init_method='tcp://127.0.0.1:{}'.format(args.port),
+    # #     world_size=torch.cuda.device_count(),
+    # #     rank=args.local_rank
+    # # )
+    # torch.cuda.set_device(local_rank)
     # dist.init_process_group(
     #     backend='nccl',
     #     init_method='tcp://127.0.0.1:{}'.format(args.port),
     #     world_size=torch.cuda.device_count(),
-    #     rank=args.local_rank
+    #     rank=local_rank
     # )
-    # torch.cuda.set_device(local_rank)
-    dist.init_process_group(
-        backend='nccl',
-        init_method='tcp://127.0.0.1:{}'.format(args.port),
-        world_size=torch.cuda.device_count(),
-        rank=args.local_rank
-    )
     
     if not osp.exists(configer.get('res_save_pth')): os.makedirs(configer.get('res_save_pth'))
 

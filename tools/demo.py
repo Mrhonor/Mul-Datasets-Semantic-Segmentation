@@ -21,9 +21,9 @@ np.random.seed(123)
 # args
 parse = argparse.ArgumentParser()
 
-parse.add_argument('--weight_path', type=str, default='res/Mds/model_38000.pth',)
+parse.add_argument('--weight_path', type=str, default='res/Mds/model_final.pth',)
 parse.add_argument('--config', dest='config', type=str, default='configs/bisenetv2_eval.json',)
-parse.add_argument('--img_path', dest='img_path', type=str, default='berlin_000543_000019_leftImg8bit.png',)
+parse.add_argument('--img_path', dest='img_path', type=str, default='leverkusen_000017_000019_leftImg8bit.png',)
 args = parse.parse_args()
 # cfg = set_cfg_from_file(args.config)
 configer = Configer(configs=args.config)
@@ -73,6 +73,7 @@ class E2EModel(torch.nn.Module):
         self.net = model_factory[configer.get('model_name')](configer)
         self.net.load_state_dict(torch.load(weight_path, map_location='cpu'), strict=False)
         self.net.eval()
+        # self.net.train()
         # self.net.cuda()
         
     def forward(self, x):
@@ -80,7 +81,7 @@ class E2EModel(torch.nn.Module):
         x = x.div_(255.)
         x = x.sub_(self.mean).div_(self.std).clone()
         # out = self.net(x)[0]
-        out = self.net(x)
+        out = self.net(x, dataset=0)
         return out
     
 ## mean: [0.3038, 0.3383, 0.3034] std: [0.2071, 0.2088, 0.2090]    
@@ -106,14 +107,17 @@ for i in range(1):
     t0 = time()
     # input_im = to_tensor(dict(im=im, lb=None))['im'].unsqueeze(0).cuda()
     input_im = cv2.resize(im, (960, 768))
-    # input_im = im
+    input_im = im
     
     input_im = torch.tensor(input_im.astype(np.float32).copy()).unsqueeze(0) #.cuda()
+    
+    # test_im = torch.cat((input_im, input_im), dim=0)
     # print(input_im)
     # inference
     # out1 = net1(input_im).squeeze().detach().cpu().numpy()
     # out2 = net(input_im).long().squeeze().detach().cpu().numpy()
     out2 = net(input_im)
+    # print(out2.shape)
     # print(out2.shape)
     out2 = out2[0].long().squeeze().detach().cpu().numpy()
     

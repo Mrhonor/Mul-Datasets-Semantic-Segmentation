@@ -9,7 +9,7 @@
       "im_root": "/home/cxh/datasets/",
       "train_im_anns":"datasets/Cityscapes/train.txt",
       "val_im_anns":"datasets/Cityscapes/val.txt", 
-      "ims_per_gpu": 10,
+      "ims_per_gpu": 6,
       "eval_ims_per_gpu": 2
     },
     "dataset2": {
@@ -18,7 +18,7 @@
       "im_root": "/home/cxh/datasets/CamVid",
       "train_im_anns":"datasets/CamVid/train.txt",
       "val_im_anns":"datasets/CamVid/test.txt", 
-      "ims_per_gpu": 2,
+      "ims_per_gpu": 6,
       "eval_ims_per_gpu": 2
     },
     "n_bn": 2,
@@ -85,15 +85,15 @@
       "aux_num": 4,
       "ignore_index": -1,
       "domain_loss_weight": 1,
-      "m": 0,
-      "gamma": 14
+      "m": 0.1,
+      "gamma": 12
     },
     "lr": {
       "lr_start": 5e-3,
       "weight_decay": 5e-5,
       "warmup_iters": 0,
       "fix_param_iters": 0,
-      "max_iter": 100000
+      "max_iter": 30000
     },
     "train": {
       "scales": [0.5, 1.0, 2.0],
@@ -106,7 +106,7 @@
       "cropsize": [512, 1024]
     },
     "use_fp16": false,
-    "use_sync_bn": true,
+    "use_sync_bn": false,
     "contrast": {
       "use_contrast": true,
       "proj_dim": 256,
@@ -118,7 +118,7 @@
       "num_prototype": 3,
       "coefficient": 0.99,
       "upsample": false,
-      "downsample": true,
+      "downsample": false,
       "update_confidence_thresh": 0.1,
       "update_sim_thresh": 0.3,
       "with_ppd": false,
@@ -129,7 +129,7 @@
     "res_save_pth": "res/Mds/",
     "network": {
       "stride": 32,
-      "with_domain_adversarial": true
+      "with_domain_adversarial": false
     },
     "dataset_aux_head": {
       "use_dataset_aux_head": false,

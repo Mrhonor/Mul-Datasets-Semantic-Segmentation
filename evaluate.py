@@ -128,13 +128,13 @@ class MscEvalV0_Contrast(object):
 
                 im_sc = im_sc.cuda()
                 
-                logits = net(im_sc)
+                logits = net(im_sc, dataset=dataset_id)
                 logits = F.interpolate(logits, size=size,
                         mode='bilinear', align_corners=True)
                 probs += torch.softmax(logits, dim=1)
                 if self.flip:
                     im_sc = torch.flip(im_sc, dims=(3, ))
-                    logits = net(im_sc)
+                    logits = net(im_sc, dataset=dataset_id)
                     logits = torch.flip(logits, dims=(3, ))
                     logits = F.interpolate(logits, size=size,
                             mode='bilinear', align_corners=True)
@@ -634,8 +634,8 @@ def eval_model_contrast(configer, net):
 
     # dl_cam = get_data_loader(cfg_cam, mode='val', distributed=is_dist)
     dl_city, dl_cam = get_data_loader(configer, aux_mode='eval', distributed=is_dist)
-    # net.eval()
-    net.train()
+    net.eval()
+    # net.train()
 
     heads, mious = [], []
     logger = logging.getLogger()

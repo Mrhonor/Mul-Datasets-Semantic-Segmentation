@@ -16,6 +16,7 @@ class ClassRemap():
         self.network_stride = self.configer.get('network', 'stride')
         self.num_prototype = self.configer.get('contrast', 'num_prototype')
         self.Upsample = nn.Upsample(scale_factor=self.network_stride, mode='nearest')
+        self.max_iter = self.configer.get('lr', 'max_iter')
         self._unpack()
         
     def SingleSegRemapping(self, labels, dataset_id):
@@ -282,13 +283,15 @@ class ClassRemapOneHotLabel(ClassRemap):
                 MaxSimIndex[MaxSim < self.update_sim_thresh] = self.ignore_index
                 
                 outputIndex[targetIndex] = MaxSimIndex[targetIndex]
+                cur_iter = self.configer.get('iter')
                 for class_id in v:
                     this_classes = MaxSim[outputIndex==class_id]
                     len_this_classes = this_classes.shape[0]
                     if len_this_classes == 0:
                         continue
                     else:
-                        len_this_classes = max(int(len_this_classes * 0.25), 1)
+                        ratio = min(1.25 * float(cur_iter) / self.max_iter, 1)
+                        len_this_classes = max(int(len_this_classes * ratio), 1)
                         
                     out_vector = torch.ones_like(this_classes) * self.ignore_index
                     
@@ -377,8 +380,9 @@ class ClassRemapOneHotLabel(ClassRemap):
             seg_mask = seg_mask.cuda()
         
         # simScore :  (b h_c w_c) * (n k)
-        simScore = torch.div(proto_logits.detach(), self.temperature)
-        simScore = self.softmax(simScore)
+        # simScore = torch.div(proto_logits.detach(), self.temperature)
+        # simScore = self.softmax(simScore)
+        simScore = proto_logits
         OneColContrastLb = contrast_lb.contiguous().view(-1)
         
         ## 循环两遍，单标签覆盖多标签
@@ -393,6 +397,7 @@ class ClassRemapOneHotLabel(ClassRemap):
                     continue
                        
                 MaxSim, MaxSimIndex = torch.max(simScore[OneColContrastLb == k], dim=1)
+                # print(MaxSim)
                 outputIndex = torch.ones_like(MaxSimIndex) * self.ignore_index
                 
                 # 新标签样本
@@ -411,13 +416,29 @@ class ClassRemapOneHotLabel(ClassRemap):
                 MaxSimIndex[MaxSim < self.update_sim_thresh] = self.ignore_index
                 
                 outputIndex[targetIndex] = MaxSimIndex[targetIndex]
+                cur_iter = self.configer.get('iter')
+                
+                for class_id in Expendtensor_v:
+                    this_classes = MaxSim[outputIndex==class_id]
+                    len_this_classes = this_classes.shape[0]
+                    if len_this_classes == 0:
+                        continue
+                    else:
+                        ratio = min(1.25 * float(cur_iter) / self.max_iter, 1)
+                        len_this_classes = max(int(len_this_classes * ratio), 1)
+                        
+                    out_vector = torch.ones_like(this_classes, dtype=torch.long) * self.ignore_index
+                    
+                    
+                    topkindex = torch.topk(this_classes, len_this_classes, sorted=False)[1]
+                    out_vector[topkindex] = class_id
+                    outputIndex[outputIndex==class_id] = out_vector.long()
 
                 hardLd[Expendtensor_v] = 1
                
                 RemapLbIndex[outputIndex==self.ignore_index] = hardLd
                 RemapLbIndex[outputIndex!=self.ignore_index, outputIndex[outputIndex!=self.ignore_index]] = 1
                 
-   
                 # contrast_mask[contrast_lb==int(k)] = outputIndex
                 contrast_lb_mask[contrast_lb==int(k)] = RemapLbIndex
         
@@ -439,7 +460,8 @@ class ClassRemapOneHotLabel(ClassRemap):
             
             
             if len(v) == 1: 
-                # contrast_lb_mask[contrast_lb==int(k), v] = 1
+                MaxSim, MaxSimIndex = torch.max(simScore[OneColContrastLb == k, v[0]*self.num_prototype:(v[0]+1)*self.num_prototype], dim=1)
+                contrast_lb_mask[contrast_lb==int(k), v[0]*self.num_prototype + MaxSimIndex] = 1
                 
                 seg_vector = torch.zeros(self.num_unify_classes, dtype=torch.bool)
                 if seg_mask.is_cuda:
@@ -448,6 +470,10 @@ class ClassRemapOneHotLabel(ClassRemap):
                 seg_vector[v[0]] = 1
 
                 seg_mask[labels==int(k)] = seg_vector
+                
+                # if int(k) == 3:
+                #     print(dataset_id)
+                #     print(seg_vector)
             else:
                 expend_vector = torch.zeros(self.num_unify_classes, dtype=torch.bool)
                 if seg_mask.is_cuda:
@@ -482,19 +508,26 @@ def test_ContrastRemapping():
                            [2, 2, 1, 2],
                            [0, 0, 0, 2]]).unsqueeze(0)
     segment_queue = torch.tensor([[-1, 0], [1, 0], [0, 1], [0, -1]], dtype=torch.float) # 19 x 2
-    embed = torch.tensor([[[-0.1, -0.9],[0.9, 0.1]],
+    embed = torch.tensor([[[-0.1, 0.9],[0.9, 0.1]],
                           [[-0.8, 0.2],[-0.1, 0.9]]]).unsqueeze(0)
     # 
-    embed = embed.permute(0, 3, 1, 2)
+    # embed = embed.permute(0, 3, 1, 2)
     Shapedembed = embed.contiguous().view(-1, 2)
+    mul_segment_queue = torch.tensor([[[-1, 0], [0.9, 0.1], [-0.1, 1], [0, -1]],
+                                      [[-0.9, 0.1], [1, 0], [0, 1], [-0.1, -1.9]]], dtype=torch.float) # 19 x 2 x 2
+    proto_logits = torch.mm(Shapedembed, mul_segment_queue.view(-1, 2).T)
+    print(mul_segment_queue.view(-1, 2))
+    # print(proto_logits)
+    rearrange_logit = torch.zeros_like(proto_logits)
 
-    proto_logits = torch.mm(Shapedembed, segment_queue.T)
-    # print(embed)
+    for i in range(0, 2):
+        rearrange_logit[:, i::2] = proto_logits[:, i*4:(i+1)*4]
+    print(rearrange_logit)
+    
     # contrast_mask, seg_mask = classRemap.ContrastRemapping(labels, embed, segment_queue, 0)
-    contrast_mask, seg_mask = classRemap.MultiProtoRemapping(labels, proto_logits, 0)
+    contrast_mask, seg_mask = classRemap.MultiProtoRemapping(labels, rearrange_logit, 0)
     print(contrast_mask)
     print(seg_mask) 
-    print(contrast_mask)
     
 
         
@@ -503,6 +536,7 @@ if __name__ == "__main__":
     sys.path.insert(0, '/home/cxh/mr/BiSeNet')
     from tools.configer import *
     from math import sin, cos
+    from einops import rearrange
     
     test_ContrastRemapping()
     # pi = 3.14

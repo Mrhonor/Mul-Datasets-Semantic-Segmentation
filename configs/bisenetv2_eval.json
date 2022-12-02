@@ -1,28 +1,28 @@
 {
-  "model_name": "bisenetv2_contrast_wn",
+  "model_name": "bisenetv2_contrast",
   "aux_mode": "pred",
   "n_datasets": 2,
   "num_unify_classes": 19,
   "dataset1": {
     "n_cats": 18,
     "data_reader": "CityScapes",
-    "im_root": "/usr/home/cxh/project/datasets/cityscapes",
+    "im_root": "/home/cxh/datasets/",
     "train_im_anns":"datasets/Cityscapes/train.txt",
     "val_im_anns":"datasets/Cityscapes/val.txt", 
-    "ims_per_gpu": 3,
-    "eval_ims_per_gpu": 2
+    "ims_per_gpu": 1,
+    "eval_ims_per_gpu": 1
 
   },
   "dataset2": {
     "n_cats": 12, 
     "data_reader": "CamVid",
-    "im_root": "/usr/home/cxh/project/datasets/CamVid",
-    "train_im_anns":"datasets/CamVid/train.txt",
-    "val_im_anns":"datasets/CamVid/test.txt", 
+    "im_root": "/home/cxh/datasets/CamVid",
+    "train_im_anns":"datasets/CamVid/temp.txt",
+    "val_im_anns":"datasets/CamVid/temp.txt", 
     "ims_per_gpu": 1,
-    "eval_ims_per_gpu": 2
+    "eval_ims_per_gpu": 1
   },
-  "n_bn": 1,
+  "n_bn": 2,
   "class_remap1":{
     "0": [0], 
     "1": [1],
@@ -84,7 +84,7 @@
     "with_aux": true,
     "aux_weight": 1,
     "aux_num": 4,
-    "ignore_index": 255,
+    "ignore_index": -1,
     "domain_loss_weight": 1,
     "m": 0,
     "gamma": 14
@@ -97,7 +97,7 @@
     "max_iter": 100000
   },
   "train": {
-    "scales": [0.5, 1.0, 2.0],
+    "scales": [1.0],
     "cropsize": [512, 1024],
     "finetune": false,
     "finetune_from": "res/Mds/model_43000.pth"
@@ -124,13 +124,8 @@
     "coefficient": 0.99,
     "upsample": false,
     "downsample": true,
-<<<<<<< HEAD
-    "update_confidence_thresh": 0.1,
-    "update_sim_thresh": 0.8,
-=======
     "update_confidence_thresh": 0.3,
     "update_sim_thresh": 0.3,
->>>>>>> ssl
     "with_ppd": false,
     "ppd_loss_weight": 1,
     "with_hard_lb_contrast": true,
@@ -139,7 +134,7 @@
   "res_save_pth": "res/Mds/",
   "network": {
     "stride": 32,
-    "with_domain_adversarial": true
+    "with_domain_adversarial": false
   },
   "dataset_aux_head": {
     "use_dataset_aux_head": false,

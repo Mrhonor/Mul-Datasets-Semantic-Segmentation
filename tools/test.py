@@ -16,17 +16,19 @@ from configs import set_cfg_from_file
 from tools.configer import Configer
 from lib.class_remap import ClassRemapOneHotLabel
 from lib.get_dataloader import get_data_loader
-from lib.loss_cross_datasets import CrossDatasetsLoss
+from lib.loss.loss_cross_datasets import CrossDatasetsLoss
 from bitarray import bitarray
+from einops import rearrange
+from lib.prototype_learning import prototype_learning
 
 torch.set_grad_enabled(False)
 np.random.seed(123)
 
 # args
 parse = argparse.ArgumentParser()
-parse.add_argument('--weight_path', type=str, default='res/domain/model_44000.pth',)
+parse.add_argument('--weight_path', type=str, default='res/Mds/model_3000.pth',)
 parse.add_argument('--config', dest='config', type=str, default='configs/bisenetv2_eval.json',)
-parse.add_argument('--img_path', dest='img_path', type=str, default='berlin_000543_000019_leftImg8bit.png',)
+parse.add_argument('--img_path', dest='img_path', type=str, default='0001TP_006720.png',)
 args = parse.parse_args()
 # cfg = set_cfg_from_file(args.config)
 configer = Configer(configs=args.config)
@@ -70,14 +72,71 @@ palette = buildPalette(labels_info_eval)
 
 ClassRemaper = ClassRemapOneHotLabel(configer)
 net = model_factory[configer.get('model_name')](configer)
-net.load_state_dict(torch.load(args.weight_path, map_location='cpu'), strict=True)
+net.load_state_dict(torch.load(args.weight_path, map_location='cpu'), strict=False)
 net.eval()
-net.cuda()
+# net.cuda()
 
 dl_city, dl_cam = get_data_loader(configer, aux_mode='train', distributed=False)
 
-mean = torch.tensor([0.3257, 0.3690, 0.3223])[:, None, None]
-std = torch.tensor([0.2112, 0.2148, 0.2115])[:, None, None]
+# mean = torch.tensor([0.3257, 0.3690, 0.3223])[:, None, None]
+# std = torch.tensor([0.2112, 0.2148, 0.2115])[:, None, None]
+
+mean = torch.tensor([0.3038, 0.3383, 0.3034])[:, None, None]
+std = torch.tensor([0.2071, 0.2088, 0.2090])[:, None, None]
+
+lossfuc = CrossDatasetsLoss(configer)
+
+def LabelToOneHot(LabelVector, nClass, ignore_index=-1):
+    
+    ## 输入的label应该是一维tensor向量
+    OutOneHot = torch.zeros(len(LabelVector), nClass, dtype=torch.bool)
+    if LabelVector.is_cuda:
+        OutOneHot = OutOneHot.cuda()
+        
+    OutOneHot[LabelVector!=ignore_index, LabelVector[LabelVector!=ignore_index]]=1
+    return OutOneHot
+
+def test_showimg_mul():
+    prototypes = net.prototypes   
+
+    for im, lb in dl_cam:
+        lb = lb.squeeze(1)
+        b,h,w = lb.shape
+
+        contrast_lb = lb[:, ::32, ::32]
+        out = net(im, dataset=1)
+        embedding = out['embed'][0]
+        print(embedding.shape)
+        logits = out['seg'][0][0]
+        rearr_emb = rearrange(embedding, 'b c h w -> (b h w) c')
+        dataset_ids = torch.tensor([1])
+        proto_mask = lossfuc.AdaptiveSingleSegRemapping(contrast_lb, dataset_ids)
+        proto_logits, proto_target, new_proto = prototype_learning(configer, prototypes, rearr_emb, logits, proto_mask, update_prototype=True)
+        proto_targetOntHot = LabelToOneHot(proto_target, 57)
+            
+        proto_targetOntHot = rearrange(proto_targetOntHot, '(b h w) n -> b h w n', b=contrast_lb.shape[0], h=contrast_lb.shape[1], w=contrast_lb.shape[2])
+        contrast_mask_label, seg_mask_mul = lossfuc.AdaptiveMultiProtoRemapping(lb, proto_logits, dataset_ids)
+
+        
+        seg_lb = torch.zeros([b,h,w,3])
+        # seg_mask = seg_mask.permute(0,2,3,1)
+        for i in range(0,b):
+            for j in range(0,h):
+                for k in range(0,w):
+                    # print(seg_mask.shape)
+                    # print(seg_mask[i,j,k,:])
+                    bitToInt = bitarrayToInt(bitarray(list(seg_mask_mul[i,j,k,:])))
+                    R = bitToInt & 0xFF
+                    G = (bitToInt >> 8) & 0xFF
+                    B = (bitToInt >> 16) & 0xFF
+                    # print(R,G,B)
+                    seg_lb[i,j,k] =torch.tensor([B, G, R])
+        
+        cv2.imwrite('./im.jpg', im.long().squeeze().detach().cpu().numpy())
+        cv2.imwrite('./lb.bmp', seg_lb.long().squeeze().detach().cpu().numpy())
+        break
+
+
 
 def test_showimg():
     segment_queue = net.segment_queue   
@@ -151,4 +210,10 @@ def test_loss():
         
 
 if __name__ == "__main__":
-    test_loss()
+    # test_showimg_mul()
+    bitToInt = bitarrayToInt(bitarray(list([True,False,False,False,False,False,False,False,False,False,False,False,False,False,False,False,False,False,False])))
+    R = bitToInt & 0xFF
+    G = (bitToInt >> 8) & 0xFF
+    B = (bitToInt >> 16) & 0xFF
+    # print(R,G,B)
+    print(torch.tensor([B, G, R]))

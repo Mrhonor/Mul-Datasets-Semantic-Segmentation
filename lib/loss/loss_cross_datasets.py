@@ -26,8 +26,8 @@ def LabelToOneHot(LabelVector, nClass, ignore_index=-1):
 class CrossDatasetsLoss(nn.Module):
     def __init__(self, configer=None):
         super(CrossDatasetsLoss, self).__init__()
-        
         self.configer = configer
+        self.n_datasets = self.configer.get('n_datasets')
         self.classRemapper = eval(self.configer.get('class_remaper'))(configer=self.configer)
         self.num_unify_classes = self.configer.get('num_unify_classes')
         self.num_prototype = self.configer.get('contrast', 'num_prototype')
@@ -72,7 +72,6 @@ class CrossDatasetsLoss(nn.Module):
         
         self.with_domain_adversarial = self.configer.get('network', 'with_domain_adversarial')
         if self.with_domain_adversarial:
-            self.n_datasets = self.configer.get('n_datasets')
             batch_sizes = torch.tensor([self.configer.get('dataset'+str(i), 'ims_per_gpu') for i in range(1, self.n_datasets+1)])
             batch_size_sum = torch.sum(batch_sizes)
             
@@ -87,7 +86,6 @@ class CrossDatasetsLoss(nn.Module):
         assert "seg" in preds
         
     
-        
         logits, *logits_aux = preds['seg']
         if self.use_contrast:
             embedding = preds['embed']
@@ -153,7 +151,7 @@ class CrossDatasetsLoss(nn.Module):
             contrast_mask_label, seg_mask_mul = self.AdaptiveMultiProtoRemapping(lb, proto_logits, dataset_ids)
 
             # loss_contrast = self.contrast_criterion(embedding, contrast_mask_label, predict, segment_queue) + self.hard_lb_contrast_loss(embedding, hard_lb_mask, segment_queue)
-
+            
             loss_contrast = self.hard_lb_contrast_loss(proto_logits, contrast_mask_label+proto_targetOntHot)
             
             loss_seg_mul = self.seg_criterion_mul(logits, seg_mask_mul)

@@ -350,3 +350,312 @@ torch.distributed.elastic.multiprocessing.api.SignalException: Process 50739 got
 [W 2022-11-22 19:01:05.817 LabApp] Could not determine jupyterlab build status without nodejs
 [I 2022-11-22 22:57:39.027 ServerApp] 302 GET / (::1) 0.76ms
 [W 2022-11-22 22:57:40.706 LabApp] Could not determine jupyterlab build status without nodejs
+WARNING:__main__:
+*****************************************
+Setting OMP_NUM_THREADS environment variable for each process to be 1 in default, to avoid your system being overloaded, please further tune the variable for optimal performance in your application as needed. 
+*****************************************
+The Zen of Python, by Tim Peters
+
+Beautiful is better than ugly.
+Explicit is better than implicit.
+Simple is better than complex.
+Complex is better than complicated.
+Flat is better than nested.
+Sparse is better than dense.
+Readability counts.
+Special cases aren't special enough to break the rules.
+Although practicality beats purity.
+Errors should never pass silently.
+Unless explicitly silenced.
+In the face of ambiguity, refuse the temptation to guess.
+There should be one-- and preferably only one --obvious way to do it.
+Although that way may not be obvious at first unless you're Dutch.
+Now is better than never.
+Although never is often better than *right* now.
+If the implementation is hard to explain, it's a bad idea.
+If the implementation is easy to explain, it may be a good idea.
+Namespaces are one honking great idea -- let's do more of those!
+The Zen of Python, by Tim Peters
+
+Beautiful is better than ugly.
+Explicit is better than implicit.
+Simple is better than complex.
+Complex is better than complicated.
+Flat is better than nested.
+Sparse is better than dense.
+Readability counts.
+Special cases aren't special enough to break the rules.
+Although practicality beats purity.
+Errors should never pass silently.
+Unless explicitly silenced.
+In the face of ambiguity, refuse the temptation to guess.
+There should be one-- and preferably only one --obvious way to do it.
+Although that way may not be obvious at first unless you're Dutch.
+Now is better than never.
+Although never is often better than *right* now.
+If the implementation is hard to explain, it's a bad idea.
+If the implementation is easy to explain, it may be a good idea.
+Namespaces are one honking great idea -- let's do more of those!
+iter: 100/100000, Cam_epoch: 1.2665245202558635, CityScapes_epoch: 0.19959677419354838, lr: 0.004996, eta: 1 day, 8:19:48, time: 117.67, loss: 15.9552, loss_seg: 0.8597, loss_contrast: 1.2748, loss_domain:  8.7051, loss_aux0: 1.7607, loss_aux1: 1.3328, loss_aux2: 1.0823, loss_aux3: 0.9398
+iter: 200/100000, Cam_epoch: 2.5458422174840085, CityScapes_epoch: 0.4012096774193548, lr: 0.004991, eta: 1 day, 7:48:05, time: 112.91, loss: 6.2323, loss_seg: 0.5967, loss_contrast: 0.9095, loss_domain:  0.8643, loss_aux0: 1.3430, loss_aux1: 1.0315, loss_aux2: 0.8141, loss_aux3: 0.6733
+iter: 300/100000, Cam_epoch: 3.8251599147121533, CityScapes_epoch: 0.6028225806451613, lr: 0.004987, eta: 1 day, 7:35:58, time: 112.86, loss: 6.3855, loss_seg: 0.5042, loss_contrast: 0.7919, loss_domain:  1.5282, loss_aux0: 1.2896, loss_aux1: 0.9677, loss_aux2: 0.7239, loss_aux3: 0.5799
+iter: 400/100000, Cam_epoch: 5.104477611940299, CityScapes_epoch: 0.8044354838709677, lr: 0.004982, eta: 1 day, 7:31:38, time: 113.52, loss: 5.8175, loss_seg: 0.4791, loss_contrast: 0.7469, loss_domain:  1.2685, loss_aux0: 1.2129, loss_aux1: 0.8987, loss_aux2: 0.6672, loss_aux3: 0.5442
+iter: 500/100000, Cam_epoch: 6.383795309168444, CityScapes_epoch: 1.0060483870967742, lr: 0.004978, eta: 1 day, 7:29:57, time: 114.02, loss: 5.4317, loss_seg: 0.4427, loss_contrast: 0.6704, loss_domain:  1.1765, loss_aux0: 1.1744, loss_aux1: 0.8541, loss_aux2: 0.6189, loss_aux3: 0.4947
+WARNING:torch.distributed.elastic.agent.server.api:Received 1 death signal, shutting down workers
+WARNING:torch.distributed.elastic.multiprocessing.api:Sending process 29244 closing signal SIGHUP
+WARNING:torch.distributed.elastic.multiprocessing.api:Sending process 29245 closing signal SIGHUP
+Traceback (most recent call last):
+  File "/home/cxh/anaconda3/envs/bisenet/lib/python3.8/runpy.py", line 194, in _run_module_as_main
+    return _run_code(code, main_globals, None,
+  File "/home/cxh/anaconda3/envs/bisenet/lib/python3.8/runpy.py", line 87, in _run_code
+    exec(code, run_globals)
+  File "/home/cxh/anaconda3/envs/bisenet/lib/python3.8/site-packages/torch/distributed/run.py", line 765, in <module>
+    main()
+  File "/home/cxh/anaconda3/envs/bisenet/lib/python3.8/site-packages/torch/distributed/elastic/multiprocessing/errors/__init__.py", line 345, in wrapper
+    return f(*args, **kwargs)
+  File "/home/cxh/anaconda3/envs/bisenet/lib/python3.8/site-packages/torch/distributed/run.py", line 761, in main
+    run(args)
+  File "/home/cxh/anaconda3/envs/bisenet/lib/python3.8/site-packages/torch/distributed/run.py", line 752, in run
+    elastic_launch(
+  File "/home/cxh/anaconda3/envs/bisenet/lib/python3.8/site-packages/torch/distributed/launcher/api.py", line 131, in __call__
+    return launch_agent(self._config, self._entrypoint, list(args))
+  File "/home/cxh/anaconda3/envs/bisenet/lib/python3.8/site-packages/torch/distributed/launcher/api.py", line 236, in launch_agent
+    result = agent.run()
+  File "/home/cxh/anaconda3/envs/bisenet/lib/python3.8/site-packages/torch/distributed/elastic/metrics/api.py", line 125, in wrapper
+    result = f(*args, **kwargs)
+  File "/home/cxh/anaconda3/envs/bisenet/lib/python3.8/site-packages/torch/distributed/elastic/agent/server/api.py", line 709, in run
+    result = self._invoke_run(role)
+  File "/home/cxh/anaconda3/envs/bisenet/lib/python3.8/site-packages/torch/distributed/elastic/agent/server/api.py", line 850, in _invoke_run
+    time.sleep(monitor_interval)
+  File "/home/cxh/anaconda3/envs/bisenet/lib/python3.8/site-packages/torch/distributed/elastic/multiprocessing/api.py", line 60, in _terminate_process_handler
+    raise SignalException(f"Process {os.getpid()} got signal: {sigval}", sigval=sigval)
+torch.distributed.elastic.multiprocessing.api.SignalException: Process 29237 got signal: 1
+WARNING:__main__:
+*****************************************
+Setting OMP_NUM_THREADS environment variable for each process to be 1 in default, to avoid your system being overloaded, please further tune the variable for optimal performance in your application as needed. 
+*****************************************
+The Zen of Python, by Tim Peters
+
+Beautiful is better than ugly.
+Explicit is better than implicit.
+Simple is better than complex.
+Complex is better than complicated.
+Flat is better than nested.
+Sparse is better than dense.
+Readability counts.
+Special cases aren't special enough to break the rules.
+Although practicality beats purity.
+Errors should never pass silently.
+Unless explicitly silenced.
+In the face of ambiguity, refuse the temptation to guess.
+There should be one-- and preferably only one --obvious way to do it.
+Although that way may not be obvious at first unless you're Dutch.
+Now is better than never.
+Although never is often better than *right* now.
+If the implementation is hard to explain, it's a bad idea.
+If the implementation is easy to explain, it may be a good idea.
+Namespaces are one honking great idea -- let's do more of those!
+The Zen of Python, by Tim Peters
+
+Beautiful is better than ugly.
+Explicit is better than implicit.
+Simple is better than complex.
+Complex is better than complicated.
+Flat is better than nested.
+Sparse is better than dense.
+Readability counts.
+Special cases aren't special enough to break the rules.
+Although practicality beats purity.
+Errors should never pass silently.
+Unless explicitly silenced.
+In the face of ambiguity, refuse the temptation to guess.
+There should be one-- and preferably only one --obvious way to do it.
+Although that way may not be obvious at first unless you're Dutch.
+Now is better than never.
+Although never is often better than *right* now.
+If the implementation is hard to explain, it's a bad idea.
+If the implementation is easy to explain, it may be a good idea.
+Namespaces are one honking great idea -- let's do more of those!
+WARNING:torch.distributed.elastic.agent.server.api:Received 1 death signal, shutting down workers
+WARNING:torch.distributed.elastic.multiprocessing.api:Sending process 33616 closing signal SIGHUP
+WARNING:torch.distributed.elastic.multiprocessing.api:Sending process 33617 closing signal SIGHUP
+Traceback (most recent call last):
+  File "/home/cxh/anaconda3/envs/bisenet/lib/python3.8/runpy.py", line 194, in _run_module_as_main
+    return _run_code(code, main_globals, None,
+  File "/home/cxh/anaconda3/envs/bisenet/lib/python3.8/runpy.py", line 87, in _run_code
+    exec(code, run_globals)
+  File "/home/cxh/anaconda3/envs/bisenet/lib/python3.8/site-packages/torch/distributed/run.py", line 765, in <module>
+    main()
+  File "/home/cxh/anaconda3/envs/bisenet/lib/python3.8/site-packages/torch/distributed/elastic/multiprocessing/errors/__init__.py", line 345, in wrapper
+    return f(*args, **kwargs)
+  File "/home/cxh/anaconda3/envs/bisenet/lib/python3.8/site-packages/torch/distributed/run.py", line 761, in main
+    run(args)
+  File "/home/cxh/anaconda3/envs/bisenet/lib/python3.8/site-packages/torch/distributed/run.py", line 752, in run
+    elastic_launch(
+  File "/home/cxh/anaconda3/envs/bisenet/lib/python3.8/site-packages/torch/distributed/launcher/api.py", line 131, in __call__
+    return launch_agent(self._config, self._entrypoint, list(args))
+  File "/home/cxh/anaconda3/envs/bisenet/lib/python3.8/site-packages/torch/distributed/launcher/api.py", line 236, in launch_agent
+    result = agent.run()
+  File "/home/cxh/anaconda3/envs/bisenet/lib/python3.8/site-packages/torch/distributed/elastic/metrics/api.py", line 125, in wrapper
+    result = f(*args, **kwargs)
+  File "/home/cxh/anaconda3/envs/bisenet/lib/python3.8/site-packages/torch/distributed/elastic/agent/server/api.py", line 709, in run
+    result = self._invoke_run(role)
+  File "/home/cxh/anaconda3/envs/bisenet/lib/python3.8/site-packages/torch/distributed/elastic/agent/server/api.py", line 850, in _invoke_run
+    time.sleep(monitor_interval)
+  File "/home/cxh/anaconda3/envs/bisenet/lib/python3.8/site-packages/torch/distributed/elastic/multiprocessing/api.py", line 60, in _terminate_process_handler
+    raise SignalException(f"Process {os.getpid()} got signal: {sigval}", sigval=sigval)
+torch.distributed.elastic.multiprocessing.api.SignalException: Process 33612 got signal: 1
+WARNING:__main__:
+*****************************************
+Setting OMP_NUM_THREADS environment variable for each process to be 1 in default, to avoid your system being overloaded, please further tune the variable for optimal performance in your application as needed. 
+*****************************************
+The Zen of Python, by Tim Peters
+
+Beautiful is better than ugly.
+Explicit is better than implicit.
+Simple is better than complex.
+Complex is better than complicated.
+Flat is better than nested.
+Sparse is better than dense.
+Readability counts.
+Special cases aren't special enough to break the rules.
+Although practicality beats purity.
+Errors should never pass silently.
+Unless explicitly silenced.
+In the face of ambiguity, refuse the temptation to guess.
+There should be one-- and preferably only one --obvious way to do it.
+Although that way may not be obvious at first unless you're Dutch.
+Now is better than never.
+Although never is often better than *right* now.
+If the implementation is hard to explain, it's a bad idea.
+If the implementation is easy to explain, it may be a good idea.
+Namespaces are one honking great idea -- let's do more of those!
+The Zen of Python, by Tim Peters
+
+Beautiful is better than ugly.
+Explicit is better than implicit.
+Simple is better than complex.
+Complex is better than complicated.
+Flat is better than nested.
+Sparse is better than dense.
+Readability counts.
+Special cases aren't special enough to break the rules.
+Although practicality beats purity.
+Errors should never pass silently.
+Unless explicitly silenced.
+In the face of ambiguity, refuse the temptation to guess.
+There should be one-- and preferably only one --obvious way to do it.
+Although that way may not be obvious at first unless you're Dutch.
+Now is better than never.
+Although never is often better than *right* now.
+If the implementation is hard to explain, it's a bad idea.
+If the implementation is easy to explain, it may be a good idea.
+Namespaces are one honking great idea -- let's do more of those!
+WARNING:torch.distributed.elastic.agent.server.api:Received 1 death signal, shutting down workers
+WARNING:torch.distributed.elastic.multiprocessing.api:Sending process 35905 closing signal SIGHUP
+WARNING:torch.distributed.elastic.multiprocessing.api:Sending process 35906 closing signal SIGHUP
+Traceback (most recent call last):
+  File "/home/cxh/anaconda3/envs/bisenet/lib/python3.8/runpy.py", line 194, in _run_module_as_main
+    return _run_code(code, main_globals, None,
+  File "/home/cxh/anaconda3/envs/bisenet/lib/python3.8/runpy.py", line 87, in _run_code
+    exec(code, run_globals)
+  File "/home/cxh/anaconda3/envs/bisenet/lib/python3.8/site-packages/torch/distributed/run.py", line 765, in <module>
+    main()
+  File "/home/cxh/anaconda3/envs/bisenet/lib/python3.8/site-packages/torch/distributed/elastic/multiprocessing/errors/__init__.py", line 345, in wrapper
+    return f(*args, **kwargs)
+  File "/home/cxh/anaconda3/envs/bisenet/lib/python3.8/site-packages/torch/distributed/run.py", line 761, in main
+    run(args)
+  File "/home/cxh/anaconda3/envs/bisenet/lib/python3.8/site-packages/torch/distributed/run.py", line 752, in run
+    elastic_launch(
+  File "/home/cxh/anaconda3/envs/bisenet/lib/python3.8/site-packages/torch/distributed/launcher/api.py", line 131, in __call__
+    return launch_agent(self._config, self._entrypoint, list(args))
+  File "/home/cxh/anaconda3/envs/bisenet/lib/python3.8/site-packages/torch/distributed/launcher/api.py", line 236, in launch_agent
+    result = agent.run()
+  File "/home/cxh/anaconda3/envs/bisenet/lib/python3.8/site-packages/torch/distributed/elastic/metrics/api.py", line 125, in wrapper
+    result = f(*args, **kwargs)
+  File "/home/cxh/anaconda3/envs/bisenet/lib/python3.8/site-packages/torch/distributed/elastic/agent/server/api.py", line 709, in run
+    result = self._invoke_run(role)
+  File "/home/cxh/anaconda3/envs/bisenet/lib/python3.8/site-packages/torch/distributed/elastic/agent/server/api.py", line 850, in _invoke_run
+    time.sleep(monitor_interval)
+  File "/home/cxh/anaconda3/envs/bisenet/lib/python3.8/site-packages/torch/distributed/elastic/multiprocessing/api.py", line 60, in _terminate_process_handler
+    raise SignalException(f"Process {os.getpid()} got signal: {sigval}", sigval=sigval)
+torch.distributed.elastic.multiprocessing.api.SignalException: Process 35896 got signal: 1
+[W 2022-11-24 17:35:08.687 LabApp] 'ip' has moved from NotebookApp to ServerApp. This config will be passed to ServerApp. Be sure to update your config before our next release.
+[W 2022-11-24 17:35:08.687 LabApp] 'password' has moved from NotebookApp to ServerApp. This config will be passed to ServerApp. Be sure to update your config before our next release.
+[W 2022-11-24 17:35:08.687 LabApp] 'password' has moved from NotebookApp to ServerApp. This config will be passed to ServerApp. Be sure to update your config before our next release.
+[W 2022-11-24 17:35:08.687 LabApp] 'port' has moved from NotebookApp to ServerApp. This config will be passed to ServerApp. Be sure to update your config before our next release.
+[W 2022-11-24 17:35:08.687 LabApp] 'allow_remote_access' has moved from NotebookApp to ServerApp. This config will be passed to ServerApp. Be sure to update your config before our next release.
+[I 2022-11-24 17:35:08.696 ServerApp] jupyterlab | extension was successfully linked.
+[I 2022-11-24 17:35:08.706 ServerApp] nbclassic | extension was successfully linked.
+[I 2022-11-24 17:35:08.964 ServerApp] notebook_shim | extension was successfully linked.
+[W 2022-11-24 17:35:09.059 ServerApp] WARNING: The Jupyter server is listening on all IP addresses and not using encryption. This is not recommended.
+[I 2022-11-24 17:35:09.062 ServerApp] notebook_shim | extension was successfully loaded.
+[I 2022-11-24 17:35:09.063 LabApp] JupyterLab extension loaded from /home/cxh/anaconda3/envs/bisenet/lib/python3.8/site-packages/jupyterlab
+[I 2022-11-24 17:35:09.064 LabApp] JupyterLab application directory is /home/cxh/anaconda3/envs/bisenet/share/jupyter/lab
+[I 2022-11-24 17:35:09.069 ServerApp] jupyterlab | extension was successfully loaded.
+[I 2022-11-24 17:35:09.076 ServerApp] nbclassic | extension was successfully loaded.
+[I 2022-11-24 17:35:09.076 ServerApp] The port 14923 is already in use, trying another port.
+[I 2022-11-24 17:35:09.077 ServerApp] The port 14924 is already in use, trying another port.
+[I 2022-11-24 17:35:09.077 ServerApp] Serving notebooks from local directory: /home/cxh/mr/BiSeNet
+[I 2022-11-24 17:35:09.077 ServerApp] Jupyter Server 1.18.1 is running at:
+[I 2022-11-24 17:35:09.077 ServerApp] http://localhost:14925/lab
+[I 2022-11-24 17:35:09.077 ServerApp]  or http://127.0.0.1:14925/lab
+[I 2022-11-24 17:35:09.077 ServerApp] Use Control-C to stop this server and shut down all kernels (twice to skip confirmation).
+[I 2022-11-24 17:39:43.927 ServerApp] Interrupted...
+[W 2022-11-24 17:39:49.811 LabApp] 'ip' has moved from NotebookApp to ServerApp. This config will be passed to ServerApp. Be sure to update your config before our next release.
+[W 2022-11-24 17:39:49.811 LabApp] 'password' has moved from NotebookApp to ServerApp. This config will be passed to ServerApp. Be sure to update your config before our next release.
+[W 2022-11-24 17:39:49.811 LabApp] 'password' has moved from NotebookApp to ServerApp. This config will be passed to ServerApp. Be sure to update your config before our next release.
+[W 2022-11-24 17:39:49.811 LabApp] 'port' has moved from NotebookApp to ServerApp. This config will be passed to ServerApp. Be sure to update your config before our next release.
+[W 2022-11-24 17:39:49.811 LabApp] 'allow_remote_access' has moved from NotebookApp to ServerApp. This config will be passed to ServerApp. Be sure to update your config before our next release.
+[I 2022-11-24 17:39:49.820 ServerApp] jupyterlab | extension was successfully linked.
+[I 2022-11-24 17:39:49.830 ServerApp] nbclassic | extension was successfully linked.
+[I 2022-11-24 17:39:50.003 ServerApp] notebook_shim | extension was successfully linked.
+[W 2022-11-24 17:39:50.042 ServerApp] WARNING: The Jupyter server is listening on all IP addresses and not using encryption. This is not recommended.
+[I 2022-11-24 17:39:50.043 ServerApp] notebook_shim | extension was successfully loaded.
+[I 2022-11-24 17:39:50.044 LabApp] JupyterLab extension loaded from /home/cxh/anaconda3/envs/bisenet/lib/python3.8/site-packages/jupyterlab
+[I 2022-11-24 17:39:50.044 LabApp] JupyterLab application directory is /home/cxh/anaconda3/envs/bisenet/share/jupyter/lab
+[I 2022-11-24 17:39:50.047 ServerApp] jupyterlab | extension was successfully loaded.
+[I 2022-11-24 17:39:50.051 ServerApp] nbclassic | extension was successfully loaded.
+[I 2022-11-24 17:39:50.051 ServerApp] The port 14923 is already in use, trying another port.
+[I 2022-11-24 17:39:50.051 ServerApp] The port 14924 is already in use, trying another port.
+[I 2022-11-24 17:39:50.051 ServerApp] Serving notebooks from local directory: /home/cxh/mr/BiSeNet
+[I 2022-11-24 17:39:50.051 ServerApp] Jupyter Server 1.18.1 is running at:
+[I 2022-11-24 17:39:50.052 ServerApp] http://localhost:14925/lab
+[I 2022-11-24 17:39:50.052 ServerApp]  or http://127.0.0.1:14925/lab
+[I 2022-11-24 17:39:50.052 ServerApp] Use Control-C to stop this server and shut down all kernels (twice to skip confirmation).
+[I 2022-11-24 17:40:47.095 ServerApp] 302 GET / (::1) 1.68ms
+[I 2022-11-24 17:40:47.118 LabApp] 302 GET /lab? (::1) 1.81ms
+[I 2022-11-24 17:40:52.802 ServerApp] 302 POST /login?next=%2Flab%3F (::1) 62.34ms
+[W 2022-11-24 17:40:55.347 LabApp] Could not determine jupyterlab build status without nodejs
+[I 2022-11-24 17:40:55.899 ServerApp] New terminal with automatic name: 1
+[I 2022-11-24 23:37:10.127 ServerApp] 302 GET / (::1) 1.92ms
+[W 2022-11-24 23:37:11.714 LabApp] Could not determine jupyterlab build status without nodejs
+[I 2022-11-25 11:07:02.339 ServerApp] 302 GET / (::1) 1.30ms
+[I 2022-11-25 11:07:02.390 LabApp] 302 GET /lab? (::1) 1.07ms
+[I 2022-11-25 11:07:15.490 ServerApp] 302 POST /login?next=%2Flab%3F (::1) 53.60ms
+[W 2022-11-25 11:07:18.804 LabApp] Could not determine jupyterlab build status without nodejs
+[I 2022-11-25 18:35:58.845 ServerApp] 302 GET / (::1) 1.31ms
+[W 2022-11-25 18:36:00.551 LabApp] Could not determine jupyterlab build status without nodejs
+[I 2022-11-25 20:37:21.735 ServerApp] 302 GET / (::1) 1.38ms
+[W 2022-11-25 20:37:32.546 LabApp] Could not determine jupyterlab build status without nodejs
+[I 2022-11-25 20:38:05.909 ServerApp] New terminal with automatic name: 2
+[W 2022-11-25 22:20:02.865 ServerApp] WebSocket ping timeout after 119986 ms.
+[W 2022-11-25 22:20:05.951 ServerApp] WebSocket ping timeout after 119994 ms.
+[I 2022-11-26 09:58:38.656 ServerApp] 302 GET / (::1) 1.39ms
+[W 2022-11-26 09:58:40.273 LabApp] Could not determine jupyterlab build status without nodejs
+[I 2022-11-26 12:32:16.976 ServerApp] 302 GET / (::1) 0.59ms
+[W 2022-11-26 12:32:18.530 LabApp] Could not determine jupyterlab build status without nodejs
+[I 2022-11-27 10:43:54.180 ServerApp] 302 GET / (::1) 1.30ms
+[W 2022-11-27 10:43:56.116 LabApp] Could not determine jupyterlab build status without nodejs
+[I 2022-11-27 19:35:02.244 ServerApp] 302 GET / (::1) 1.25ms
+[W 2022-11-27 19:35:04.744 LabApp] Could not determine jupyterlab build status without nodejs
+[I 2022-11-27 23:12:00.957 ServerApp] 302 GET / (::1) 0.83ms
+[W 2022-11-27 23:12:03.042 LabApp] Could not determine jupyterlab build status without nodejs
+[I 2022-11-28 11:40:00.832 ServerApp] 302 GET / (::1) 3.53ms
+[W 2022-11-28 11:40:02.857 LabApp] Could not determine jupyterlab build status without nodejs
+[I 2022-11-29 23:03:42.883 ServerApp] 302 GET / (::1) 2.05ms
+[W 2022-11-29 23:03:45.042 LabApp] Could not determine jupyterlab build status without nodejs
+[I 2022-12-01 21:05:21.202 ServerApp] 302 GET / (::1) 1.06ms
+[W 2022-12-01 21:05:23.279 LabApp] Could not determine jupyterlab build status without nodejs
+[I 2022-12-01 23:29:22.147 ServerApp] 302 GET / (::1) 2.75ms
+[W 2022-12-01 23:29:24.366 LabApp] Could not determine jupyterlab build status without nodejs

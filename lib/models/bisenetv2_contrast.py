@@ -3,15 +3,10 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from lib.projection import ProjectionHead
-from lib.domain_classifier_head import DomainClassifierHead
+from lib.module.projection import ProjectionHead
+from lib.module.domain_classifier_head import DomainClassifierHead
 from lib.functions import ReverseLayerF
-<<<<<<< HEAD
 from lib.module.ConvNorm import ConvNorm
-=======
-from lib.ConvNorm import ConvNorm
-from lib.class_remap import ClassRemap
->>>>>>> ssl
 
 import numpy as np
 from timm.models.layers import trunc_normal_
@@ -346,11 +341,12 @@ class BGALayer(nn.Module):
 
 class SegmentHead(nn.Module):
 
-    def __init__(self, in_chan, mid_chan, n_classes, up_factor=8, proj='ConvNorm', aux=True):
+    def __init__(self, in_chan, mid_chan, n_classes, up_factor=8, proj='ConvNorm', aux=True, n_bn=1):
         super(SegmentHead, self).__init__()
-        self.conv = ConvBNReLU(in_chan, mid_chan, 3, stride=1)
+        
         self.drop = nn.Dropout(0.1)
         self.up_factor = up_factor
+        self.n_bn = n_bn
 
         out_chan = n_classes
         mid_chan2 = up_factor * up_factor if aux else mid_chan
@@ -364,10 +360,10 @@ class SegmentHead(nn.Module):
         #     nn.Conv2d(mid_chan2, out_chan, 1, 1, 0, bias=True),
         #     nn.Upsample(scale_factor=up_factor, mode='bilinear', align_corners=False)
         # )
-
+        self.conv = ConvBNReLU(in_chan, mid_chan, 3, stride=1, n_bn=self.n_bn)
         self.aux = aux
         self.up_sample1 = nn.Upsample(scale_factor=2)
-        self.conv1 = ConvBNReLU(mid_chan, mid_chan2, 3, stride=1)
+        self.conv1 = ConvBNReLU(mid_chan, mid_chan2, 3, stride=1, n_bn=self.n_bn)
 
         if proj == 'convmlp':
             self.proj = nn.Conv2d(mid_chan2, out_chan, 1, 1, 0, bias=True)
@@ -379,25 +375,25 @@ class SegmentHead(nn.Module):
             self.up_sample2 = nn.Upsample(scale_factor=up_factor, mode='bilinear', align_corners=True)
         
 
-    def forward(self, x):
+    def forward(self, dataset, x, *other_x):
         # print(x.size())
         
         # 采用多分割头，所以不应该返回list
-        feats = self.conv(0, x)
-        feat = self.drop(feats[0])
-        feat = feats[0]
+        feats = self.conv(dataset, x, *other_x)
+        feats = [self.drop(feat) for feat in feats]
+        # feat = feats[0]
 
         if self.aux is True:
-            feat = self.up_sample1(feat)
-            feats = self.conv1(0, feat)
-            feat = self.proj(feats[0])
+            feats = [self.up_sample1(feat) for feat in feats] 
+            feats = self.conv1(dataset, *feats)
+            feats = [self.proj(feat) for feat in feats]
         else:
-            feat = self.proj(feat)
+            feats = [self.proj(feat) for feat in feats]
             
         if self.up_factor > 1:
-            feat = self.up_sample2(feat)
+            feats = [self.up_sample2(feat) for feat in feats]
 
-        return feat
+        return feats
 
 
 class BiSeNetV2_Contrast(nn.Module):
@@ -428,20 +424,20 @@ class BiSeNetV2_Contrast(nn.Module):
         
         self.use_dataset_aux_head = self.configer.get('dataset_aux_head', 'use_dataset_aux_head')
         if self.use_dataset_aux_head:
-            self.dataset_aux_head =  nn.ModuleList([SegmentHead(128, 1024, self.configer.get('dataset'+str(i), 'n_cats'), up_factor=8, aux=False)
+            self.dataset_aux_head =  nn.ModuleList([SegmentHead(128, 1024, self.configer.get('dataset'+str(i), 'n_cats'), up_factor=8, aux=False, n_bn=self.n_bn)
                                                                                     for i in range(1, self.n_datasets+1)])
             
             self.train_dataset_aux = True
             
             if self.aux_mode == 'train':
                 self.dataset_aux2 = nn.ModuleList([SegmentHead(16, 128, self.configer.get('dataset'+str(i), 'n_cats'), 
-                                                               up_factor=4, aux=True) for i in range(1, self.n_datasets+1)])
+                                                               up_factor=4, aux=True, n_bn=self.n_bn) for i in range(1, self.n_datasets+1)])
                 self.dataset_aux3 = nn.ModuleList([SegmentHead(32, 128, self.configer.get('dataset'+str(i), 'n_cats'), 
-                                                               up_factor=8, aux=True) for i in range(1, self.n_datasets+1)])
+                                                               up_factor=8, aux=True, n_bn=self.n_bn) for i in range(1, self.n_datasets+1)])
                 self.dataset_aux4 = nn.ModuleList([SegmentHead(64, 128, self.configer.get('dataset'+str(i), 'n_cats'), 
-                                                               up_factor=16, aux=True) for i in range(1, self.n_datasets+1)])
+                                                               up_factor=16, aux=True, n_bn=self.n_bn) for i in range(1, self.n_datasets+1)])
                 self.dataset_aux5_4 = nn.ModuleList([SegmentHead(128, 128, self.configer.get('dataset'+str(i), 'n_cats'), 
-                                                               up_factor=32, aux=True) for i in range(1, self.n_datasets+1)])
+                                                               up_factor=32, aux=True, n_bn=self.n_bn) for i in range(1, self.n_datasets+1)])
                 
             
         self.use_contrast = self.configer.get('contrast', 'use_contrast')
@@ -449,19 +445,19 @@ class BiSeNetV2_Contrast(nn.Module):
         if self.use_contrast:
             
             if configer.get('use_sync_bn'):
-                self.projHead = ProjectionHead(dim_in=128, proj_dim=self.proj_dim, up_factor=self.network_stride, bn_type='torchsyncbn', up_sample=self.upsample, down_sample=self.downsample)
+                self.projHead = ProjectionHead(dim_in=128, proj_dim=self.proj_dim, up_factor=self.network_stride, bn_type='torchsyncbn', up_sample=self.upsample, down_sample=self.downsample, n_bn=self.n_bn)
             else:
-                self.projHead = ProjectionHead(dim_in=128, proj_dim=self.proj_dim, up_factor=self.network_stride, bn_type='torchbn', up_sample=self.upsample, down_sample=self.downsample)
+                self.projHead = ProjectionHead(dim_in=128, proj_dim=self.proj_dim, up_factor=self.network_stride, bn_type='torchbn', up_sample=self.upsample, down_sample=self.downsample, n_bn=self.n_bn)
             
             
         self.with_domain_adversarial = self.configer.get('network', 'with_domain_adversarial')
         if self.with_domain_adversarial:
             if configer.get('use_sync_bn'):
-                self.DomainClassifierHead1 = DomainClassifierHead(dim_in=128, n_domain=self.n_datasets, classifier='convmlp_small', bn_type='torchsyncbn')
-                self.DomainClassifierHead2 = DomainClassifierHead(dim_in=128, n_domain=self.n_datasets, classifier='convmlp', bn_type='torchsyncbn')
+                self.DomainClassifierHead1 = DomainClassifierHead(dim_in=128, n_domain=self.n_datasets, classifier='convmlp_small', bn_type='torchsyncbn', n_bn=self.n_bn)
+                self.DomainClassifierHead2 = DomainClassifierHead(dim_in=128, n_domain=self.n_datasets, classifier='convmlp', bn_type='torchsyncbn', n_bn=self.n_bn)
             else:
-                self.DomainClassifierHead1 = DomainClassifierHead(dim_in=128, n_domain=self.n_datasets, classifier='convmlp_small', bn_type='torchbn')
-                self.DomainClassifierHead2 = DomainClassifierHead(dim_in=128, n_domain=self.n_datasets, classifier='convmlp', bn_type='torchsyncbn')
+                self.DomainClassifierHead1 = DomainClassifierHead(dim_in=128, n_domain=self.n_datasets, classifier='convmlp_small', bn_type='torchbn', n_bn=self.n_bn)
+                self.DomainClassifierHead2 = DomainClassifierHead(dim_in=128, n_domain=self.n_datasets, classifier='convmlp', bn_type='torchsyncbn', n_bn=self.n_bn)
 
         # ## TODO: what is the number of mid chan ?
         # self.head = nn.ModuleList([])
@@ -482,14 +478,14 @@ class BiSeNetV2_Contrast(nn.Module):
         #         self.aux4.append(SegmentHead(64, 128, n, up_factor=16))
         #         self.aux5_4.append(SegmentHead(128, 128, n, up_factor=32))
 
-        self.head = SegmentHead(128, 1024, self.num_unify_classes, up_factor=8, aux=False)
+        self.head = SegmentHead(128, 1024, self.num_unify_classes, up_factor=8, aux=False, n_bn=self.n_bn)
 
             
         if self.aux_mode == 'train':
-            self.aux2 = SegmentHead(16, 128, self.num_unify_classes, up_factor=4, aux=True)
-            self.aux3 = SegmentHead(32, 128, self.num_unify_classes, up_factor=8, aux=True)
-            self.aux4 = SegmentHead(64, 128, self.num_unify_classes, up_factor=16, aux=True)
-            self.aux5_4 = SegmentHead(128, 128, self.num_unify_classes, up_factor=32, aux=True)
+            self.aux2 = SegmentHead(16, 128, self.num_unify_classes, up_factor=4, aux=True, n_bn=self.n_bn)
+            self.aux3 = SegmentHead(32, 128, self.num_unify_classes, up_factor=8, aux=True, n_bn=self.n_bn)
+            self.aux4 = SegmentHead(64, 128, self.num_unify_classes, up_factor=16, aux=True, n_bn=self.n_bn)
+            self.aux5_4 = SegmentHead(128, 128, self.num_unify_classes, up_factor=32, aux=True, n_bn=self.n_bn)
 
             
         self.prototypes = nn.Parameter(torch.zeros(self.num_unify_classes, self.num_prototype, self.proj_dim),
@@ -519,34 +515,28 @@ class BiSeNetV2_Contrast(nn.Module):
         
 
         if self.aux_mode == 'train' and self.train_dataset_aux == False:
-            logits = [self.head(feat_head[i]) for i in range(0, len(other_x) + 1)]
-            # logits_aux2 = self.aux2(feat2)
-            # logits_aux3 = self.aux3(feat3)
-            # logits_aux4 = self.aux4(feat4)
-            # logits_aux5_4 = self.aux5_4(feat5_4)
-            ## 多数据集模式
-            ## 修改后支持单张图片输入
-            logits_aux2 = [self.aux2(feat2[i]) for i in range(0, len(other_x) + 1)]
-            logits_aux3 = [self.aux3(feat3[i]) for i in range(0, len(other_x) + 1)]
-            logits_aux4 = [self.aux4(feat4[i]) for i in range(0, len(other_x) + 1)]
-            logits_aux5_4 = [self.aux5_4(feat5_4[i]) for i in range(0, len(other_x) + 1)]
-            
+            logits = self.head(dataset, *feat_head)
+            logits_aux2 = self.aux2(dataset, *feat2)
+            logits_aux3 = self.aux3(dataset, *feat3)
+            logits_aux4 = self.aux4(dataset, *feat4)
+            logits_aux5_4 = self.aux5_4(dataset, *feat5_4)
+
             domain_pred1 = None
             domain_pred2 = None
             if self.with_domain_adversarial:
                 p = float(self.configer.get('iter')) / self.configer.get('lr', 'max_iter')
                 alpha = 2. / (1. + np.exp(-10 * p)) - 1
-                reverse_feat1 = [ReverseLayerF.apply(feat_s[i], alpha) for i in range(0, len(other_x)+1)]
-                domain_pred1 = [self.DomainClassifierHead1(reverse_feat1[i]) for i in range(0, len(other_x) + 1)]
+                reverse_feat1 = [ReverseLayerF.apply(feat, alpha) for feat in feat_s]
+                domain_pred1 = self.DomainClassifierHead1(*reverse_feat1) 
                 
-                reverse_feat2 = [ReverseLayerF.apply(feat_head[i], alpha) for i in range(0, len(other_x)+1)]
-                domain_pred2 = [self.DomainClassifierHead2(reverse_feat2[i]) for i in range(0, len(other_x) + 1)]
+                reverse_feat2 = [ReverseLayerF.apply(feat, alpha) for feat in feat_head]
+                domain_pred2 = self.DomainClassifierHead2(*reverse_feat2)
                 
             
             if not self.use_contrast:
                 return {'seg': [logits, logits_aux2, logits_aux3, logits_aux4, logits_aux5_4], 'domain': [domain_pred1, domain_pred2]}
    
-            emb = [self.projHead(feat_s[i]) for i in range(0, len(other_x) + 1)]
+            emb = self.projHead(dataset, *feat_s)
             
             return {'seg': [logits, logits_aux2, logits_aux3, logits_aux4, logits_aux5_4], 'embed': emb, 'domain': [domain_pred1, domain_pred2]}
                 
@@ -556,11 +546,11 @@ class BiSeNetV2_Contrast(nn.Module):
             sort_index = perm_index.sort()[1]
             recover_index = []
             
-            for i in range(self.n_datasets):
+            for i in range(0, self.n_datasets):
                 recover_index.append(sort_index[acc:acc+self.batch_sizes[i]])
                 acc += self.batch_sizes[i] 
             
-            
+            raise Exception("not imp yet!")
             ## 多数据集模式
             ## 修改后支持单张图片输入
             logits = [self.dataset_aux_head[i](feat_head[0][recover_index[i]]) for i in range(0, self.n_datasets)]
@@ -576,16 +566,18 @@ class BiSeNetV2_Contrast(nn.Module):
             # return logits, logits_aux2, logits_aux3, logits_aux4, logits_aux5_4
         elif self.aux_mode == 'eval':
             if self.train_dataset_aux:
+                raise Exception("not imp yet!")
                 logits = [self.dataset_aux_head[dataset](feat_head[0])]
             else:    
-                logits = [self.head(feat_head[i]) for i in range(0, len(other_x) + 1)]
+                # logits = [self.head(feat_head[i]) for i in range(0, len(other_x) + 1)]
+                logits = self.head(dataset, *feat_head)
                 # logits = [self.head(feat_head[i]) for i in range(0, len(other_x) + 1)]
 
                 
-            return logits
+            return logits[0]
         elif self.aux_mode == 'pred':
             # logits = [self.head(feat_head[i]) for i in range(0, len(other_x) + 1)]
-            logits = self.head(feat_head[dataset])
+            logits = self.head(dataset, *feat_head)[0]
             # pred = logits.argmax(dim=1)
             # if self.upsample is False:
             #     logits = [self.up_sample(logit) for logit in logits] 
@@ -593,22 +585,26 @@ class BiSeNetV2_Contrast(nn.Module):
             pred = logits.argmax(dim=1)
             
             
-            logit = F.softmax(logits[dataset], dim=1)
-            maxV = torch.max(logit, dim=1)[0]
+            # logit = F.softmax(logits[dataset], dim=1)
+            # maxV = torch.max(logit, dim=1)[0]
             
             return pred
         elif self.aux_mode == 'pred_by_emb':
-            emb = self.projHead(feat_head[dataset])
-            
-            simScore = torch.einsum('bchw,nc->bnhw', emb, self.segment_queue)
+            emb = self.projHead(feat_s[dataset])
+            shapedProto = rearrange(self.prototypes, ' n k d -> (n k) d')
+            # rearrange_Proto = torch.zeros_like(shapedProto)
+            # for i in range(0, self.num_prototype):
+            #     rearrange_Proto[i::self.num_prototype, :] = shapedProto[i*self.num_unify_classes:(i+1)*self.num_unify_classes, :]
+
+            simScore = torch.einsum('bchw,nc->bnhw', emb, shapedProto)
             # if self.upsample is False:
             #     simScore = [self.up_sample(score) for score in simScore] 
             # print(simScore[0].argmax(dim=1).shape)
             
             MaxVal, MaxSimIndex = simScore.max(dim=1)
             update_sim_thresh = self.configer.get('contrast', 'update_sim_thresh')
-            OutIndex = torch.ones_like(MaxSimIndex) * 15
-            OutIndex[simScore[:, 15, :, :] < 0.3] = self.num_unify_classes
+            # OutIndex = torch.ones_like(MaxSimIndex) * 15
+            # OutIndex[simScore[:, 15, :, :] < 0.3] = self.num_unify_classes
             
             # ClassRemaper = ClassRemap(self.configer)
             
@@ -621,7 +617,7 @@ class BiSeNetV2_Contrast(nn.Module):
             #         topkindex = torch.topk(this_classes, int(len_this_classes * 0.25), sorted=False)[1]
             #         out_vector[topkindex] = this_classes[topkindex]
             #         MaxSimIndex[MaxSimIndex==class_id] = out_vector
-            return MaxSimIndex
+            return (MaxSimIndex / self.num_prototype).long()
             
         else:
             raise NotImplementedError
@@ -761,6 +757,9 @@ class BiSeNetV2_Contrast(nn.Module):
                 elif param.dim() == 4:
                     wd_params.append(param)
                 else:
+                    nowd_params.append(param)
+                    # print(param.dim())
+                    # print(param)
                     print(name)
 
         wd_params, nowd_params, lr_mul_wd_params, lr_mul_nowd_params = [], [], [], []

@@ -3,8 +3,8 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from lib.projection import ProjectionHead
-from lib.domain_classifier_head import DomainClassifierHead
+from lib.module.projection import ProjectionHead
+from lib.module.domain_classifier_head import DomainClassifierHead
 from lib.functions import ReverseLayerF
 from lib.module.ConvNorm import ConvNorm
 

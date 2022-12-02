@@ -31,7 +31,7 @@ from lib.ohem_ce_loss import OhemCELoss
 from lib.lr_scheduler import WarmupPolyLrScheduler
 from lib.meters import TimeMeter, AvgMeter
 from lib.logger import setup_logger, print_log_msg
-from lib.loss_cross_datasets import CrossDatasetsLoss
+from lib.loss.loss_cross_datasets import CrossDatasetsLoss
 from lib.class_remap import ClassRemap
 
 from tools.configer import Configer
@@ -518,20 +518,20 @@ def train():
 
 def main():
 
-    # local_rank = int(os.environ["LOCAL_RANK"])
-    torch.cuda.set_device(args.local_rank)
+    local_rank = int(os.environ["LOCAL_RANK"])
+    # torch.cuda.set_device(args.local_rank)
     # dist.init_process_group(
     #     backend='nccl',
     #     init_method='tcp://127.0.0.1:{}'.format(args.port),
     #     world_size=torch.cuda.device_count(),
     #     rank=args.local_rank
     # )
-    # torch.cuda.set_device(local_rank)
+    torch.cuda.set_device(local_rank)
     dist.init_process_group(
         backend='nccl',
         init_method='tcp://127.0.0.1:{}'.format(args.port),
         world_size=torch.cuda.device_count(),
-        rank=args.local_rank
+        rank=local_rank
     )
     
     if not osp.exists(configer.get('res_save_pth')): os.makedirs(configer.get('res_save_pth'))

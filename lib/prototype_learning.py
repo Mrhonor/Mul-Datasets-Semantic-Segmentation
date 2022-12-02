@@ -69,4 +69,8 @@ def prototype_learning(configer, prototypes, _c, out_seg, gt_seg, update_prototy
     #     dist.all_reduce(protos.div_(dist.get_world_size()))
     #     prototypes = nn.Parameter(protos, requires_grad=False)
 
+    # rearrange_logit = torch.zeros_like(proto_logits)
+    # for i in range(0, num_prototype):
+    #     rearrange_logit[:, i::num_prototype] = proto_logits[:, i*num_unify_classes:(i+1)*num_unify_classes]
+
     return proto_logits, proto_target, protos
