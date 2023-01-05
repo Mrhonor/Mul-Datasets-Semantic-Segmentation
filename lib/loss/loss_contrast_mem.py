@@ -422,6 +422,8 @@ class PixelContrastLossMulProto(nn.Module, ABC):
         loss = torch.sum(loss) / lb_num 
 
         return loss
+                                                    
+
 
 def test_PixelContrastLossMulProto():
 

@@ -93,7 +93,7 @@
       "weight_decay": 5e-5,
       "warmup_iters": 0,
       "fix_param_iters": 0,
-      "max_iter": 30000
+      "max_iter": 50000
     },
     "train": {
       "scales": [0.5, 1.0, 2.0],
@@ -124,7 +124,9 @@
       "with_ppd": false,
       "ppd_loss_weight": 1,
       "with_hard_lb_contrast": true,
-      "hard_lb_contrast_loss_weight": 1
+      "hard_lb_contrast_loss_weight": 1,
+      "with_consistence": true,
+      "consistent_loss_weight": 1
     },
     "res_save_pth": "res/Mds/",
     "network": {

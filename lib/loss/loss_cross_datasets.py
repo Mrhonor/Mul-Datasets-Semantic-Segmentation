@@ -65,6 +65,10 @@ class CrossDatasetsLoss(nn.Module):
                 self.hard_lb_contrast_loss_weight = self.configer.get('contrast', 'hard_lb_contrast_loss_weight')
                 self.hard_lb_contrast_loss = PixelContrastLossMulProto(configer=configer)
             
+            self.with_consistence = self.configer.get('contrast', 'with_consistence')
+            if self.with_consistence:
+                self.consistent_criterion = nn.KLDivLoss()
+                self.consistent_loss_weight = self.configer.get('contrast', 'consistent_loss_weight')
             
         
         self.upsample = self.configer.get('contrast', 'upsample')
@@ -88,7 +92,7 @@ class CrossDatasetsLoss(nn.Module):
     
         logits, *logits_aux = preds['seg']
         if self.use_contrast:
-            embedding = preds['embed']
+            embedding_ori, embedding_bn = preds['embed']
         
         if self.with_domain_adversarial:
             domain_pred1, domain_pred2 = preds['domain']        
@@ -97,7 +101,6 @@ class CrossDatasetsLoss(nn.Module):
 
         lb = target
  
-
         if "prototypes" in preds:
             prototypes = preds['prototypes']
         else:
@@ -114,7 +117,6 @@ class CrossDatasetsLoss(nn.Module):
             ## proto_logits: (b h_c w_c) * (nk) 每个通道输出分别与prototype的内积
             ## proto_target: 每个通道输出所分配到的prototype的index
             proto_logits, proto_target, new_proto = prototype_learning(self.configer, prototypes, rearr_emb, logits, proto_mask, update_prototype=True)
-            
                             
             proto_targetOntHot = LabelToOneHot(proto_target, self.num_unify_classes*self.num_prototype)
             
@@ -125,6 +127,7 @@ class CrossDatasetsLoss(nn.Module):
         loss_aux = None
         loss_domain = None
         loss_contrast = None
+        KLloss = None
 
         if is_warmup or not self.use_contrast:
             # pred = F.interpolate(input=logits, size=(h, w), mode='bilinear', align_corners=True)
@@ -141,11 +144,9 @@ class CrossDatasetsLoss(nn.Module):
                 loss_aux = [aux_criterion_mul(aux, seg_label_mul) for aux, aux_criterion_mul in zip(pred_aux, self.segLoss_aux_Mul)]
                 # loss_aux = [aux_criterion_mul(aux, seg_label_mul+ seg_label_sig) for aux, aux_criterion_mul, aux_criterion_sig in zip(pred_aux, self.segLoss_aux_Mul, self.segLoss_aux_Sig)]
                 
-
                 loss = loss + self.aux_weight * sum(loss_aux)
                 
-            
-                
+             
         else:
 
             contrast_mask_label, seg_mask_mul = self.AdaptiveMultiProtoRemapping(lb, proto_logits, dataset_ids)
@@ -173,8 +174,11 @@ class CrossDatasetsLoss(nn.Module):
                 
             loss += self.loss_weight * loss_contrast
             
+            if self.with_consistence:
+                KLloss = self.consistent_criterion(embedding_bn, embedding_ori.detach())
+                loss += self.consistent_loss_weight * KLloss  
             
-
+            
 
         if self.with_domain_adversarial:
             domain_label = torch.ones(b, dtype=torch.int) 
@@ -191,7 +195,7 @@ class CrossDatasetsLoss(nn.Module):
             loss = loss + self.domain_loss_weight * loss_domain
             
             
-        return loss, loss_seg, loss_aux, loss_contrast, loss_domain, new_proto
+        return loss, loss_seg, loss_aux, loss_contrast, loss_domain, KLloss, new_proto
 
 
 
@@ -239,9 +243,7 @@ class CrossDatasetsLoss(nn.Module):
             seg_mask_mul[dataset_ids==i] = out_seg_mask
             
         return contrast_mask_label, seg_mask_mul
-        
-
-
+ 
 def test_LabelToOneHot():
     lb = torch.tensor([2, 1,2,-1])
     print(LabelToOneHot(lb, 3))
