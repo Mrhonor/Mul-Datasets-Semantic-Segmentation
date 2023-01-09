@@ -31,6 +31,7 @@ class CrossDatasetsLoss(nn.Module):
         self.classRemapper = eval(self.configer.get('class_remaper'))(configer=self.configer)
         self.num_unify_classes = self.configer.get('num_unify_classes')
         self.num_prototype = self.configer.get('contrast', 'num_prototype')
+        self.temperature = self.configer.get('contrast', 'temperature')
         
         # self.ignore_index = -1
         # if self.configer.exists('loss', 'params') and 'ce_ignore_index' in self.configer.get('loss', 'params'):
@@ -67,7 +68,7 @@ class CrossDatasetsLoss(nn.Module):
             
             self.with_consistence = self.configer.get('contrast', 'with_consistence')
             if self.with_consistence:
-                self.consistent_criterion = nn.KLDivLoss()
+                self.consistent_criterion = nn.KLDivLoss(reduction='batchmean')
                 self.consistent_loss_weight = self.configer.get('contrast', 'consistent_loss_weight')
             
         
@@ -89,10 +90,10 @@ class CrossDatasetsLoss(nn.Module):
     def forward(self, preds, target, dataset_ids, is_warmup=False):
         assert "seg" in preds
         
-    
         logits, *logits_aux = preds['seg']
         if self.use_contrast:
             embedding_ori, embedding_bn = preds['embed']
+            embedding = torch.cat((embedding_ori, embedding_bn), dim=0)
         
         if self.with_domain_adversarial:
             domain_pred1, domain_pred2 = preds['domain']        
@@ -106,17 +107,29 @@ class CrossDatasetsLoss(nn.Module):
         else:
             prototypes = None
 
-        contrast_lb = lb[:, ::self.network_stride, ::self.network_stride]
+        test = True
+
+        if test:
+            contrast_lb = lb[:int(b/2), ::self.network_stride, ::self.network_stride]
+        else:
+            contrast_lb = lb[:, ::self.network_stride, ::self.network_stride]
+        
         
         new_proto = None
         if self.use_contrast:
-            rearr_emb = rearrange(embedding, 'b c h w -> (b h w) c')
-            proto_mask = self.AdaptiveSingleSegRemapping(contrast_lb, dataset_ids)
+            if test:
+                rearr_emb = rearrange(embedding[:int(b/2)], 'b c h w -> (b h w) c')
+                proto_mask = self.AdaptiveSingleSegRemapping(contrast_lb, dataset_ids[:int(b/2)])
+                proto_logits, proto_target, new_proto = prototype_learning(self.configer, prototypes, rearr_emb, logits[:int(b/2)], proto_mask, update_prototype=True)
+            else:
+                rearr_emb = rearrange(embedding, 'b c h w -> (b h w) c')
+                proto_mask = self.AdaptiveSingleSegRemapping(contrast_lb, dataset_ids)
+                proto_logits, proto_target, new_proto = prototype_learning(self.configer, prototypes, rearr_emb, logits, proto_mask, update_prototype=True)
 
             ## n: num of class; k: num of prototype per class
             ## proto_logits: (b h_c w_c) * (nk) 每个通道输出分别与prototype的内积
             ## proto_target: 每个通道输出所分配到的prototype的index
-            proto_logits, proto_target, new_proto = prototype_learning(self.configer, prototypes, rearr_emb, logits, proto_mask, update_prototype=True)
+            
                             
             proto_targetOntHot = LabelToOneHot(proto_target, self.num_unify_classes*self.num_prototype)
             
@@ -148,9 +161,12 @@ class CrossDatasetsLoss(nn.Module):
                 
              
         else:
-
-            contrast_mask_label, seg_mask_mul = self.AdaptiveMultiProtoRemapping(lb, proto_logits, dataset_ids)
-
+            if test:
+                contrast_mask_label, seg_mask_mul = self.AdaptiveMultiProtoRemapping(lb[:int(b/2)], proto_logits, dataset_ids[:int(b/2)])
+                # seg_mask_mul = torch.cat((seg_mask_mul, seg_mask_mul), dim=0)
+                logits = logits[:int(b/2)]
+            else:
+                contrast_mask_label, seg_mask_mul = self.AdaptiveMultiProtoRemapping(lb, proto_logits, dataset_ids)
             # loss_contrast = self.contrast_criterion(embedding, contrast_mask_label, predict, segment_queue) + self.hard_lb_contrast_loss(embedding, hard_lb_mask, segment_queue)
             
             loss_contrast = self.hard_lb_contrast_loss(proto_logits, contrast_mask_label+proto_targetOntHot)
@@ -162,7 +178,10 @@ class CrossDatasetsLoss(nn.Module):
             
             if self.with_aux:
                 # aux_weight_mask = self.classRemapper.GetEqWeightMask(lb, dataset_id)
-                pred_aux = [F.interpolate(input=logit, size=(h, w), mode='bilinear', align_corners=True) for logit in logits_aux]
+                if test:
+                    pred_aux = [F.interpolate(input=logit[:int(b/2)], size=(h, w), mode='bilinear', align_corners=True) for logit in logits_aux]
+                else:
+                    pred_aux = [F.interpolate(input=logit, size=(h, w), mode='bilinear', align_corners=True) for logit in logits_aux]
                 # loss_aux = [aux_criterion_sig(aux[0], seg_mask_sig) + aux_criterion_mul(aux[1], seg_mask_mul) for aux, aux_criterion_mul, aux_criterion_sig in zip(pred_aux, self.segLoss_aux_Mul, self.segLoss_aux_Sig)]
                 loss_aux = [aux_criterion_mul(aux, seg_mask_mul) for aux, aux_criterion_mul in zip(pred_aux, self.segLoss_aux_Mul)]
                 
@@ -175,7 +194,9 @@ class CrossDatasetsLoss(nn.Module):
             loss += self.loss_weight * loss_contrast
             
             if self.with_consistence:
-                KLloss = self.consistent_criterion(embedding_bn, embedding_ori.detach())
+                
+                KLloss = self.consistent_criterion(F.log_softmax(embedding_bn / self.temperature, dim=1), F.softmax(embedding_ori.detach() / self.temperature, dim=1))
+    
                 loss += self.consistent_loss_weight * KLloss  
             
             

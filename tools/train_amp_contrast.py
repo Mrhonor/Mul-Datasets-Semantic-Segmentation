@@ -370,6 +370,7 @@ def train():
         # im = im[perm_index]
         # lb = lb[perm_index]
         for j in range(0, 2):
+            # print(j)
             dataset_lbs = j * torch.ones(lb[j].shape[0]*2).cuda()
             optim.zero_grad()
             with amp.autocast(enabled=configer.get('use_fp16')):
@@ -545,21 +546,21 @@ def train():
 
 def main():
 
-    # local_rank = int(os.environ["LOCAL_RANK"])
-    # # torch.cuda.set_device(args.local_rank)
-    # # dist.init_process_group(
-    # #     backend='nccl',
-    # #     init_method='tcp://127.0.0.1:{}'.format(args.port),
-    # #     world_size=torch.cuda.device_count(),
-    # #     rank=args.local_rank
-    # # )
-    # torch.cuda.set_device(local_rank)
+    local_rank = int(os.environ["LOCAL_RANK"])
+    # torch.cuda.set_device(args.local_rank)
     # dist.init_process_group(
     #     backend='nccl',
     #     init_method='tcp://127.0.0.1:{}'.format(args.port),
     #     world_size=torch.cuda.device_count(),
-    #     rank=local_rank
+    #     rank=args.local_rank
     # )
+    torch.cuda.set_device(local_rank)
+    dist.init_process_group(
+        backend='nccl',
+        init_method='tcp://127.0.0.1:{}'.format(args.port),
+        world_size=torch.cuda.device_count(),
+        rank=local_rank
+    )
     
     if not osp.exists(configer.get('res_save_pth')): os.makedirs(configer.get('res_save_pth'))
 

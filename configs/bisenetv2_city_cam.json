@@ -1,24 +1,24 @@
 {
-    "model_name": "bisenetv2_contrast",
+    "model_name": "bisenetv2_contrast_bn",
     "aux_mode": "train",
     "n_datasets": 2,
     "num_unify_classes": 19,
     "dataset1": {
       "n_cats": 18,
       "data_reader": "CityScapes",
-      "im_root": "/home/cxh/datasets/",
+      "im_root": "/data2/datasets",
       "train_im_anns":"datasets/Cityscapes/train.txt",
       "val_im_anns":"datasets/Cityscapes/val.txt", 
-      "ims_per_gpu": 6,
+      "ims_per_gpu": 4,
       "eval_ims_per_gpu": 2
     },
     "dataset2": {
       "n_cats": 12, 
       "data_reader": "CamVid",
-      "im_root": "/home/cxh/datasets/CamVid",
+      "im_root": "/data2/datasets/CamVid",
       "train_im_anns":"datasets/CamVid/train.txt",
       "val_im_anns":"datasets/CamVid/test.txt", 
-      "ims_per_gpu": 6,
+      "ims_per_gpu": 4,
       "eval_ims_per_gpu": 2
     },
     "n_bn": 2,
@@ -106,7 +106,7 @@
       "cropsize": [512, 1024]
     },
     "use_fp16": false,
-    "use_sync_bn": false,
+    "use_sync_bn": true,
     "contrast": {
       "use_contrast": true,
       "proj_dim": 256,
