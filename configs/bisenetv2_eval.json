@@ -1,5 +1,5 @@
 {
-  "model_name": "bisenetv2_contrast",
+  "model_name": "bisenetv2_contrast_bn",
   "aux_mode": "pred",
   "n_datasets": 2,
   "num_unify_classes": 19,

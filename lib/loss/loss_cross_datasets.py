@@ -107,7 +107,7 @@ class CrossDatasetsLoss(nn.Module):
         else:
             prototypes = None
 
-        test = True
+        test = False
 
         if test:
             contrast_lb = lb[:int(b/2), ::self.network_stride, ::self.network_stride]

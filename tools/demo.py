@@ -17,11 +17,10 @@ from tools.configer import Configer
 torch.set_grad_enabled(False) 
 np.random.seed(123)
 
-
 # args
 parse = argparse.ArgumentParser()
 
-parse.add_argument('--weight_path', type=str, default='res/Mds/model_final.pth',)
+parse.add_argument('--weight_path', type=str, default='res/Mds/model_1000.pth',)
 parse.add_argument('--config', dest='config', type=str, default='configs/bisenetv2_eval.json',)
 parse.add_argument('--img_path', dest='img_path', type=str, default='0001TP_006720.png',)
 args = parse.parse_args()
@@ -81,6 +80,7 @@ class E2EModel(torch.nn.Module):
         x = x.div_(255.)
         x = x.sub_(self.mean).div_(self.std).clone()
         # out = self.net(x)[0]
+        # x = torch.cat((x,x), dim=0)
         out = self.net(x, dataset=1)
         return out
     
