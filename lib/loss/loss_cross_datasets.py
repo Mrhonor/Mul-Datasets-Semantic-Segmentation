@@ -115,7 +115,6 @@ class CrossDatasetsLoss(nn.Module):
             ## proto_target: 每个通道输出所分配到的prototype的index
             proto_logits, proto_target, new_proto = prototype_learning(self.configer, prototypes, rearr_emb, logits, proto_mask, update_prototype=True)
             
-                            
             proto_targetOntHot = LabelToOneHot(proto_target, self.num_unify_classes*self.num_prototype)
             
             proto_targetOntHot = rearrange(proto_targetOntHot, '(b h w) n -> b h w n', b=contrast_lb.shape[0], h=contrast_lb.shape[1], w=contrast_lb.shape[2])
@@ -147,14 +146,14 @@ class CrossDatasetsLoss(nn.Module):
             
                 
         else:
-
+            reweight_matrix = self.AdaptiveGetReweightMatrix(lb, dataset_ids)
             contrast_mask_label, seg_mask_mul = self.AdaptiveMultiProtoRemapping(lb, proto_logits, dataset_ids)
 
             # loss_contrast = self.contrast_criterion(embedding, contrast_mask_label, predict, segment_queue) + self.hard_lb_contrast_loss(embedding, hard_lb_mask, segment_queue)
             
             loss_contrast = self.hard_lb_contrast_loss(proto_logits, contrast_mask_label+proto_targetOntHot)
             
-            loss_seg_mul = self.seg_criterion_mul(logits, seg_mask_mul)
+            loss_seg_mul = self.seg_criterion_mul(logits, seg_mask_mul, reweight_matrix)
             loss_seg = loss_seg_mul 
             loss = loss_seg
 
@@ -163,7 +162,7 @@ class CrossDatasetsLoss(nn.Module):
                 # aux_weight_mask = self.classRemapper.GetEqWeightMask(lb, dataset_id)
                 pred_aux = [F.interpolate(input=logit, size=(h, w), mode='bilinear', align_corners=True) for logit in logits_aux]
                 # loss_aux = [aux_criterion_sig(aux[0], seg_mask_sig) + aux_criterion_mul(aux[1], seg_mask_mul) for aux, aux_criterion_mul, aux_criterion_sig in zip(pred_aux, self.segLoss_aux_Mul, self.segLoss_aux_Sig)]
-                loss_aux = [aux_criterion_mul(aux, seg_mask_mul) for aux, aux_criterion_mul in zip(pred_aux, self.segLoss_aux_Mul)]
+                loss_aux = [aux_criterion_mul(aux, seg_mask_mul, reweight_matrix) for aux, aux_criterion_mul in zip(pred_aux, self.segLoss_aux_Mul)]
                 
                 loss = loss + self.aux_weight * sum(loss_aux)
                 
@@ -239,6 +238,18 @@ class CrossDatasetsLoss(nn.Module):
             seg_mask_mul[dataset_ids==i] = out_seg_mask
             
         return contrast_mask_label, seg_mask_mul
+    
+    def AdaptiveGetReweightMatrix(self, lb, dataset_ids):
+        b, h, w = lb.shape
+        ReweightMatrix_mul = torch.ones_like(lb)
+            
+        for i in range(0, self.n_datasets):
+            if not (dataset_ids == i).any():
+                continue
+            
+            ReweightMatrix_mul[dataset_ids] = self.classRemapper.getReweightMatrix(lb[dataset_ids==i], i)
+            
+        return ReweightMatrix_mul
         
 
 

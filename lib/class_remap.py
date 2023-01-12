@@ -10,6 +10,7 @@ class ClassRemap():
         self.temperature = self.configer.get('contrast', 'temperature')
         self.remapList = []
         self.maxMapNums = [] # 最大映射类别数
+        self.class_weight = []
         # self.class_weight = self.configer.get("class_weight")
         self.num_unify_classes = self.configer.get('num_unify_classes')
         self.softmax = nn.Softmax(dim=1)
@@ -52,8 +53,7 @@ class ClassRemap():
             outLabels.append(mask)
             
         return outLabels
-        
-    
+
     def ContrastRemapping(self, labels, embed, proto, dataset_id):
         is_emb_upsampled = self.configer.get('contrast', 'upsample')
         
@@ -143,11 +143,13 @@ class ClassRemap():
         else:
             raise NotImplementedError("read json errror! no  n_datasets")    
 
-        self.class_weight = []
-        for i in range(0, self.num_unify_classes):
-            self.class_weight.append(self.configer.get('class_weight')[str(i)])
+        for i in range(1, self.n_datasets+1):
+            this_class_weight = []
+            for j in range(0, self.num_unify_classes):
+                this_class_weight.append(self.configer.get('class_weight'+ str(i))[str(j)])
+            this_class_weight = torch.tensor(this_class_weight)
+            self.class_weight.append(this_class_weight)
             
-        self.class_weight = torch.tensor(self.class_weight)
 
         # 读取class remap info
         for i in range(1, self.n_datasets+1):
@@ -187,9 +189,18 @@ class ClassRemap():
     def get_class_weight(self,cur_class_id,dataset_id):
         tgt_classes = self.remapList[dataset_id][cur_class_id]        
         # weight_vec = torch.ones(len(tgt_classes), dtype=torch.float)
-        weight_vec = self.class_weight[tgt_classes]
+        weight_vec = self.class_weight[dataset_id][tgt_classes]
         return weight_vec
         
+    def getReweightMatrix(self, lb, dataset_id):
+        reweight_matrix = torch.ones_like(lb)
+
+        for k, v in self.remapList[dataset_id].items():
+            if len(v) == 1 and self.class_weight[dataset_id][v[0]] != 1:
+                weight = self.class_weight[dataset_id][v[0]]
+                reweight_matrix[lb == int(k)] = weight
+
+        return reweight_matrix
     
         
 class ClassRemapOneHotLabel(ClassRemap):
@@ -529,6 +540,15 @@ def test_ContrastRemapping():
     print(contrast_mask)
     print(seg_mask) 
     
+def test_getReweightMatrix():
+    configer = Configer(configs='configs/test.json')
+    classRemap = ClassRemapOneHotLabel(configer)
+    labels = torch.tensor([[2, 0, 0, 0],
+                           [2, 1, 1, 1],
+                           [2, 2, 1, 3],
+                           [0, 0, 0, 2]]).unsqueeze(0)
+
+    print(classRemap.getReweightMatrix(labels, 1))
 
         
 if __name__ == "__main__":
@@ -538,7 +558,8 @@ if __name__ == "__main__":
     from math import sin, cos
     from einops import rearrange
     
-    test_ContrastRemapping()
+    # test_ContrastRemapping()
+    test_get_reweight_matrix()
     # pi = 3.14
 
     # configer = Configer(configs='configs/bisenetv2_city_cam.json')
