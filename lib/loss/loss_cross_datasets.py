@@ -146,7 +146,7 @@ class CrossDatasetsLoss(nn.Module):
             
                 
         else:
-            reweight_matrix = self.AdaptiveGetReweightMatrix(lb, dataset_ids)
+            reweight_matrix = self.AdaptiveGetReweightMatrix(lb, dataset_ids).contiguous().view(-1)
             contrast_mask_label, seg_mask_mul = self.AdaptiveMultiProtoRemapping(lb, proto_logits, dataset_ids)
 
             # loss_contrast = self.contrast_criterion(embedding, contrast_mask_label, predict, segment_queue) + self.hard_lb_contrast_loss(embedding, hard_lb_mask, segment_queue)
@@ -247,7 +247,7 @@ class CrossDatasetsLoss(nn.Module):
             if not (dataset_ids == i).any():
                 continue
             
-            ReweightMatrix_mul[dataset_ids] = self.classRemapper.getReweightMatrix(lb[dataset_ids==i], i)
+            ReweightMatrix_mul[dataset_ids==i] = self.classRemapper.getReweightMatrix(lb[dataset_ids==i], i)
             
         return ReweightMatrix_mul
         
