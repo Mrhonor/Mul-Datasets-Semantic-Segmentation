@@ -20,9 +20,9 @@ np.random.seed(123)
 # args
 parse = argparse.ArgumentParser()
 
-parse.add_argument('--weight_path', type=str, default='res/Mds/model_1000.pth',)
+parse.add_argument('--weight_path', type=str, default='res/Mds/Reweight/model_final.pth',)
 parse.add_argument('--config', dest='config', type=str, default='configs/bisenetv2_eval.json',)
-parse.add_argument('--img_path', dest='img_path', type=str, default='0001TP_006720.png',)
+parse.add_argument('--img_path', dest='img_path', type=str, default='0001TP_007380.png',)
 args = parse.parse_args()
 # cfg = set_cfg_from_file(args.config)
 configer = Configer(configs=args.config)
@@ -81,7 +81,7 @@ class E2EModel(torch.nn.Module):
         x = x.sub_(self.mean).div_(self.std).clone()
         # out = self.net(x)[0]
         # x = torch.cat((x,x), dim=0)
-        out = self.net(x, dataset=1)
+        out = self.net(x, dataset=0)
         return out
     
 ## mean: [0.3038, 0.3383, 0.3034] std: [0.2071, 0.2088, 0.2090]    

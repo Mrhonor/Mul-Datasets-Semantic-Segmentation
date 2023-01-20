@@ -68,7 +68,7 @@ class CrossDatasetsLoss(nn.Module):
             
             self.with_consistence = self.configer.get('contrast', 'with_consistence')
             if self.with_consistence:
-                self.consistent_criterion = nn.KLDivLoss(reduction='batchmean')
+                self.consistent_criterion = nn.KLDivLoss(reduction='mean')
                 self.consistent_loss_weight = self.configer.get('contrast', 'consistent_loss_weight')
             
         
@@ -107,7 +107,7 @@ class CrossDatasetsLoss(nn.Module):
         else:
             prototypes = None
 
-        test = False
+        test = True
 
         if test:
             contrast_lb = lb[:int(b/2), ::self.network_stride, ::self.network_stride]
@@ -164,14 +164,17 @@ class CrossDatasetsLoss(nn.Module):
             if test:
                 contrast_mask_label, seg_mask_mul = self.AdaptiveMultiProtoRemapping(lb[:int(b/2)], proto_logits, dataset_ids[:int(b/2)])
                 # seg_mask_mul = torch.cat((seg_mask_mul, seg_mask_mul), dim=0)
-                logits = logits[:int(b/2)]
+                
             else:
                 contrast_mask_label, seg_mask_mul = self.AdaptiveMultiProtoRemapping(lb, proto_logits, dataset_ids)
             # loss_contrast = self.contrast_criterion(embedding, contrast_mask_label, predict, segment_queue) + self.hard_lb_contrast_loss(embedding, hard_lb_mask, segment_queue)
             
             loss_contrast = self.hard_lb_contrast_loss(proto_logits, contrast_mask_label+proto_targetOntHot)
             
-            loss_seg_mul = self.seg_criterion_mul(logits, seg_mask_mul)
+            if test:
+                loss_seg_mul = self.seg_criterion_mul(logits[:int(b/2)], seg_mask_mul)
+            else:
+                loss_seg_mul = self.seg_criterion_mul(logits, seg_mask_mul)
             loss_seg = loss_seg_mul 
             loss = loss_seg
 
@@ -195,7 +198,7 @@ class CrossDatasetsLoss(nn.Module):
             
             if self.with_consistence:
                 
-                KLloss = self.consistent_criterion(F.log_softmax(embedding_bn / self.temperature, dim=1), F.softmax(embedding_ori.detach() / self.temperature, dim=1))
+                KLloss = self.consistent_criterion(F.log_softmax(logits[int(b/2):] / self.temperature, dim=1), F.softmax(logits[:int(b/2)].detach() / self.temperature, dim=1))
     
                 loss += self.consistent_loss_weight * KLloss  
             
@@ -217,7 +220,6 @@ class CrossDatasetsLoss(nn.Module):
             
             
         return loss, loss_seg, loss_aux, loss_contrast, loss_domain, KLloss, new_proto
-
 
 
     def AdaptiveSingleSegRemapping(self, lb, dataset_ids):

@@ -128,7 +128,7 @@ labels_info_eval = [
     {"hasInstances": True, "category": "vehicle", "catid": 7, "name": "bicycle", "ignoreInEval": False, "id": 33, "color": [119, 11, 32], "trainId": 18},
     {"hasInstances": False, "category": "vehicle", "catid": 7, "name": "license plate", "ignoreInEval": True, "id": -1, "color": [0, 0, 142], "trainId": -1}
 ]
-
+labels_info_train = labels_info_eval
 ## CityScapes -> {unify class1, unify class2, ...}
 # Wall -> {Wall, fence}
 
@@ -140,7 +140,8 @@ class CityScapes(BaseDataset):
                 dataroot, annpath, trans_func, mode)
     
         if mode == 'train':
-            self.n_cats = 18
+            # self.n_cats = 18
+            self.n_cats = 19
         elif mode == 'eval':
             self.n_cats = 19
         
