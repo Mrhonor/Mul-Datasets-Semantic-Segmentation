@@ -18,6 +18,7 @@ class ClassRemap():
         self.num_prototype = self.configer.get('contrast', 'num_prototype')
         self.Upsample = nn.Upsample(scale_factor=self.network_stride, mode='nearest')
         self.max_iter = self.configer.get('lr', 'max_iter')
+        self.reweight = self.configer.get('loss', 'reweight')
         self._unpack()
         
     def SingleSegRemapping(self, labels, dataset_id):
@@ -143,12 +144,13 @@ class ClassRemap():
         else:
             raise NotImplementedError("read json errror! no  n_datasets")    
 
-        for i in range(1, self.n_datasets+1):
-            this_class_weight = []
-            for j in range(0, self.num_unify_classes):
-                this_class_weight.append(self.configer.get('class_weight'+ str(i))[str(j)])
-            this_class_weight = torch.tensor(this_class_weight)
-            self.class_weight.append(this_class_weight)
+        if self.reweight:
+            for i in range(1, self.n_datasets+1):
+                this_class_weight = []
+                for j in range(0, self.num_unify_classes):
+                    this_class_weight.append(self.configer.get('class_weight'+ str(i))[str(j)])
+                this_class_weight = torch.tensor(this_class_weight)
+                self.class_weight.append(this_class_weight)
             
 
         # 读取class remap info
@@ -170,7 +172,7 @@ class ClassRemap():
     
     def ReverseSegRemap(self, preds, dataset_id):
         # logits : B x h x w
-        Remap_pred = torch.ones_like(preds) * self.ignore_index
+        Remap_pred = torch.ones_like(preds) * 0
         for k, v in self.remapList[dataset_id].items():
             for lb in v:
                 Remap_pred[preds == int(lb)] = int(k)
@@ -471,6 +473,12 @@ class ClassRemapOneHotLabel(ClassRemap):
             
             
             if len(v) == 1: 
+                # print("simscore : ",simScore.shape)
+                # print((OneColContrastLb == int(k)).any())
+                # print("v: ",v[0])
+                # print("k: ", k)
+                # print("dataset_id: ", dataset_id)
+                # print("shape: ", simScore[OneColContrastLb == k, v[0]*self.num_prototype:(v[0]+1)*self.num_prototype].shape)
                 MaxSim, MaxSimIndex = torch.max(simScore[OneColContrastLb == k, v[0]*self.num_prototype:(v[0]+1)*self.num_prototype], dim=1)
                 contrast_lb_mask[contrast_lb==int(k), v[0]*self.num_prototype + MaxSimIndex] = 1
                 

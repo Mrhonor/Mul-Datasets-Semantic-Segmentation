@@ -2,7 +2,7 @@
   "model_name": "bisenetv2_contrast",
   "aux_mode": "pred",
   "n_datasets": 2,
-  "num_unify_classes": 19,
+  "num_unify_classes": 41,
   "dataset1": {
     "n_cats": 18,
     "data_reader": "CityScapes",
@@ -22,7 +22,7 @@
     "ims_per_gpu": 1,
     "eval_ims_per_gpu": 1
   },
-  "n_bn": 2,
+  "n_bn": 1,
   "class_remap1":{
     "0": [0], 
     "1": [1],

@@ -68,8 +68,8 @@ labels_info = [
     {"name": "RD normal street", "id": 50, "color": [255, 0, 255], "trainId": 33},
     {"name": "Sky", "id": 51, "color": [135, 206, 255], "trainId": 34},
     {"name": "Buildings", "id": 52, "color": [241, 230, 255], "trainId": 35},
-    {"name": "Blurred area", "id": 53, "color": [96, 69, 143], "trainId": 36},
-    {"name": "Rain dirt", "id": 54, "color": [53, 46, 82], "trainId": 37}
+    {"name": "Blurred area", "id": 53, "color": [96, 69, 143], "trainId": -1},
+    {"name": "Rain dirt", "id": 54, "color": [53, 46, 82], "trainId": -1}
 ]
 
 class A2D2Data(Dataset):
@@ -79,7 +79,8 @@ class A2D2Data(Dataset):
 
         self.mode = mode
         self.trans_func = trans_func
-        self.n_cats = 38
+        # self.n_cats = 38
+        self.n_cats = 36
         self.lb_map = np.arange(256).astype(np.uint8)
 
         for el in labels_info:

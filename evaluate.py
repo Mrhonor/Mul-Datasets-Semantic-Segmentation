@@ -36,6 +36,7 @@ from tools.configer import Configer
 
 CITY_ID = 0
 CAM_ID = 1
+A2D2_ID = 2
 
 def get_round_size(size, divisor=32):
     return [math.ceil(el / divisor) * divisor for el in size]
@@ -141,13 +142,10 @@ class MscEvalV0_Contrast(object):
                     probs += torch.softmax(logits, dim=1)
             preds = torch.argmax(probs, dim=1)
 
-            # if dataset_id == CITY_ID:
-            #     # CityScapes数据集一一对应不需要逆映射
-            #     preds = self.class_Remaper.ReverseSegRemap(preds, dataset_id)
 
-            if dataset_id == CAM_ID:
-                # CityScapes数据集一一对应不需要逆映射
-                preds = self.class_Remaper.ReverseSegRemap(preds, dataset_id)
+            # if dataset_id == CAM_ID:
+            #     # CityScapes数据集一一对应不需要逆映射
+            preds = self.class_Remaper.ReverseSegRemap(preds, dataset_id)
 
             keep = label != self.ignore_label
 
@@ -633,7 +631,7 @@ def eval_model_contrast(configer, net):
     n_datasets = configer.get("n_datasets")
 
     # dl_cam = get_data_loader(cfg_cam, mode='val', distributed=is_dist)
-    dl_city, dl_cam = get_data_loader(configer, aux_mode='eval', distributed=is_dist)
+    dl_city, dl_cam, dl_a2d2 = get_data_loader(configer, aux_mode='eval', distributed=is_dist)
     net.eval()
     # net.train()
 
@@ -642,13 +640,15 @@ def eval_model_contrast(configer, net):
 
     single_scale = MscEvalV0_Contrast(configer, (1., ), False)
     
-    mIOU_city = single_scale(net, dl_city, 19, CITY_ID)
+    mIOU_city = single_scale(net, dl_city, configer.get('dataset1', 'n_cats'), CITY_ID)
     mIOU_cam = single_scale(net, dl_cam, configer.get('dataset2', 'n_cats'), CAM_ID)
+    mIOU_a2d2 = single_scale(net, dl_a2d2, configer.get('dataset3', 'n_cats'), A2D2_ID)
 
     heads.append('single_scale')
     mious.append(mIOU_cam)
     mious.append(mIOU_city)
-    logger.info('Cam single mIOU is: %s\nCityScapes single mIOU is: %s\n', mIOU_cam, mIOU_city)
+    mious.append(mIOU_a2d2)
+    logger.info('Cam single mIOU is: %s\nCityScapes single mIOU is: %s\A2D2 single mIOU is: %s\n', mIOU_cam, mIOU_city, mIOU_a2d2)
 
     net.aux_mode = org_aux
     return heads, mious

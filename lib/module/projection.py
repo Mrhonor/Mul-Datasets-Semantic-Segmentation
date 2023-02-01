@@ -17,7 +17,6 @@ class ProjectionHead(nn.Module):
         if self.up_sample:
             self.Upsample = nn.Upsample(scale_factor=up_factor, mode='nearest')
             
-        
 
         if proj == 'linear':
             raise Exception("Not Imp error")

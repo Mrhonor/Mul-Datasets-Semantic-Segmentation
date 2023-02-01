@@ -62,9 +62,9 @@ def is_distributed():
 def parse_args():
     parse = argparse.ArgumentParser()
     parse.add_argument('--local_rank', dest='local_rank', type=int, default=-1,)
-    parse.add_argument('--port', dest='port', type=int, default=16854,)
+    parse.add_argument('--port', dest='port', type=int, default=16855,)
     parse.add_argument('--finetune_from', type=str, default=None,)
-    parse.add_argument('--config', dest='config', type=str, default='configs/bisenetv2_city_cam.json',)
+    parse.add_argument('--config', dest='config', type=str, default='configs/bisenetv2_city_cam_a2d2.json',)
     return parse.parse_args()
 
 # 使用绝对路径
@@ -77,6 +77,7 @@ configer = Configer(configs=args.config)
 
 CITY_ID = 0
 CAM_ID = 1
+A2D2_ID = 2
 
 ClassRemaper = ClassRemap(configer=configer)
 
@@ -104,6 +105,31 @@ def set_model(configer):
         net = nn.SyncBatchNorm.convert_sync_batchnorm(net)
     net.cuda()
     net.train()
+    return net
+
+def set_ema_model(configer):
+    logger = logging.getLogger()
+    # net = NULL
+    # if config_files is NULL:
+    #     net = model_factory[config_file.model_type](config_file.n_cats)
+    # 修改判定
+    # if len(config_files) == 0:
+    #     net = model_factory[config_file.model_type](config_file.n_cats)
+    # else:
+    #     n_classes = [cfg.n_cats for cfg in config_files]
+    #     net = model_factory[config_file.model_type](config_file.n_cats, 'train', 2, *n_classes)
+
+    net = model_factory[configer.get('model_name') + '_ema'](configer)
+
+    if configer.get('train', 'finetune'):
+        logger.info(f"ema load pretrained weights from {configer.get('train', 'finetune_from')}")
+        net.load_state_dict(torch.load(configer.get('train', 'finetune_from'), map_location='cpu'), strict=False)
+
+        
+    if configer.get('use_sync_bn'): 
+        net = nn.SyncBatchNorm.convert_sync_batchnorm(net)
+    net.cuda()
+    net.eval()
     return net
 
 def set_optimizer(model, configer):
@@ -168,8 +194,9 @@ def set_meters(configer):
             for i in range(configer.get('loss', 'aux_num'))]
     loss_contrast_meter = AvgMeter('loss_contrast')
     loss_domain_meter = AvgMeter('loss_domian')
+    kl_loss_meter = AvgMeter('Kl_loss')
             
-    return time_meter, loss_meter, loss_pre_meter, loss_aux_meters, loss_contrast_meter, loss_domain_meter
+    return time_meter, loss_meter, loss_pre_meter, loss_aux_meters, loss_contrast_meter, loss_domain_meter, kl_loss_meter
 
 def dequeue_and_enqueue(configer, seg_out, keys, labels,
                             segment_queue, iter, dataset_id):
@@ -274,6 +301,7 @@ def train():
     logger = logging.getLogger()
     is_dist = dist.is_initialized()
     writer = SummaryWriter(configer.get('res_save_pth'))
+    use_ema = configer.get('use_ema')
     ## dataset
     # dl = get_data_loader(cfg, mode='train', distributed=is_dist)
     
@@ -281,6 +309,9 @@ def train():
     # dl_cam = get_data_loader(configer, distributed=is_dist)
     ## model
     net = set_model(configer=configer)
+    if use_ema:
+        ema_net = set_ema_model(configer=configer)
+        
     contrast_losses = set_contrast_loss(configer)
 
     ## optimizer
@@ -290,7 +321,7 @@ def train():
     scaler = amp.GradScaler()
 
     ## meters
-    time_meter, loss_meter, loss_pre_meter, loss_aux_meters, loss_contrast_meter, loss_domain_meter = set_meters(configer)
+    time_meter, loss_meter, loss_pre_meter, loss_aux_meters, loss_contrast_meter, loss_domain_meter, kl_loss_meter = set_meters(configer)
     ## lr scheduler
     lr_schdr = WarmupPolyLrScheduler(optim, power=0.9,
         max_iter=configer.get('lr','max_iter'), warmup_iter=configer.get('lr','warmup_iters'),
@@ -327,18 +358,19 @@ def train():
     with_domain_adversarial = configer.get('network', 'with_domain_adversarial')
 
     for i in range(starti, configer.get('lr','max_iter') + starti):
+
         configer.plus_one('iter')
 
         try:
             im_lb, dataset_lbs = next(dl_iter)
             im, lb = im_lb
-            if not im.size()[0] == (configer.get('dataset1', 'ims_per_gpu') + configer.get('dataset2', 'ims_per_gpu')):
+            if not im.size()[0] == (configer.get('dataset1', 'ims_per_gpu') + configer.get('dataset2', 'ims_per_gpu') + configer.get('dataset3', 'ims_per_gpu')):
                 raise StopIteration
         except StopIteration:
             city_iter = iter(dl_iter)
             im_lb, dataset_lbs = next(dl_iter)
             im, lb = im_lb
-        epoch = i * (configer.get('dataset1', 'ims_per_gpu') + configer.get('dataset2', 'ims_per_gpu')) / 2976
+        epoch = i * (configer.get('dataset1', 'ims_per_gpu') + configer.get('dataset2', 'ims_per_gpu') + configer.get('dataset3', 'ims_per_gpu')) / 32976
 
         im = im.cuda()
         lb = lb.cuda()
@@ -348,8 +380,6 @@ def train():
 
 
         lb = torch.squeeze(lb, 1)
-        lb_city = lb[dataset_lbs==CITY_ID]
-        lb_cam = lb[dataset_lbs==CAM_ID]
         # print(lb_city.shape)
         # print(lb_cam.shape)
         # perm_index = torch.randperm(im.shape[0])
@@ -358,12 +388,12 @@ def train():
 
         optim.zero_grad()
         with amp.autocast(enabled=configer.get('use_fp16')):
-            if finetune and i >= fix_param_iters + aux_iter:
-                finetune = False
-                if is_distributed():
-                    net.module.switch_require_grad_state(True)
-                else:
-                    net.switch_require_grad_state(True)
+            # if finetune and i >= fix_param_iters + aux_iter:
+            #     finetune = False
+            #     if is_distributed():
+            #         net.module.switch_require_grad_state(True)
+            #     else:
+            #         net.switch_require_grad_state(True)
                 
             
             ## 修改为多数据集模式
@@ -376,10 +406,10 @@ def train():
                     net.set_train_dataset_aux(False)    
                             
             out = net(im)
+            
             # logits, *logits_aux = out['seg']
             # emb = out['embed']
             
-            with_embed = True if i >= contrast_warmup_iters else False
 
             adaptive_out = {}
             for k, v in out.items():
@@ -393,6 +423,11 @@ def train():
                     adaptive_out[k] = logits_list
                 else:
                     adaptive_out[k] = v[0]
+
+            if use_ema:
+                with torch.no_grad():
+                    ema_out = ema_net(im)
+                    adaptive_out['ema'] = ema_out
 
             if is_distributed():
                 adaptive_out['prototypes'] = net.module.prototypes
@@ -409,7 +444,7 @@ def train():
                 is_warmup = False
                 
                 
-            backward_loss, loss_seg, loss_aux, loss_contrast, loss_domain, new_proto = contrast_losses(adaptive_out, lb, dataset_lbs, is_warmup)
+            backward_loss, loss_seg, loss_aux, loss_contrast, loss_domain, kl_loss, new_proto = contrast_losses(adaptive_out, lb, dataset_lbs, is_warmup)
 
         if is_distributed():
             net.module.PrototypesUpdate(new_proto)
@@ -437,9 +472,13 @@ def train():
         scaler.step(optim)
         scaler.update()
         torch.cuda.synchronize()
+        if use_ema:
+            ema_net.EMAUpdate(net.module)
         # print('synchronize')
         time_meter.update()
         loss_meter.update(backward_loss.item())
+        if kl_loss:
+            kl_loss_meter.update(kl_loss.item())
         
         # loss_pre_meter.update(loss_pre.item())
         
@@ -462,10 +501,10 @@ def train():
             lr = sum(lr) / len(lr)
             print_log_msg(
                 i, 0, epoch, configer.get('lr', 'max_iter')+starti, lr, time_meter, loss_meter,
-                loss_pre_meter, loss_aux_meters, loss_contrast_meter, loss_domain_meter)
+                loss_pre_meter, loss_aux_meters, loss_contrast_meter, loss_domain_meter, kl_loss_meter)
             
 
-        if (i + 1) % 1000 == 0:
+        if (i + 1) % 2000 == 0:
             save_pth = osp.join(configer.get('res_save_pth'), 'model_{}.pth'.format(i+1))
             logger.info('\nsave models to {}'.format(save_pth))
 

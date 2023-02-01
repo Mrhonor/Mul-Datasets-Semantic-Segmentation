@@ -13,9 +13,9 @@ from timm.models.layers import trunc_normal_
 
 from lib.sinkhorn import distributed_sinkhorn
 from lib.momentum_update import momentum_update
+from lib.module.module_helper import ConvBN, ConvBNReLU
 from timm.models.layers import trunc_normal_
 from einops import rearrange, repeat
-from lib.module.module_helper import ConvBNReLU, ConvBN
 import torch.distributed as dist
 
 
@@ -23,6 +23,7 @@ import torch.distributed as dist
 # backbone_url = '/root/autodl-tmp/project/BiSeNet/pth/backbone_v2.pth'
 backbone_url = './res/backbone_v2.pth'
 # backbone_url = './res/model_3000.pth'
+
 
 
 class UpSample(nn.Module):
@@ -393,10 +394,10 @@ class SegmentHead(nn.Module):
         return feats
 
 
-class BiSeNetV2_Contrast(nn.Module):
+class BiSeNetV2_Contrast_BN(nn.Module):
 
     def __init__(self, configer):
-        super(BiSeNetV2_Contrast, self).__init__()
+        super(BiSeNetV2_Contrast_BN, self).__init__()
         self.configer = configer
         self.aux_mode = self.configer.get('aux_mode')
         self.num_unify_classes = self.configer.get("num_unify_classes")
@@ -789,102 +790,6 @@ class BiSeNetV2_Contrast(nn.Module):
         #     dist.all_reduce(protos.div_(dist.get_world_size()))
         #     self.prototypes = nn.Parameter(protos, requires_grad=False)
             
-            
-class BiSeNetV2_Contrast_Teacher(nn.Module):
-
-    def __init__(self, configer):
-        super(BiSeNetV2_Contrast_Teacher, self).__init__()
-        self.configer = configer
-        self.aux_mode = self.configer.get('aux_mode')
-        self.num_unify_classes = self.configer.get("num_unify_classes")
-        self.n_datasets = self.configer.get('n_datasets')
-        self.n_bn = self.configer.get("n_bn")
-        self.segment = SegmentBranch(n_bn=self.n_bn)
-        self.network_stride = self.configer.get('network', 'stride')
-        ## unify proj head
-        self.proj_dim = self.configer.get('contrast', 'proj_dim')
-        self.upsample = self.configer.get('contrast', 'upsample') 
-        self.downsample = self.configer.get('contrast', 'downsample')
-        self.num_prototype = self.configer.get('contrast', 'num_prototype')
-        self.coefficient = self.configer.get('contrast', 'coefficient')
-   
-        self.use_contrast = self.configer.get('contrast', 'use_contrast')
-
-        if self.use_contrast:
-            self.projHead = ProjectionHead(dim_in=128, proj_dim=self.proj_dim, up_factor=self.network_stride, bn_type='torchbn', up_sample=self.upsample, down_sample=self.downsample, n_bn=self.n_bn)
-            
-
-        self.prototypes = nn.Parameter(torch.zeros(self.num_unify_classes, self.num_prototype, self.proj_dim),
-                                       requires_grad=False)
-
-
-    def forward(self, x, *other_x, dataset=0, perm_index=None):
-        _, _, _, _, feat_s = self.segment(x, dataset, *other_x)
-
-        emb = self.projHead(dataset, *feat_s)[0]
-        shapedProto = rearrange(self.prototypes, ' n k d -> (n k) d')
-        # rearrange_Proto = torch.zeros_like(shapedProto)
-        # for i in range(0, self.num_prototype):
-        #     rearrange_Proto[i::self.num_prototype, :] = shapedProto[i*self.num_unify_classes:(i+1)*self.num_unify_classes, :]
-
-        simScore = torch.einsum('bchw,nc->bnhw', emb, shapedProto)
-        
-        return simScore
-        # if self.upsample is False:
-        #     simScore = [self.up_sample(score) for score in simScore] 
-        # print(simScore[0].argmax(dim=1).shape)
-        
-        # _, MaxSimIndex = simScore.max(dim=1)
-        # OutIndex = torch.ones_like(MaxSimIndex) * 15
-        # OutIndex[simScore[:, 15, :, :] < 0.3] = self.num_unify_classes
-        
-        # ClassRemaper = ClassRemap(self.configer)
-        
-        # for k, v in ClassRemaper.remapList[dataset].items():
-        #     for class_id in v:
-        #         this_classes = MaxSimIndex[MaxSimIndex==class_id]
-        #         out_vector = torch.ones_like(this_classes) * self.num_unify_classes
-        #         len_this_classes = this_classes.shape[0]
-                
-        #         topkindex = torch.topk(this_classes, int(len_this_classes * 0.25), sorted=False)[1]
-        #         out_vector[topkindex] = this_classes[topkindex]
-        #         MaxSimIndex[MaxSimIndex==class_id] = out_vector
-        
-        # return (MaxSimIndex / self.num_prototype).long()
-
-
-    def PrototypesUpdate(self, new_proto):
-        self.prototypes = nn.Parameter(F.normalize(new_proto, p=2, dim=-1),
-                                        requires_grad=False)
-
-        # if dist.is_available() and dist.is_initialized():
-        #     protos = self.prototypes.data.clone()
-        #     dist.all_reduce(protos.div_(dist.get_world_size()))
-        #     self.prototypes = nn.Parameter(protos, requires_grad=False)   
-        
-    def EMAUpdate(self, student_net):
-        std_gen = student_net.named_parameters()
-        for param_k in self.named_parameters():
-            try:
-                param_q = next(std_gen)
-                while param_q[0] != param_k[0]:
-                    param_q = next(std_gen)
-
-            except:
-                std_gen = student_net.named_parameters()
-
-            param_k[1].data = param_k[1].data.clone() * 0.999 + param_q[1].data.clone() * (1. - 0.999)
-            
-        std_buf = student_net.named_buffers()
-        for buffer_k in self.named_buffers():
-            try:
-                buffer_q = next(std_buf)
-                while buffer_q[0] != buffer_k[0]:
-                    buffer_q = next(std_buf)
-            except:
-                std_buf = student_net.named_buffers()
-                
-            buffer_k[1].data = buffer_q[1].data.clone()         
 
 if __name__ == "__main__":
 
