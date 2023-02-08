@@ -32,6 +32,7 @@ class CrossDatasetsLoss(nn.Module):
         self.num_unify_classes = self.configer.get('num_unify_classes')
         self.num_prototype = self.configer.get('contrast', 'num_prototype')
         self.temperature = self.configer.get('contrast', 'temperature')
+        self.with_mulbn = self.configer.get('contrast', 'with_mulbn')
         self.reweight = self.configer.get('loss', 'reweight')
         self.use_ema = self.configer.get('use_ema')
         
@@ -94,7 +95,10 @@ class CrossDatasetsLoss(nn.Module):
         
         logits, *logits_aux = preds['seg']
         if self.use_contrast:
-            embedding = preds['embed']
+            if self.with_mulbn:
+                embedding, embedding_others = preds['embed']
+            else:
+                embedding, embedding_others = preds['embed']
             # embedding = torch.cat((embedding_ori, embedding_bn), dim=0)
         
         if self.with_domain_adversarial:
@@ -118,6 +122,7 @@ class CrossDatasetsLoss(nn.Module):
         
         
         new_proto = None
+        max_index_others = None
         if self.use_contrast:
             rearr_emb = rearrange(embedding, 'b c h w -> (b h w) c')
             proto_mask = self.AdaptiveSingleSegRemapping(contrast_lb, dataset_ids)
@@ -130,6 +135,14 @@ class CrossDatasetsLoss(nn.Module):
             proto_targetOntHot = LabelToOneHot(proto_target, self.num_unify_classes*self.num_prototype)
             
             proto_targetOntHot = rearrange(proto_targetOntHot, '(b h w) n -> b h w n', b=contrast_lb.shape[0], h=contrast_lb.shape[1], w=contrast_lb.shape[2])
+            
+            if self.with_mulbn:
+                rearr_emb_others = [rearrange(emb, 'b c h w -> (b h w) c') for emb in embedding_others] 
+                max_index_others = [torch.max(emb, dim=1)[1] for emb in rearr_emb_others]
+                # proto_targetOntHot_others = [LabelToOneHot(tgt, self.num_unify_classes*self.num_prototype) for tgt in max_index_others]
+                # proto_targetOntHot_others = [rearrange(tgt, '(b h w) n -> b h w n', b=contrast_lb.shape[0], h=contrast_lb.shape[1], w=contrast_lb.shape[2]) for tgt in proto_targetOntHot_others] 
+                
+                # cosine_similarity = torch.mm(_c, prototypes.view(-1, prototypes.shape[-1]).t())
 
 
         loss_aux = None
@@ -160,21 +173,24 @@ class CrossDatasetsLoss(nn.Module):
             if self.reweight:
                 reweight_matrix = self.AdaptiveGetReweightMatrix(lb, dataset_ids).contiguous().view(-1)
                 
-            
-
             # loss_contrast = self.contrast_criterion(embedding, contrast_mask_label, predict, segment_queue) + self.hard_lb_contrast_loss(embedding, hard_lb_mask, segment_queue)
             
             # proto_targetOntHot 单标签， contrast_mask_label 多标签
             if not self.use_ema:
-                contrast_mask_label, seg_mask_mul = self.AdaptiveMultiProtoRemapping(lb, proto_logits, dataset_ids)
+                contrast_mask_label, seg_mask_mul = self.AdaptiveMultiProtoRemapping(lb, proto_logits, dataset_ids, max_index_others)
             else:
-                contrast_mask_label, _ = self.AdaptiveMultiProtoRemapping(lb, proto_logits, dataset_ids)
+                contrast_mask_label, _ = self.AdaptiveMultiProtoRemapping(lb, proto_logits, dataset_ids, max_index_others)
                 rearr_ema = rearrange(ema_pred, 'b c h w -> (b h w) c')
                 _, seg_mask_mul = self.AdaptiveMultiProtoRemapping(lb, rearr_ema, dataset_ids)
                 
                 
             loss_contrast = self.hard_lb_contrast_loss(proto_logits, contrast_mask_label+proto_targetOntHot)
-            
+            # if self.with_mulbn:
+            #     for i in range(0, self.n_datasets):
+            #         proto_logits_other = torch.mm(rearr_emb_others[i], prototypes.view(-1, prototypes.shape[-1]).t())
+            #         loss_contrast += self.hard_lb_contrast_loss(proto_logits_other, contrast_mask_label+proto_targetOntHot) 
+
+
             loss_seg_mul = self.seg_criterion_mul(logits, seg_mask_mul, reweight_matrix)
             loss_seg = loss_seg_mul 
             loss = loss_seg
@@ -247,7 +263,7 @@ class CrossDatasetsLoss(nn.Module):
             
         return seg_label_mul
 
-    def AdaptiveMultiProtoRemapping(self, lb, proto_logits, dataset_ids):
+    def AdaptiveMultiProtoRemapping(self, lb, proto_logits, dataset_ids, max_index_others=None):
         b, h, w = lb.shape
         seg_mask_mul = torch.zeros(b,h,w,self.num_unify_classes, dtype=torch.bool)
         contrast_mask_label = torch.zeros(b, int(h/self.network_stride), int(w/self.network_stride), self.num_unify_classes*self.num_prototype, dtype=torch.bool)
@@ -260,7 +276,7 @@ class CrossDatasetsLoss(nn.Module):
                 continue
             re_proto_logits = rearrange(proto_logits, '(b h w) n -> b h w n', b=contrast_mask_label.shape[0], h=contrast_mask_label.shape[1], w=contrast_mask_label.shape[2])
             this_proto_logits = rearrange(re_proto_logits[dataset_ids==i], 'b h w n -> (b h w) n')
-            out_contrast_mask, out_seg_mask = self.classRemapper.MultiProtoRemapping(lb[dataset_ids==i], this_proto_logits, i)
+            out_contrast_mask, out_seg_mask = self.classRemapper.MultiProtoRemapping(lb[dataset_ids==i], this_proto_logits, i, max_index_others)
             contrast_mask_label[dataset_ids==i] = out_contrast_mask
             seg_mask_mul[dataset_ids==i] = out_seg_mask
             

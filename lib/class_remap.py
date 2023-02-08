@@ -375,7 +375,7 @@ class ClassRemapOneHotLabel(ClassRemap):
         return contrast_lb_mask, seg_mask
   
     
-    def MultiProtoRemapping(self, labels, proto_logits, dataset_id):
+    def MultiProtoRemapping(self, labels, proto_logits, dataset_id, max_index_others=None):
         contrast_lb = labels[:, ::self.network_stride, ::self.network_stride]
         
         B, H, W = labels.shape
@@ -397,7 +397,12 @@ class ClassRemapOneHotLabel(ClassRemap):
         # simScore = self.softmax(simScore)
         simScore = proto_logits
         OneColContrastLb = contrast_lb.contiguous().view(-1)
+        MaxSim_All, MaxSimIndex_All = torch.max(simScore, dim=1)
         
+        if max_index_others != None:
+            for max_other in max_index_others:
+                MaxSimIndex_All[MaxSimIndex_All != max_other] = self.ignore_index
+                
         ## 循环两遍，单标签覆盖多标签
         for k, v in self.remapList[dataset_id].items():
             # 判断是否为空
@@ -408,8 +413,11 @@ class ClassRemapOneHotLabel(ClassRemap):
                 # 在多映射情况下，找到内积最大的一项的标签
                 if not (contrast_lb==int(k)).any():
                     continue
-                       
-                MaxSim, MaxSimIndex = torch.max(simScore[OneColContrastLb == k], dim=1)
+                
+                MaxSim = MaxSim_All[OneColContrastLb == k] 
+                MaxSimIndex = MaxSimIndex_All[OneColContrastLb == k]      
+                # MaxSim, MaxSimIndex = torch.max(simScore[OneColContrastLb == k], dim=1)
+                    
                 # print(MaxSim)
                 outputIndex = torch.ones_like(MaxSimIndex) * self.ignore_index
                 

@@ -101,10 +101,10 @@ class A2D2Data(Dataset):
         self.len = len(self.img_paths)
 
         self.to_tensor = T.ToTensor(
-            mean=(0.3257, 0.3690, 0.3223),  # city, rgb
-            std=(0.2112, 0.2148, 0.2115),
+            mean=(0.3038, 0.3383, 0.3034), # city, rgb
+            std=(0.2071, 0.2088, 0.2090),
         )
-
+        
         self.colors = []
 
         for el in labels_info:

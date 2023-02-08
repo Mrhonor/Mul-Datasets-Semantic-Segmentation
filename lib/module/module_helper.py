@@ -25,6 +25,28 @@ class ConvBNReLU(nn.Module):
 
     def forward(self, dataset, x, *other_x):
         ## 处理多数据集情况
+        if self.n_bn != 1 and len(other_x) != 0 and self.training:
+            batch_size = [x.shape[0]]
+            for i in range(0, len(other_x)):
+                batch_size.append(other_x[i].shape[0])
+                x = torch.cat((x, other_x[i]), 0)
+            feat = self.conv(x)
+            feats = []
+            begin_index = 0
+            for i in range(0, len(other_x) + 1):
+                end_index = begin_index + batch_size[i]
+                if i == dataset:
+                    feat_ = self.bn[i](feat[begin_index: end_index])
+                else:
+                    self.bn[i].eval()
+                    feat_ = self.bn[i](feat[begin_index: end_index])
+                    self.bn[i].train()
+
+                feat_ = feat_ * self.affine_weight.reshape(1,-1,1,1) + self.affine_bias.reshape(1,-1,1,1)
+                feat_ = self.relu(feat_)
+                feats.append(feat_)
+
+            return feats
         
         if len(other_x) != 0:
             batch_size = [x.shape[0]]
@@ -47,7 +69,7 @@ class ConvBNReLU(nn.Module):
         else:
             if dataset >= self.n_bn or dataset < 0:
                 dataset = 0
-            
+ 
             feat = self.conv(x)
             feat = self.bn[dataset](feat)
             
@@ -83,6 +105,27 @@ class ConvBN(nn.Module):
         
 
     def forward(self, dataset, x, *other_x):
+        ## 处理多数据集情况
+        if self.n_bn != 1 and len(other_x) != 0 and self.training:
+            batch_size = [x.shape[0]]
+            for i in range(0, len(other_x)):
+                batch_size.append(other_x[i].shape[0])
+                x = torch.cat((x, other_x[i]), 0)
+            feat = self.conv(x)
+            feats = []
+            begin_index = 0
+            for i in range(0, len(other_x) + 1):
+                end_index = begin_index + batch_size[i]
+                self.bn[i].eval()
+                feat_ = self.bn[i](feat[begin_index: end_index])
+                self.bn[i].train()
+
+                feat_ = feat_ * self.affine_weight.reshape(1,-1,1,1) + self.affine_bias.reshape(1,-1,1,1)
+
+                feats.append(feat_)
+
+            return feats
+        
         if len(other_x) != 0:
             batch_size = [x.shape[0]]
             for i in range(0, len(other_x)):

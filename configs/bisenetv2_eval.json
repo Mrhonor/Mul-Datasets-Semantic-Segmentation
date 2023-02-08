@@ -2,25 +2,33 @@
   "model_name": "bisenetv2_contrast",
   "aux_mode": "pred",
   "n_datasets": 2,
-  "num_unify_classes": 41,
+  "num_unify_classes": 19,
   "dataset1": {
-    "n_cats": 18,
+    "n_cats": 20,
     "data_reader": "CityScapes",
-    "im_root": "/home/cxh/datasets/",
+    "im_root": "/data2/datasets",
     "train_im_anns":"datasets/Cityscapes/train.txt",
     "val_im_anns":"datasets/Cityscapes/val.txt", 
-    "ims_per_gpu": 1,
-    "eval_ims_per_gpu": 1
-
+    "ims_per_gpu": 6,
+    "eval_ims_per_gpu": 2
   },
   "dataset2": {
-    "n_cats": 12, 
+    "n_cats": 13, 
     "data_reader": "CamVid",
-    "im_root": "/home/cxh/datasets/CamVid",
-    "train_im_anns":"datasets/CamVid/temp.txt",
-    "val_im_anns":"datasets/CamVid/temp.txt", 
-    "ims_per_gpu": 1,
-    "eval_ims_per_gpu": 1
+    "im_root": "/data2/datasets/CamVid",
+    "train_im_anns":"datasets/CamVid/train.txt",
+    "val_im_anns":"datasets/CamVid/test.txt", 
+    "ims_per_gpu": 6,
+    "eval_ims_per_gpu": 2
+  },
+  "dataset3": {
+    "n_cats": 36, 
+    "data_reader": "A2D2Data",
+    "im_root": "/data1/datasets/A2D2/camera_lidar_semantic",
+    "train_im_anns":"datasets/A2D2/train.txt",
+    "val_im_anns":"datasets/A2D2/val.txt", 
+    "ims_per_gpu": 6,
+    "eval_ims_per_gpu": 2
   },
   "n_bn": 1,
   "class_remap1":{

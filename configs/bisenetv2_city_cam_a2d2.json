@@ -1,5 +1,5 @@
 {
-    "model_name": "bisenetv2_contrast",
+    "model_name": "bisenetv2_contrast_bn",
     "aux_mode": "train",
     "n_datasets": 3,
     "num_unify_classes": 41,
@@ -9,7 +9,7 @@
       "im_root": "/data2/datasets",
       "train_im_anns":"datasets/Cityscapes/train.txt",
       "val_im_anns":"datasets/Cityscapes/val.txt", 
-      "ims_per_gpu": 3,
+      "ims_per_gpu": 8,
       "eval_ims_per_gpu": 2
     },
     "dataset2": {
@@ -18,7 +18,7 @@
       "im_root": "/data2/datasets/CamVid",
       "train_im_anns":"datasets/CamVid/train.txt",
       "val_im_anns":"datasets/CamVid/test.txt", 
-      "ims_per_gpu": 1,
+      "ims_per_gpu": 8,
       "eval_ims_per_gpu": 2
     },
     "dataset3": {
@@ -27,10 +27,10 @@
       "im_root": "/data1/datasets/A2D2/camera_lidar_semantic",
       "train_im_anns":"datasets/A2D2/train.txt",
       "val_im_anns":"datasets/A2D2/val.txt", 
-      "ims_per_gpu": 4,
+      "ims_per_gpu": 8,
       "eval_ims_per_gpu": 2
     },
-    "n_bn": 1,
+    "n_bn": 3,
     "class_remap1":{
       "0": [0, 21, 23, 28, 30, 33, 35, 36, 37, 39], 
       "1": [1, 22, 27],
@@ -247,13 +247,13 @@
       "m": 0,
       "gamma": 12
     },
-    "use_ema": true,
+    "use_ema": false,
     "lr": {
-      "lr_start": 2e-3,
-      "weight_decay": 2e-5,
+      "lr_start": 5e-3,
+      "weight_decay": 5e-5,
       "warmup_iters": 0,
       "fix_param_iters": 0,
-      "max_iter": 80000
+      "max_iter": 50000
     },
     "train": {
       "scales": [0.5, 1.0, 2.0],
@@ -280,18 +280,19 @@
       "upsample": false,
       "downsample": false,
       "update_confidence_thresh": 0.1,
-      "update_sim_thresh": 0.3,
+      "update_sim_thresh": 0.4,
       "with_ppd": false,
       "ppd_loss_weight": 1,
       "with_hard_lb_contrast": true,
       "hard_lb_contrast_loss_weight": 1,
       "with_consistence": false,
-      "consistent_loss_weight": 10
+      "consistent_loss_weight": 10,
+      "with_mulbn": true
     },
     "res_save_pth": "res/Mds/",
     "network": {
       "stride": 32,
-      "with_domain_adversarial": true
+      "with_domain_adversarial": false
     },
     "dataset_aux_head": {
       "use_dataset_aux_head": false,

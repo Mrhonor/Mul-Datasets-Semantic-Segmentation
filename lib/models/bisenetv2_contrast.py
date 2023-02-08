@@ -813,7 +813,6 @@ class BiSeNetV2_Contrast_Teacher(nn.Module):
         if self.use_contrast:
             self.projHead = ProjectionHead(dim_in=128, proj_dim=self.proj_dim, up_factor=self.network_stride, bn_type='torchbn', up_sample=self.upsample, down_sample=self.downsample, n_bn=self.n_bn)
             
-
         self.prototypes = nn.Parameter(torch.zeros(self.num_unify_classes, self.num_prototype, self.proj_dim),
                                        requires_grad=False)
 
@@ -884,7 +883,32 @@ class BiSeNetV2_Contrast_Teacher(nn.Module):
             except:
                 std_buf = student_net.named_buffers()
                 
-            buffer_k[1].data = buffer_q[1].data.clone()         
+            buffer_k[1].data = buffer_q[1].data.clone()   
+        
+    def UpdateAll(self, student_net):
+        std_gen = student_net.named_parameters()
+        for param_k in self.named_parameters():
+            try:
+                param_q = next(std_gen)
+                while param_q[0] != param_k[0]:
+                    param_q = next(std_gen)
+
+            except:
+                std_gen = student_net.named_parameters()
+
+            param_k[1].data = param_q[1].data.clone()
+            
+        std_buf = student_net.named_buffers()
+        for buffer_k in self.named_buffers():
+            try:
+                buffer_q = next(std_buf)
+                while buffer_q[0] != buffer_k[0]:
+                    buffer_q = next(std_buf)
+            except:
+                std_buf = student_net.named_buffers()
+                
+            buffer_k[1].data = buffer_q[1].data.clone()   
+              
 
 if __name__ == "__main__":
 

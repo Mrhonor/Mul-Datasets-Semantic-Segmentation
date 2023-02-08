@@ -303,8 +303,7 @@ def train():
     writer = SummaryWriter(configer.get('res_save_pth'))
     use_ema = configer.get('use_ema')
     ## dataset
-    # dl = get_data_loader(cfg, mode='train', distributed=is_dist)
-    
+
     dl = get_single_data_loader(configer, aux_mode='train', distributed=is_dist)
     # dl_cam = get_data_loader(configer, distributed=is_dist)
     ## model
@@ -504,7 +503,7 @@ def train():
                 loss_pre_meter, loss_aux_meters, loss_contrast_meter, loss_domain_meter, kl_loss_meter)
             
 
-        if (i + 1) % 2000 == 0:
+        if (i + 1) % 5000 == 0:
             save_pth = osp.join(configer.get('res_save_pth'), 'model_{}.pth'.format(i+1))
             logger.info('\nsave models to {}'.format(save_pth))
 

@@ -443,9 +443,11 @@ class BiSeNetV2_Contrast_BN(nn.Module):
         if self.use_contrast:
             
             if configer.get('use_sync_bn'):
-                self.projHead = ProjectionHead(dim_in=128, proj_dim=self.proj_dim, up_factor=self.network_stride, bn_type='torchsyncbn', up_sample=self.upsample, down_sample=self.downsample, n_bn=self.n_bn)
+                self.projHead = nn.ModuleList([ProjectionHead(dim_in=128, proj_dim=self.proj_dim, up_factor=self.network_stride, bn_type='torchsyncbn', 
+                                                              up_sample=self.upsample, down_sample=self.downsample, n_bn=1) for i in range(0, self.n_datasets+1)])
             else:
-                self.projHead = ProjectionHead(dim_in=128, proj_dim=self.proj_dim, up_factor=self.network_stride, bn_type='torchbn', up_sample=self.upsample, down_sample=self.downsample, n_bn=self.n_bn)
+                self.projHead = nn.ModuleList([ProjectionHead(dim_in=128, proj_dim=self.proj_dim, up_factor=self.network_stride, bn_type='torchsyncbn', 
+                                                              up_sample=self.upsample, down_sample=self.downsample, n_bn=1) for i in range(0, self.n_datasets+1)])
             
             
         self.with_domain_adversarial = self.configer.get('network', 'with_domain_adversarial')
@@ -456,25 +458,6 @@ class BiSeNetV2_Contrast_BN(nn.Module):
             else:
                 self.DomainClassifierHead1 = DomainClassifierHead(dim_in=128, n_domain=self.n_datasets, classifier='convmlp_small', bn_type='torchbn', n_bn=self.n_bn)
                 self.DomainClassifierHead2 = DomainClassifierHead(dim_in=128, n_domain=self.n_datasets, classifier='convmlp', bn_type='torchsyncbn', n_bn=self.n_bn)
-
-        # ## TODO: what is the number of mid chan ?
-        # self.head = nn.ModuleList([])
-        # if self.aux_mode == 'train':
-        #     self.aux2 = nn.ModuleList([])
-        #     self.aux3 = nn.ModuleList([])
-        #     self.aux4 = nn.ModuleList([])
-        #     self.aux5_4 = nn.ModuleList([])
-
-        ## 多数据集的头
-        # self.n_head = len(other_n_classes) + 1
-        # if self.n_head > 1:
-        # for n in other_n_classes:
-        #     self.head.append(SegmentHead(128, 1024, n, up_factor=8, aux=False))
-        #     if self.aux_mode == 'train':
-        #         self.aux2.append(SegmentHead(16, 128, n, up_factor=4))
-        #         self.aux3.append(SegmentHead(32, 128, n, up_factor=8))
-        #         self.aux4.append(SegmentHead(64, 128, n, up_factor=16))
-        #         self.aux5_4.append(SegmentHead(128, 128, n, up_factor=32))
 
         self.head = SegmentHead(128, 1024, self.num_unify_classes, up_factor=8, aux=False, n_bn=self.n_bn)
 
@@ -492,18 +475,12 @@ class BiSeNetV2_Contrast_BN(nn.Module):
         trunc_normal_(self.prototypes, std=0.02)
         self.init_weights()
 
-    def forward(self, x, *other_x, dataset=0, perm_index=None):
-        # perm_index用于恢复batch size中数据集来源信息，临时使用
-        
-        # x = x.cuda()
-        ## other_x 其他数据集的输入
-        # size = x.size()[2:]
-
-        
-        feat_d = self.detail(x, dataset, *other_x)
-        feat2, feat3, feat4, feat5_4, feat_s = self.segment(x, dataset, *other_x)
+    def forward(self, x, *other_x, dataset=0, perm_index=None):    
+        feat_d = self.detail(x, dataset)
+        feat2, feat3, feat4, feat5_4, feat_s = self.segment(x, dataset)
         feat_head = self.bga(feat_d, feat_s, dataset)
 
+        
         # logits = self.head[0](feat_head[0])
         ## 修改为多数据集模式，返回list
         
@@ -511,8 +488,10 @@ class BiSeNetV2_Contrast_BN(nn.Module):
         ## 修改后支持单张图片输入
 
         
-
         if self.aux_mode == 'train' and self.train_dataset_aux == False:
+            with torch.no_grad():
+                _, _, _, _, feat_s_other = self.segment(other_x[0], dataset, *other_x[1:])
+
             logits = self.head(dataset, *feat_head)
             logits_aux2 = self.aux2(dataset, *feat2)
             logits_aux3 = self.aux3(dataset, *feat3)
@@ -534,9 +513,11 @@ class BiSeNetV2_Contrast_BN(nn.Module):
             if not self.use_contrast:
                 return {'seg': [logits, logits_aux2, logits_aux3, logits_aux4, logits_aux5_4], 'domain': [domain_pred1, domain_pred2]}
    
-            emb = self.projHead(dataset, *feat_s)
+            emb = self.projHead[0](dataset, *feat_s)
             
-            return {'seg': [logits, logits_aux2, logits_aux3, logits_aux4, logits_aux5_4], 'embed': emb, 'domain': [domain_pred1, domain_pred2]}
+            emb_others = [self.projHead[i+1](dataset, feat_s_other[i]) for i in range(0, self.n_datasets)]
+            
+            return {'seg': [logits, logits_aux2, logits_aux3, logits_aux4, logits_aux5_4], 'embed': [emb, emb_others], 'domain': [domain_pred1, domain_pred2]}
                 
             # return logits, logits_aux2, logits_aux3, logits_aux4, logits_aux5_4
         elif self.aux_mode == 'train' and self.train_dataset_aux == True and perm_index != None:
@@ -567,6 +548,7 @@ class BiSeNetV2_Contrast_BN(nn.Module):
                 raise Exception("not imp yet!")
                 logits = [self.dataset_aux_head[dataset](feat_head[0])]
             else:    
+                
                 # logits = [self.head(feat_head[i]) for i in range(0, len(other_x) + 1)]
                 logits = self.head(dataset, *feat_head)
                 # logits = [self.head(feat_head[i]) for i in range(0, len(other_x) + 1)]
@@ -581,7 +563,7 @@ class BiSeNetV2_Contrast_BN(nn.Module):
             #     logits = [self.up_sample(logit) for logit in logits] 
             # print(logits[0].argmax(dim=1).shape)
             pred = logits.argmax(dim=1)
-            
+            print(1)
             
             # logit = F.softmax(logits[dataset], dim=1)
             # maxV = torch.max(logit, dim=1)[0]
@@ -641,7 +623,6 @@ class BiSeNetV2_Contrast_BN(nn.Module):
                 nn.init.zeros_(param)
 
         self.load_pretrain()
-
 
     def load_pretrain(self):
         # state = modelzoo.load_url(backbone_url)
