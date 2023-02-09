@@ -4,10 +4,27 @@ import torch.nn.functional as F
 
 from torch.nn.utils import weight_norm
 
+class MySequential(nn.Module):
+    def __init__(self, *args):
+        super(MySequential, self).__init__()
+        if len(args) == 1 and isinstance(args[0], OrderedDict):
+            for key, module in args[0].items():
+                self.add_module(key, module)
+        else:
+            for idx, module in enumerate(args):
+                self.add_module(str(idx), module)
+
+    def forward(self, dataset, x, *other_x):
+        feat = [x, *other_x]
+        for module in self:
+            feat = module(dataset, feat)
+        return feat
+
+
 class ConvBNReLU(nn.Module):
 
     def __init__(self, in_chan, out_chan, ks=3, stride=1, padding=1,
-                 dilation=1, groups=1, bias=False, n_bn=1):
+                 dilation=1, groups=1, bias=False, n_bn=1, inplace=True):
         ## n_bn bn层数量，对应混合的数据集数量
         super(ConvBNReLU, self).__init__()
         self.conv = nn.Conv2d(
@@ -21,7 +38,7 @@ class ConvBNReLU(nn.Module):
         self.affine_weight = nn.Parameter(torch.empty(out_chan))
         self.affine_bias = nn.Parameter(torch.empty(out_chan))
         
-        self.relu = nn.ReLU(inplace=True)
+        self.relu = nn.ReLU(inplace=inplace)
 
     def forward(self, dataset, x, *other_x):
         ## 处理多数据集情况

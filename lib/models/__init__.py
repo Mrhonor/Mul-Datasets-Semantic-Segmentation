@@ -6,7 +6,7 @@ from .bisenetv1_swin import BiSeNetV1_Swin
 from .bisenetv2_contrast import BiSeNetV2_Contrast, BiSeNetV2_Contrast_Teacher
 from .bisenetv2_contrast_wn import BiSeNetV2_Contrast_WN
 from .bisenetv2_contrast_bn import BiSeNetV2_Contrast_BN
-
+from .HRNetv2 import HRNet_W48_CONTRAST
 
 model_factory = {
     'bisenetv1': BiSeNetV1,
@@ -15,5 +15,6 @@ model_factory = {
     'bisenetv2_contrast': BiSeNetV2_Contrast,
     'bisenetv2_contrast_wn': BiSeNetV2_Contrast_WN,
     'bisenetv2_contrast_bn': BiSeNetV2_Contrast_BN,
-    'bisenetv2_contrast_ema': BiSeNetV2_Contrast_Teacher
+    'bisenetv2_contrast_ema': BiSeNetV2_Contrast_Teacher,
+    'hrnet_w48_contrast': HRNet_W48_CONTRAST
 }

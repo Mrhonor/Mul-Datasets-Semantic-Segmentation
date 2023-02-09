@@ -229,7 +229,6 @@ def dequeue_and_enqueue(configer, seg_out, keys, labels,
     this_probs = probs.permute(1, 0, 2, 3)
     this_probs = probs.contiguous().view(num_unify_classes, -1)
 
-
     for lb_id in this_label_ids:
         lb = lb_id.item()
         
@@ -292,7 +291,6 @@ def reduce_tensor(inp):
         reduced_inp = inp
         dist.reduce(reduced_inp, dst=0)
     return reduced_inp
-
 
 
 def train():
@@ -363,13 +361,13 @@ def train():
         try:
             im_lb, dataset_lbs = next(dl_iter)
             im, lb = im_lb
-            if not im.size()[0] == (configer.get('dataset1', 'ims_per_gpu') + configer.get('dataset2', 'ims_per_gpu') + configer.get('dataset3', 'ims_per_gpu')):
+            if not im.size()[0] == (configer.get('dataset1', 'ims_per_gpu') + configer.get('dataset2', 'ims_per_gpu')):
                 raise StopIteration
         except StopIteration:
             city_iter = iter(dl_iter)
             im_lb, dataset_lbs = next(dl_iter)
             im, lb = im_lb
-        epoch = i * (configer.get('dataset1', 'ims_per_gpu') + configer.get('dataset2', 'ims_per_gpu') + configer.get('dataset3', 'ims_per_gpu')) / 32976
+        epoch = i * (configer.get('dataset1', 'ims_per_gpu') + configer.get('dataset2', 'ims_per_gpu')) / 2976
 
         im = im.cuda()
         lb = lb.cuda()

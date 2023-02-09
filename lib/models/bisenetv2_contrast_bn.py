@@ -446,7 +446,7 @@ class BiSeNetV2_Contrast_BN(nn.Module):
                 self.projHead = nn.ModuleList([ProjectionHead(dim_in=128, proj_dim=self.proj_dim, up_factor=self.network_stride, bn_type='torchsyncbn', 
                                                               up_sample=self.upsample, down_sample=self.downsample, n_bn=1) for i in range(0, self.n_datasets+1)])
             else:
-                self.projHead = nn.ModuleList([ProjectionHead(dim_in=128, proj_dim=self.proj_dim, up_factor=self.network_stride, bn_type='torchsyncbn', 
+                self.projHead = nn.ModuleList([ProjectionHead(dim_in=128, proj_dim=self.proj_dim, up_factor=self.network_stride, bn_type='torchbn', 
                                                               up_sample=self.upsample, down_sample=self.downsample, n_bn=1) for i in range(0, self.n_datasets+1)])
             
             
@@ -457,7 +457,7 @@ class BiSeNetV2_Contrast_BN(nn.Module):
                 self.DomainClassifierHead2 = DomainClassifierHead(dim_in=128, n_domain=self.n_datasets, classifier='convmlp', bn_type='torchsyncbn', n_bn=self.n_bn)
             else:
                 self.DomainClassifierHead1 = DomainClassifierHead(dim_in=128, n_domain=self.n_datasets, classifier='convmlp_small', bn_type='torchbn', n_bn=self.n_bn)
-                self.DomainClassifierHead2 = DomainClassifierHead(dim_in=128, n_domain=self.n_datasets, classifier='convmlp', bn_type='torchsyncbn', n_bn=self.n_bn)
+                self.DomainClassifierHead2 = DomainClassifierHead(dim_in=128, n_domain=self.n_datasets, classifier='convmlp', bn_type='torchbn', n_bn=self.n_bn)
 
         self.head = SegmentHead(128, 1024, self.num_unify_classes, up_factor=8, aux=False, n_bn=self.n_bn)
 
@@ -563,7 +563,6 @@ class BiSeNetV2_Contrast_BN(nn.Module):
             #     logits = [self.up_sample(logit) for logit in logits] 
             # print(logits[0].argmax(dim=1).shape)
             pred = logits.argmax(dim=1)
-            print(1)
             
             # logit = F.softmax(logits[dataset], dim=1)
             # maxV = torch.max(logit, dim=1)[0]

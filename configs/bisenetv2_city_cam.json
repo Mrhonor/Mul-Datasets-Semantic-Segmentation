@@ -1,8 +1,14 @@
 {
-    "model_name": "bisenetv2_contrast_bn",
+    "model_name": "hrnet_w48_contrast",
     "aux_mode": "train",
     "n_datasets": 2,
     "num_unify_classes": 19,
+    "hrnet": {
+      "cfg": "hrnet48",
+      "keep_imagenet_head": false,
+      "drop_stage4": false,
+      "full_res_stem": false
+    },
     "dataset1": {
       "n_cats": 18,
       "data_reader": "CityScapes",
@@ -101,12 +107,13 @@
     "class_remaper": "ClassRemapOneHotLabel",
     "loss":{
       "type": "MultiLabelCrossEntropyLoss",
+      "reweight": false,
       "with_aux": true,
       "aux_weight": 1,
       "aux_num": 4,
       "ignore_index": -1,
       "domain_loss_weight": 1,
-      "m": 0.1,
+      "m": 0,
       "gamma": 12
     },
     "lr": {
@@ -130,7 +137,7 @@
     "use_sync_bn": true,
     "contrast": {
       "use_contrast": true,
-      "proj_dim": 256,
+      "proj_dim": 128,
       "temperature": 0.07,
       "base_temperature": 0.07,
       "max_samples": 4096,
@@ -141,17 +148,18 @@
       "upsample": false,
       "downsample": false,
       "update_confidence_thresh": 0.1,
-      "update_sim_thresh": 0.3,
+      "update_sim_thresh": 0.4,
       "with_ppd": false,
       "ppd_loss_weight": 1,
       "with_hard_lb_contrast": true,
       "hard_lb_contrast_loss_weight": 1,
-      "with_consistence": true,
-      "consistent_loss_weight": 10
+      "with_consistence": false,
+      "consistent_loss_weight": 10,
+      "with_mulbn": false
     },
-    "res_save_pth": "res/Mds/Reweight",
+    "res_save_pth": "res/Mds/",
     "network": {
-      "stride": 32,
+      "stride": 1,
       "with_domain_adversarial": true
     },
     "dataset_aux_head": {

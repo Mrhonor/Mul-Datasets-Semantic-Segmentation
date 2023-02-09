@@ -98,7 +98,7 @@ class CrossDatasetsLoss(nn.Module):
             if self.with_mulbn:
                 embedding, embedding_others = preds['embed']
             else:
-                embedding, embedding_others = preds['embed']
+                embedding = preds['embed']
             # embedding = torch.cat((embedding_ori, embedding_bn), dim=0)
         
         if self.with_domain_adversarial:
