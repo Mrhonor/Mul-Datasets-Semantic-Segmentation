@@ -64,7 +64,7 @@ def parse_args():
     parse.add_argument('--local_rank', dest='local_rank', type=int, default=-1,)
     parse.add_argument('--port', dest='port', type=int, default=16855,)
     parse.add_argument('--finetune_from', type=str, default=None,)
-    parse.add_argument('--config', dest='config', type=str, default='configs/bisenetv2_city_cam_a2d2.json',)
+    parse.add_argument('--config', dest='config', type=str, default='configs/bisenetv2_city_cam.json',)
     return parse.parse_args()
 
 # 使用绝对路径
@@ -178,7 +178,7 @@ def set_model_dist(net):
     net = nn.parallel.DistributedDataParallel(
         net,
         device_ids=[local_rank, ],
-        find_unused_parameters=True,
+        find_unused_parameters=False,
         output_device=local_rank
         )
     return net
@@ -412,7 +412,7 @@ def train():
             for k, v in out.items():
                 if v is None:
                     adaptive_out[k] = None
-                elif k == 'seg' or k == 'domain':
+                elif (configer.get('loss', 'with_aux') and k == 'seg') or k == 'domain':
                     logits_list = []
                     for logit in v:
                         logits_list.append(logit[0])
@@ -501,7 +501,7 @@ def train():
                 loss_pre_meter, loss_aux_meters, loss_contrast_meter, loss_domain_meter, kl_loss_meter)
             
 
-        if (i + 1) % 5000 == 0:
+        if (i + 1) % 2000 == 0:
             save_pth = osp.join(configer.get('res_save_pth'), 'model_{}.pth'.format(i+1))
             logger.info('\nsave models to {}'.format(save_pth))
 

@@ -15,7 +15,7 @@
       "im_root": "/data2/datasets",
       "train_im_anns":"datasets/Cityscapes/train.txt",
       "val_im_anns":"datasets/Cityscapes/val.txt", 
-      "ims_per_gpu": 8,
+      "ims_per_gpu": 6,
       "eval_ims_per_gpu": 2
     },
     "dataset2": {
@@ -24,7 +24,7 @@
       "im_root": "/data2/datasets/CamVid",
       "train_im_anns":"datasets/CamVid/train.txt",
       "val_im_anns":"datasets/CamVid/test.txt", 
-      "ims_per_gpu": 4,
+      "ims_per_gpu": 2,
       "eval_ims_per_gpu": 2
     },
     "n_bn": 1,
@@ -108,7 +108,7 @@
     "loss":{
       "type": "MultiLabelCrossEntropyLoss",
       "reweight": false,
-      "with_aux": true,
+      "with_aux": false,
       "aux_weight": 1,
       "aux_num": 4,
       "ignore_index": -1,
@@ -125,16 +125,17 @@
     },
     "train": {
       "scales": [0.5, 1.0, 2.0],
-      "cropsize": [512, 1024],
+      "cropsize": [512, 512],
       "finetune": false,
-      "finetune_from": "res/Mds/mulbn_pretrain_model_final.pth"
+      "finetune_from": "res/Mds/model_5000.pth"
     },
     "val": {
       "scales": [0.5, 0.75, 1.0, 1.25, 1.5, 1.75],
-      "cropsize": [512, 1024]
+      "cropsize": [512, 512]
     },
     "use_fp16": false,
     "use_sync_bn": true,
+    "use_ema": false,
     "contrast": {
       "use_contrast": true,
       "proj_dim": 128,
@@ -159,8 +160,8 @@
     },
     "res_save_pth": "res/Mds/",
     "network": {
-      "stride": 1,
-      "with_domain_adversarial": true
+      "stride": 4,
+      "with_domain_adversarial": false
     },
     "dataset_aux_head": {
       "use_dataset_aux_head": false,

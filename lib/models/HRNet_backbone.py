@@ -17,8 +17,9 @@ import torch.nn as nn
 import torch.nn.functional as F
 import numpy as np
 
-from lib.models.module_helper import ConvBNReLU, ConvBN, MySequential
-from lib.utils.tools.logger import Logger as Log
+from lib.module.module_helper import ConvBNReLU, ConvBN, MySequential, MySequential_only_x
+import logging
+# from lib.logger import Logger as Log
 from configs.hrnet_config import MODEL_CONFIGS
 
 if torch.__version__.startswith('1'):
@@ -26,6 +27,7 @@ if torch.__version__.startswith('1'):
 else:
     relu_inplace = False
 
+Log = logging.getLogger()
 
 def conv3x3(in_planes, out_planes, stride=1):
     """3x3 convolution with padding"""
@@ -44,7 +46,7 @@ class BasicBlock(nn.Module):
         # self.bn1 = ModuleHelper.BatchNorm2d(bn_type=bn_type)(planes, momentum=bn_momentum)
         # self.relu = nn.ReLU(inplace=False)
         self.relu_in = nn.ReLU(inplace=True)
-        self.conv2 = ConvBN(inplanes, planes, stride=stride, n_bn=n_bn)
+        self.conv2 = ConvBN(planes, planes, stride=stride, n_bn=n_bn)
         # self.conv2 = conv3x3(planes, planes)
         # self.bn2 = ModuleHelper.BatchNorm2d(bn_type=bn_type)(planes, momentum=bn_momentum)
         self.downsample = downsample
@@ -74,14 +76,14 @@ class Bottleneck(nn.Module):
 
     def __init__(self, inplanes, planes, stride=1, downsample=None, bn_type=None, bn_momentum=0.1, n_bn=1):
         super(Bottleneck, self).__init__()
-        self.conv1 = ConvBNReLU(inplanes, planes, ks=1, n_bn=n_bn, inplace=False)
+        self.conv1 = ConvBNReLU(inplanes, planes, ks=1, padding=0, n_bn=n_bn, inplace=False)
         # self.conv1 = nn.Conv2d(inplanes, planes, kernel_size=1, bias=False)
         # self.bn1 = ModuleHelper.BatchNorm2d(bn_type=bn_type)(planes, momentum=bn_momentum)
-        self.conv2 = ConvBNReLU(inplanes, planes, stride=stride, n_bn=n_bn, inplace=False)
+        self.conv2 = ConvBNReLU(planes, planes, ks=3, stride=stride, padding=1, n_bn=n_bn, inplace=False)
         # self.conv2 = nn.Conv2d(planes, planes, kernel_size=3, stride=stride,
         #                        padding=1, bias=False)
         # self.bn2 = ModuleHelper.BatchNorm2d(bn_type=bn_type)(planes, momentum=bn_momentum)
-        self.conv3 = ConvBN(inplanes, planes*4, ks=1, n_bn=n_bn)
+        self.conv3 = ConvBN(planes, planes*4, ks=1, padding=0, n_bn=n_bn)
         # self.conv3 = nn.Conv2d(planes, planes * 4, kernel_size=1, bias=False)
         # self.bn3 = ModuleHelper.BatchNorm2d(bn_type=bn_type)(planes * 4, momentum=bn_momentum)
         # self.relu = nn.ReLU(inplace=False)
@@ -155,7 +157,7 @@ class HighResolutionModule(nn.Module):
         downsample = None
         if stride != 1 or \
                 self.num_inchannels[branch_index] != num_channels[branch_index] * block.expansion:
-            downsample = ConvBN(self.num_inchannels[branch_index], num_channels[branch_index] * block.expansion, ks=1, stride=stride)
+            downsample = ConvBN(self.num_inchannels[branch_index], num_channels[branch_index] * block.expansion, ks=1, padding=0, stride=stride)
             # downsample = nn.Sequential(
             #     nn.Conv2d(
             #         self.num_inchannels[branch_index],
@@ -205,7 +207,7 @@ class HighResolutionModule(nn.Module):
 
         return nn.ModuleList(branches)
 
-    def _make_fuse_layers(self, bn_type, bn_momentum=0.1, n_bn=n_bn):
+    def _make_fuse_layers(self, bn_type, bn_momentum=0.1, n_bn=1):
         if self.num_branches == 1:
             return None
 
@@ -280,7 +282,7 @@ class HighResolutionModule(nn.Module):
                         align_corners=True) for y_data, fuse_data, width_output, height_output in zip(y, fuse_datas, width_outputs, height_outputs)]
                 else:
                     fuse_datas = self.fuse_layers[i][j](dataset, *x[j])
-                    y = [y_data + fuse_data for y_data, fuse_data in zip(y_data, fuse_datas)]
+                    y = [y_data + fuse_data for y_data, fuse_data in zip(y, fuse_datas)]
             x_fuse.append([self.relu(y_data) for y_data in y])
 
         return x_fuse
@@ -309,7 +311,7 @@ class HighResolutionNet(nn.Module):
         if self.full_res_stem:
             Log.info("using full-resolution stem with stride=1")
             stem_stride = 1
-            self.conv1 = ConvBNReLU(3, 64, ks=3, stride=stem_stride, padding=1, n_bn=self.n_bn, inpalce=False)
+            self.conv1 = ConvBNReLU(3, 64, ks=3, stride=stem_stride, padding=1, n_bn=self.n_bn, inplace=False)
             # self.conv1 = nn.Conv2d(3, 64, kernel_size=3, stride=stem_stride, padding=1,
             #                        bias=False)
             # self.bn1 = ModuleHelper.BatchNorm2d(bn_type=bn_type)(64, momentum=bn_momentum)
@@ -317,11 +319,11 @@ class HighResolutionNet(nn.Module):
             self.layer1 = self._make_layer(Bottleneck, 64, 64, 4, bn_type=bn_type, bn_momentum=bn_momentum, n_bn=self.n_bn)
         else:
             stem_stride = 2
-            self.conv1 = ConvBNReLU(3, 64, ks=3, stride=stem_stride, padding=1, n_bn=self.n_bn, inpalce=False)
+            self.conv1 = ConvBNReLU(3, 64, ks=3, stride=stem_stride, padding=1, n_bn=self.n_bn, inplace=False)
             # self.conv1 = nn.Conv2d(3, 64, kernel_size=3, stride=stem_stride, padding=1,
             #                        bias=False)
             # self.bn1 = ModuleHelper.BatchNorm2d(bn_type=bn_type)(64, momentum=bn_momentum)
-            self.conv2 = ConvBNReLU(64, 64, ks=3, stride=stem_stride, padding=1, n_bn=self.n_bn, inpalce=False)
+            self.conv2 = ConvBNReLU(64, 64, ks=3, stride=stem_stride, padding=1, n_bn=self.n_bn, inplace=False)
             # self.conv2 = nn.Conv2d(64, 64, kernel_size=3, stride=stem_stride, padding=1,
             #                        bias=False)
             # self.bn2 = ModuleHelper.BatchNorm2d(bn_type=bn_type)(64, momentum=bn_momentum)
@@ -463,7 +465,7 @@ class HighResolutionNet(nn.Module):
     def _make_layer(self, block, inplanes, planes, blocks, stride=1, bn_type=None, bn_momentum=0.1, n_bn=1):
         downsample = None
         if stride != 1 or inplanes != planes * block.expansion:
-            downsample = ConvBN(inplanes, planes * block.expansion, ks=1, stride=strde, n_bn=1, )
+            downsample = ConvBN(inplanes, planes * block.expansion, ks=1, stride=stride, padding=0, n_bn=1, )
             # downsample = nn.Sequential(
             #     nn.Conv2d(
             #         inplanes, planes * block.expansion,
@@ -514,7 +516,7 @@ class HighResolutionNet(nn.Module):
             )
             num_inchannels = modules[-1].get_num_inchannels()
 
-        return MySequential(*modules), num_inchannels
+        return MySequential_only_x(*modules), num_inchannels
 
     def forward(self, x, *other_x, dataset=0):
 
@@ -526,7 +528,7 @@ class HighResolutionNet(nn.Module):
             x = self.conv1(dataset, x, *other_x)
             # x = self.bn1(x)
             # x = self.relu(x)
-            x = self.conv2(datset, *x)
+            x = self.conv2(dataset, *x)
             # x = self.bn2(x)
             # x = self.relu(x)
 
@@ -709,7 +711,7 @@ class HighResolutionNext(nn.Module):
             )
             num_inchannels = modules[-1].get_num_inchannels()
 
-        return MySequential(*modules), num_inchannels
+        return MySequential_only_x(*modules), num_inchannels
 
     def forward(self, x, *other_x, dataset=0):
         x = self.conv1(dataset, x, *other_x)

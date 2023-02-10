@@ -93,7 +93,11 @@ class CrossDatasetsLoss(nn.Module):
     def forward(self, preds, target, dataset_ids, is_warmup=False):
         assert "seg" in preds
         
-        logits, *logits_aux = preds['seg']
+        if self.with_aux:
+            logits, *logits_aux = preds['seg']
+        else:
+            logits = preds['seg']
+        
         if self.use_contrast:
             if self.with_mulbn:
                 embedding, embedding_others = preds['embed']

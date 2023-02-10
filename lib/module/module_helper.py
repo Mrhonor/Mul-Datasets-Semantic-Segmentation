@@ -3,8 +3,10 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from torch.nn.utils import weight_norm
+from collections import OrderedDict
 
 class MySequential(nn.Module):
+
     def __init__(self, *args):
         super(MySequential, self).__init__()
         if len(args) == 1 and isinstance(args[0], OrderedDict):
@@ -16,9 +18,26 @@ class MySequential(nn.Module):
 
     def forward(self, dataset, x, *other_x):
         feat = [x, *other_x]
-        for module in self:
-            feat = module(dataset, feat)
+        for module in self._modules.values():
+            feat = module(dataset, *feat)
         return feat
+
+class MySequential_only_x(nn.Module):
+
+    def __init__(self, *args):
+        super(MySequential_only_x, self).__init__()
+        if len(args) == 1 and isinstance(args[0], OrderedDict):
+            for key, module in args[0].items():
+                self.add_module(key, module)
+        else:
+            for idx, module in enumerate(args):
+                self.add_module(str(idx), module)
+
+    def forward(self, dataset, x):
+        for module in self._modules.values():
+            x = module(dataset, x)
+        return x
+
 
 
 class ConvBNReLU(nn.Module):

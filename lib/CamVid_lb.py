@@ -48,7 +48,7 @@ labels_info = [
     {"name": "Animal", "id": 28, "color": [64, 128, 64], "trainId": 9},
     {"name": "Bicyclist", "id": 29, "color": [0, 128, 192], "trainId": 10},
     {"name": "MotorcycleScooter", "id": 30, "color": [192, 0, 192], "trainId": 10},
-    {"name": "Void", "id": 31, "color": [0, 0, 0], "trainId": 12}
+    {"name": "Void", "id": 31, "color": [0, 0, 0], "trainId": -1}
 ]
 
 ## {unify id} : {unify name} [{city trainId}, {Camvid trainId}]
@@ -71,7 +71,8 @@ class CamVid(Dataset):
 
         self.mode = mode
         self.trans_func = trans_func
-        self.n_cats = 13
+        # self.n_cats = 13
+        self.n_cats = 12
         self.lb_map = np.arange(256).astype(np.uint8)
 
         for el in labels_info:

@@ -3,9 +3,12 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from lib.models.HRNet_backbone import HRNetBackbone
-from lib.models.tools.module_helper import ConvBNReLU
+from lib.module.module_helper import ConvBNReLU
 from lib.module.projection import ProjectionHead
 from lib.module.domain_classifier_head import DomainClassifierHead
+from timm.models.layers import trunc_normal_
+
+backbone_url = './res/hrnetv2_w48_imagenet_pretrained.pth'
 
 class SegmentHead(nn.Module):
 
@@ -15,9 +18,9 @@ class SegmentHead(nn.Module):
         self.up_factor = int(up_factor)
         self.n_bn = n_bn
 
-        self.conv1 = ConvBNReLU(in_channels, in_channels, kernel_size=3, stride=1, padding=1, n_bn=self.n_bn)
-        self.dropout = nn.Dropout2d(0.10),
-        self.conv2 = nn.Conv2d(in_channels, self.num_classes, kernel_size=1, stride=1, padding=0, bias=False)
+        self.conv1 = ConvBNReLU(in_chan, in_chan, ks=3, stride=1, padding=1, n_bn=self.n_bn)
+        self.dropout = nn.Dropout2d(0.10)
+        self.conv2 = nn.Conv2d(in_chan, n_classes, kernel_size=1, stride=1, padding=0, bias=False)
         
         
     def forward(self, dataset, x, *other_x):
@@ -89,11 +92,12 @@ class HRNet_W48_CONTRAST(nn.Module):
         self.configer = configer
         self.aux_mode = self.configer.get('aux_mode')
         self.n_bn = self.configer.get('n_bn')
-        self.num_classes = self.configer.get('data', 'num_classes')
+        self.num_unify_classes = self.configer.get('num_unify_classes')
         self.n_datasets = self.configer.get('n_datasets')
         self.backbone = HRNetBackbone(configer)
         self.proj_dim = self.configer.get('contrast', 'proj_dim')
         self.full_res_stem = self.configer.get('hrnet', 'full_res_stem')
+        self.num_prototype = self.configer.get('contrast', 'num_prototype')
         
         if self.full_res_stem:
             up_fac = 1
@@ -102,12 +106,18 @@ class HRNet_W48_CONTRAST(nn.Module):
 
         # extra added layers
         in_channels = 720  # 48 + 96 + 192 + 384
-        self.cls_head = SegmentHead(in_channels, self.num_classes, up_factor=up_fac, n_bn=self.n_bn)
+        self.cls_head = SegmentHead(in_channels, self.num_unify_classes, up_factor=up_fac, n_bn=self.n_bn)
 
         self.use_contrast = self.configer.get('contrast', 'use_contrast')
         if self.use_contrast:
             self.proj_head = ProjectionHead(dim_in=in_channels, proj_dim=self.proj_dim)
             
+        self.prototypes = nn.Parameter(torch.zeros(self.num_unify_classes, self.num_prototype, self.proj_dim),
+                                       requires_grad=False)
+
+        trunc_normal_(self.prototypes, std=0.02)
+        self.init_weights()    
+        
         # self.with_domain_adversarial = self.configer.get('network', 'with_domain_adversarial')
         # if self.with_domain_adversarial:
         #     self.DomainCls_head = DomainClassifierHead(in_channels, n_domain=self.n_datasets, )
@@ -138,3 +148,70 @@ class HRNet_W48_CONTRAST(nn.Module):
             pred = out[0].argmax(dim=1)
         else:
             raise NotImplementedError
+        
+    def get_params(self):
+        def add_param_to_list(mod, wd_params, nowd_params):
+            for param in mod.parameters():
+                if param.requires_grad == False:
+                    continue
+                
+                if param.dim() == 1:
+                    nowd_params.append(param)
+                elif param.dim() == 4:
+                    wd_params.append(param)
+                else:
+                    nowd_params.append(param)
+                    # print(param.dim())
+                    # print(param)
+                    print(name)
+
+        wd_params, nowd_params, lr_mul_wd_params, lr_mul_nowd_params = [], [], [], []
+        for name, child in self.named_children():
+            if 'head' in name or 'aux' in name:
+                add_param_to_list(child, lr_mul_wd_params, lr_mul_nowd_params)
+            else:
+                add_param_to_list(child, wd_params, nowd_params)
+        return wd_params, nowd_params, lr_mul_wd_params, lr_mul_nowd_params
+    
+    def set_train_dataset_aux(self, new_val=False):
+        self.train_dataset_aux = new_val
+
+    def switch_require_grad_state(self, require_grad_state=True):
+        for p in self.detail.parameters():
+            p.requires_grad = require_grad_state
+            
+        for p in self.segment.parameters():
+            p.requires_grad = require_grad_state
+            
+        for p in self.bga.parameters():
+            p.requires_grad = require_grad_state
+        
+    def PrototypesUpdate(self, new_proto):
+        self.prototypes = nn.Parameter(F.normalize(new_proto, p=2, dim=-1),
+                                        requires_grad=False)
+        
+    def init_weights(self):
+        for name, module in self.named_modules():
+            if isinstance(module, (nn.Conv2d, nn.Linear)):
+                nn.init.kaiming_normal_(module.weight, mode='fan_out')
+                if not module.bias is None: nn.init.constant_(module.bias, 0)
+            # elif isinstance(module, nn.modules.batchnorm._BatchNorm):
+            #     if hasattr(module, 'last_bn') and module.last_bn:
+            #         nn.init.zeros_(module.weight)
+            #     else:
+            #         nn.init.ones_(module.weight)
+            #     nn.init.zeros_(module.bias)
+        for name, param in self.named_parameters():
+            if name.find('affine_weight') != -1:
+                if hasattr(param, 'last_bn') and param.last_bn:
+                    nn.init.zeros_(param)
+                else:
+                    nn.init.ones_(param)
+            elif name.find('affine_bias') != -1:
+                nn.init.zeros_(param)
+                
+        self.load_pretrain()
+                
+    def load_pretrain(self):
+        pass
+        
