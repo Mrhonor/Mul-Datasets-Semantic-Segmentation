@@ -213,5 +213,91 @@ class HRNet_W48_CONTRAST(nn.Module):
         self.load_pretrain()
                 
     def load_pretrain(self):
-        pass
+        state = torch.load(backbone_url)
+        newstate = {}
+        def loadConvBN(srcDict, src_name, targetdict, target_name, ID):
+            targetdict[target_name+'conv.weight'] = srcDict[src_name+'conv' + str(ID)+ '.weight']
+            targetdict[target_name+'affine_weight'] = srcDict[src_name+'bn' + str(ID)+ '.weight']
+            targetdict[target_name+'affine_bias'] = srcDict[src_name+'bn' + str(ID)+ '.bias']
+        
+        def loadLayer(srcDict, src_name, targetdict, num):
+            for i in range(1, num+1):
+                loadConvBN(state, src_name, targetdict, src_name+'conv'+str(i)+'.', i)
+        
+        def loadConvBN_NoName(srcDict, src_name, targetdict):
+            targetdict[src_name+'conv.weight'] = srcDict[src_name+'0.weight']
+            targetdict[src_name+'affine_weight'] = srcDict[src_name+'1.weight']
+            targetdict[src_name+'affine_bias'] = srcDict[src_name+'1.bias']
+            
+        def loadBranch(srcDict, src_name, targetdict):
+            loadLayer(state, src_name + '0.', newstate, 2)
+            loadLayer(state, src_name + '1.', newstate, 2)
+            loadLayer(state, src_name + '2.', newstate, 2)
+            loadLayer(state, src_name + '3.', newstate, 2)
+            
+        def loadStage3fuse(srcDict, src_name, targetdict):
+            loadConvBN_NoName(srcDict, src_name+'fuse_layers.0.1.', targetdict)
+            loadConvBN_NoName(srcDict, src_name+'fuse_layers.0.2.', targetdict)
+            loadConvBN_NoName(srcDict, src_name+'fuse_layers.1.0.0.', targetdict)
+            loadConvBN_NoName(srcDict, src_name+'fuse_layers.1.2.', targetdict)
+            loadConvBN_NoName(srcDict, src_name+'fuse_layers.2.0.0.', targetdict)
+            loadConvBN_NoName(srcDict, src_name+'fuse_layers.2.0.1.', targetdict)
+            loadConvBN_NoName(srcDict, src_name+'fuse_layers.2.1.0.', targetdict)
+        
+        def loadStage(srcDict, src_name, targetdict, num):
+            for i in range(0, num):
+                loadBranch(srcDict, src_name+'branches.'+str(i)+'.', targetdict)
+                
+        def loadStage4fuse(srcDict, src_name, targetdict):
+            loadConvBN_NoName(srcDict, src_name+'fuse_layers.0.1.', targetdict)
+            loadConvBN_NoName(srcDict, src_name+'fuse_layers.0.2.', targetdict)
+            loadConvBN_NoName(srcDict, src_name+'fuse_layers.0.3.', targetdict)
+            loadConvBN_NoName(srcDict, src_name+'fuse_layers.1.0.0.', targetdict)
+            loadConvBN_NoName(srcDict, src_name+'fuse_layers.1.2.', targetdict)
+            loadConvBN_NoName(srcDict, src_name+'fuse_layers.1.3.', targetdict)
+            loadConvBN_NoName(srcDict, src_name+'fuse_layers.2.0.0.', targetdict)
+            loadConvBN_NoName(srcDict, src_name+'fuse_layers.2.0.1.', targetdict)
+            loadConvBN_NoName(srcDict, src_name+'fuse_layers.2.1.0.', targetdict)
+            loadConvBN_NoName(srcDict, src_name+'fuse_layers.2.3.', targetdict)
+            loadConvBN_NoName(srcDict, src_name+'fuse_layers.3.0.0.', targetdict)
+            loadConvBN_NoName(srcDict, src_name+'fuse_layers.3.0.1.', targetdict)
+            loadConvBN_NoName(srcDict, src_name+'fuse_layers.3.0.2.', targetdict)
+            loadConvBN_NoName(srcDict, src_name+'fuse_layers.3.1.0.', targetdict)
+            loadConvBN_NoName(srcDict, src_name+'fuse_layers.3.1.1.', targetdict)
+            loadConvBN_NoName(srcDict, src_name+'fuse_layers.3.2.0.', targetdict)
+        
+        loadConvBN(state, '', newstate, 'conv1.', 1)
+        loadConvBN(state, '', newstate, 'conv2.', 2)
+        loadLayer(state, 'layer1.0.', newstate, 3)
+        loadConvBN_NoName(state, 'layer1.0.downsample.', newstate)
+        loadLayer(state, 'layer1.1.', newstate, 3)
+        loadLayer(state, 'layer1.2.', newstate, 3)
+        loadLayer(state, 'layer1.3.', newstate, 3)
+        loadConvBN_NoName(state, 'transition1.0.', newstate)
+        loadConvBN_NoName(state, 'transition1.1.0.', newstate)
+        loadStage(state, 'stage2.0.', newstate, 2)
+        loadConvBN_NoName(state, 'stage2.0.fuse_layers.0.1.', newstate)
+        loadConvBN_NoName(state, 'stage2.0.fuse_layers.1.0.0.', newstate)
+        loadConvBN_NoName(state, 'transition2.2.0.', newstate)
+        loadStage(state, 'stage3.0.', newstate, 3)
+        loadStage3fuse(state, 'stage3.0.', newstate)
+        loadStage(state, 'stage3.1.', newstate, 3)
+        loadStage3fuse(state, 'stage3.1.', newstate)
+        loadStage(state, 'stage3.2.', newstate, 3)
+        loadStage3fuse(state, 'stage3.2.', newstate)
+        loadStage(state, 'stage3.3.', newstate, 3)
+        loadStage3fuse(state, 'stage3.3.', newstate)
+        loadConvBN_NoName(state, 'transition3.3.0.', newstate)
+        loadStage(state, 'stage4.0.', newstate, 4)
+        loadStage4fuse(state, 'stage4.0.', newstate)
+        loadStage(state, 'stage4.1.', newstate, 4)
+        loadStage4fuse(state, 'stage4.1.', newstate)
+        loadStage(state, 'stage4.2.', newstate, 4)
+        loadStage4fuse(state, 'stage4.2.', newstate)
+        
+        self.backbone.load_state_dict(newstate, strict=False)
+        
+
+    # newstate = loadpretrain(state)
+    # net.backbone.load_state_dict(newstate, strict=False)
         
