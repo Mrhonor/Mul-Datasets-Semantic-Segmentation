@@ -167,6 +167,16 @@ class ClassRemap():
             self.remapList.append(class_remap)
             self.maxMapNums.append(maxMapNum)
             
+        # remap matrix
+        self.class_remap_matrixs = []
+        for i in range(0, self.n_datasets):
+            n_cats = self.configer.get('dataset'+str(i+1), 'n_cats')
+            remap_matrix = torch.zeros([n_cats, self.num_unify_classes], dtype=torch.float32)
+            for k, v in self.remapList[i].items():
+                remap_matrix[k, v] = 1
+            self.class_remap_matrixs.append(remap_matrix)
+        
+            
     def getAnyClassRemap(self, lb_id, dataset_id):
         return self.remapList[dataset_id][lb_id]
     
@@ -203,6 +213,9 @@ class ClassRemap():
                 reweight_matrix[lb == int(k)] = weight
 
         return reweight_matrix
+    
+    def getRemapMatrix(self, dataset_id):
+        return self.class_remap_matrixs[dataset_id]
     
         
 class ClassRemapOneHotLabel(ClassRemap):

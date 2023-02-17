@@ -16,11 +16,46 @@ import lib.transform_cv2 as T
 
 
 
-labels_info = [
+labels_info_train = [
     {"name": "Sky", "id": 0, "color": [128, 128, 128], "trainId": 0},
     {"name": "Bridge", "id": 1, "color": [0, 128, 64], "trainId": 1},
     {"name": "Building", "id": 2, "color": [128, 0, 0], "trainId": 1},
     {"name": "Wall", "id": 3, "color": [64, 192, 0], "trainId": 11},
+    {"name": "Tunnel", "id": 4, "color": [64, 0, 64], "trainId": 1},
+    {"name": "Archway", "id": 5, "color": [192, 0, 128], "trainId": 1},
+    {"name": "Column_Pole", "id": 6, "color": [192, 192, 128], "trainId": 2},
+    {"name": "TrafficCone", "id": 7, "color": [0, 0, 64], "trainId": 2},
+    {"name": "Road", "id": 8, "color": [128, 64, 128], "trainId": 3},
+    {"name": "LaneMkgsDriv", "id": 9, "color": [128, 0, 192], "trainId": 3},
+    {"name": "LaneMkgsNonDriv", "id": 10, "color": [192, 0, 64], "trainId": 3},
+    {"name": "Sidewalk", "id": 11, "color": [0, 0, 192], "trainId": 4},
+    {"name": "ParkingBlock", "id": 12, "color": [64, 192, 128], "trainId": 4},
+    {"name": "RoadShoulder", "id": 13, "color": [128, 128, 192], "trainId": 4},
+    {"name": "Tree", "id": 14, "color": [128, 128, 0], "trainId": 5},
+    {"name": "VegetationMisc", "id": 15, "color": [192, 192, 0], "trainId": 5},
+    {"name": "SignSymbol", "id": 16, "color": [192, 128, 128], "trainId": 6},
+    {"name": "Misc_Text", "id": 17, "color": [128, 128, 64], "trainId": 6},
+    {"name": "TrafficLight", "id": 18, "color": [0, 64, 64], "trainId": 6},
+    {"name": "Fence", "id": 19, "color": [64, 64, 128], "trainId": 7},
+    {"name": "Car", "id": 20, "color": [64, 0, 128], "trainId": 8},
+    {"name": "SUVPickupTruck", "id": 21, "color": [64, 128, 192], "trainId": 8},
+    {"name": "Truck_Bus", "id": 22, "color": [192, 128, 192], "trainId": 8},
+    {"name": "Train", "id": 23, "color": [192, 64, 128], "trainId": 8},
+    {"name": "OtherMoving", "id": 24, "color": [128, 64, 64], "trainId": 8},
+    {"name": "Pedestrian", "id": 25, "color": [64, 64, 0], "trainId":9},
+    {"name": "Child", "id": 26, "color": [192, 128, 64], "trainId":9},
+    {"name": "CartLuggagePram", "id": 27, "color": [64, 0, 192], "trainId": 9},
+    {"name": "Animal", "id": 28, "color": [64, 128, 64], "trainId": 9},
+    {"name": "Bicyclist", "id": 29, "color": [0, 128, 192], "trainId": 10},
+    {"name": "MotorcycleScooter", "id": 30, "color": [192, 0, 192], "trainId": 10},
+    {"name": "Void", "id": 31, "color": [0, 0, 0], "trainId": 12}
+]
+
+labels_info_eval = [
+    {"name": "Sky", "id": 0, "color": [128, 128, 128], "trainId": 0},
+    {"name": "Bridge", "id": 1, "color": [0, 128, 64], "trainId": 1},
+    {"name": "Building", "id": 2, "color": [128, 0, 0], "trainId": 1},
+    {"name": "Wall", "id": 3, "color": [64, 192, 0], "trainId": 1},
     {"name": "Tunnel", "id": 4, "color": [64, 0, 64], "trainId": 1},
     {"name": "Archway", "id": 5, "color": [192, 0, 128], "trainId": 1},
     {"name": "Column_Pole", "id": 6, "color": [192, 192, 128], "trainId": 2},
@@ -72,10 +107,17 @@ class CamVid(Dataset):
         self.mode = mode
         self.trans_func = trans_func
         # self.n_cats = 13
-        self.n_cats = 12
+        if mode == 'train':
+            # self.n_cats = 18
+            self.n_cats = 13
+            self.labels_info = labels_info_train
+        elif mode == 'eval':
+            self.n_cats = 11
+            self.labels_info = labels_info_eval
+            
         self.lb_map = np.arange(256).astype(np.uint8)
 
-        for el in labels_info:
+        for el in self.labels_info:
             self.lb_map[el['id']] = el['trainId']
 
         self.ignore_lb = -1
@@ -104,7 +146,7 @@ class CamVid(Dataset):
         
         self.colors = []
 
-        for el in labels_info:
+        for el in self.labels_info:
             (r, g, b) = el['color']
             self.colors.append((r, g, b))
             
@@ -129,7 +171,6 @@ class CamVid(Dataset):
         impth = self.img_paths[idx]
         lbpth = self.lb_paths[idx]
         # print(impth)
-
 
         img = cv2.imread(impth)[:, :, ::-1]
         

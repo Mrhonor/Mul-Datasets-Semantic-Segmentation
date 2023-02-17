@@ -134,10 +134,10 @@
       "cropsize": [512, 512]
     },
     "use_fp16": false,
-    "use_sync_bn": true,
+    "use_sync_bn": false,
     "use_ema": false,
     "contrast": {
-      "use_contrast": true,
+      "use_contrast": false,
       "proj_dim": 128,
       "temperature": 0.07,
       "base_temperature": 0.07,

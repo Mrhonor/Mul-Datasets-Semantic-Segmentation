@@ -31,7 +31,7 @@ from lib.ohem_ce_loss import OhemCELoss
 from lib.lr_scheduler import WarmupPolyLrScheduler
 from lib.meters import TimeMeter, AvgMeter
 from lib.logger import setup_logger, print_log_msg
-from lib.loss.loss_cross_datasets import CrossDatasetsLoss
+from lib.loss.loss_cross_datasets import CrossDatasetsLoss, CrossDatasetsCELoss
 from lib.class_remap import ClassRemap
 
 from tools.configer import Configer
@@ -64,7 +64,7 @@ def parse_args():
     parse.add_argument('--local_rank', dest='local_rank', type=int, default=-1,)
     parse.add_argument('--port', dest='port', type=int, default=16855,)
     parse.add_argument('--finetune_from', type=str, default=None,)
-    parse.add_argument('--config', dest='config', type=str, default='configs/bisenetv2_city_cam.json',)
+    parse.add_argument('--config', dest='config', type=str, default='configs/bisenetv2_city_cam_a2d2.json',)
     return parse.parse_args()
 
 # 使用绝对路径
@@ -184,7 +184,8 @@ def set_model_dist(net):
     return net
 
 def set_contrast_loss(configer):
-    return CrossDatasetsLoss(configer)
+    return CrossDatasetsCELoss(configer)
+    # return CrossDatasetsLoss(configer)
 
 def set_meters(configer):
     time_meter = TimeMeter(configer.get('lr', 'max_iter'))
@@ -302,8 +303,9 @@ def train():
     use_ema = configer.get('use_ema')
     ## dataset
 
-    dl = get_single_data_loader(configer, aux_mode='train', distributed=is_dist)
-    # dl_cam = get_data_loader(configer, distributed=is_dist)
+    # dl = get_single_data_loader(configer, aux_mode='train', distributed=is_dist)
+    dl_city, dl_cam, dl_a2d2 = get_data_loader(configer, aux_mode='train', distributed=is_dist)
+    
     ## model
     net = set_model(configer=configer)
     if use_ema:
@@ -325,7 +327,11 @@ def train():
         warmup_ratio=0.1, warmup='exp', last_epoch=-1,)
     # 两个数据集分别处理
     # 使用迭代器读取数据
-    dl_iter = iter(dl)
+    
+    # dl_iter = iter(dl)
+    city_iter = iter(dl_city)
+    cam_iter = iter(dl_cam)
+    a2d2_iter = iter(dl_a2d2)
     
     ## train loop
     # for it, (im, lb) in enumerate(dl):
@@ -358,20 +364,50 @@ def train():
 
         configer.plus_one('iter')
 
+        # try:
+        #     im_lb, dataset_lbs = next(dl_iter)
+        #     im, lb = im_lb
+        #     if not im.size()[0] == (configer.get('dataset1', 'ims_per_gpu') + configer.get('dataset2', 'ims_per_gpu')):
+        #         raise StopIteration
+        # except StopIteration:
+        #     city_iter = iter(dl_iter)
+        #     im_lb, dataset_lbs = next(dl_iter)
+        #     im, lb = im_lb
+        # epoch = i * (configer.get('dataset1', 'ims_per_gpu') + configer.get('dataset2', 'ims_per_gpu')) / 2976
+
         try:
-            im_lb, dataset_lbs = next(dl_iter)
-            im, lb = im_lb
-            if not im.size()[0] == (configer.get('dataset1', 'ims_per_gpu') + configer.get('dataset2', 'ims_per_gpu')):
+            im_cam, lb_cam = next(cam_iter)
+            if not im_cam.size()[0] == configer.get('dataset2', 'ims_per_gpu'):
                 raise StopIteration
         except StopIteration:
-            city_iter = iter(dl_iter)
-            im_lb, dataset_lbs = next(dl_iter)
-            im, lb = im_lb
-        epoch = i * (configer.get('dataset1', 'ims_per_gpu') + configer.get('dataset2', 'ims_per_gpu')) / 2976
+            cam_iter = iter(dl_cam)
+            im_cam, lb_cam = next(cam_iter)
+        cam_epoch = i * configer.get('dataset2', 'ims_per_gpu') / 469
+        try:
+            im_city, lb_city = next(city_iter)
+            if not im_city.size()[0] == configer.get('dataset1', 'ims_per_gpu'):
+                raise StopIteration
+        except StopIteration:
+            city_iter = iter(dl_city)
+            im_city, lb_city = next(city_iter)
+        city_epoch = i * configer.get('dataset1', 'ims_per_gpu') / 2976
+        try:
+            im_a2d2, lb_a2d2 = next(a2d2_iter)
+            if not im_a2d2.size()[0] == configer.get('dataset3', 'ims_per_gpu'):
+                raise StopIteration
+        except StopIteration:
+            a2d2_iter = iter(dl_a2d2)
+            im_a2d2, lb_a2d2 = next(a2d2_iter)
+        a2d2_epoch = i * configer.get('dataset3', 'ims_per_gpu') / 30000
+
+
+        im = torch.cat((im_city, im_cam, im_a2d2), dim=0)
+        lb = torch.cat((lb_city, lb_cam, lb_a2d2), dim=0)
 
         im = im.cuda()
         lb = lb.cuda()
         # dataset_lbs = torch.tensor(dataset_lbs).cuda()
+        dataset_lbs = torch.cat((torch.zeros(lb_city.shape[0], dtype=torch.int), torch.ones(lb_cam.shape[0], dtype=torch.int), 2*torch.ones(lb_a2d2.shape[0], dtype=torch.int)), dim=0)
         dataset_lbs = dataset_lbs.cuda()
         # print(dataset_lbs)
 
@@ -440,13 +476,17 @@ def train():
             else:
                 is_warmup = False
                 
-                
-            backward_loss, loss_seg, loss_aux, loss_contrast, loss_domain, kl_loss, new_proto = contrast_losses(adaptive_out, lb, dataset_lbs, is_warmup)
+            backward_loss = contrast_losses(adaptive_out, lb, dataset_lbs, is_warmup)
+            kl_loss = None
+            loss_seg = backward_loss
+            loss_aux = None
+            loss_contrast = None
+            # backward_loss, loss_seg, loss_aux, loss_contrast, loss_domain, kl_loss, new_proto = contrast_losses(adaptive_out, lb, dataset_lbs, is_warmup)
 
-        if is_distributed():
-            net.module.PrototypesUpdate(new_proto)
-        else:
-            net.PrototypesUpdate(new_proto)        
+        # if is_distributed():
+        #     net.module.PrototypesUpdate(new_proto)
+        # else:
+        #     net.PrototypesUpdate(new_proto)        
         
             
         # if with_memory and 'key' in out:
@@ -497,11 +537,11 @@ def train():
             lr = lr_schdr.get_lr()
             lr = sum(lr) / len(lr)
             print_log_msg(
-                i, 0, epoch, configer.get('lr', 'max_iter')+starti, lr, time_meter, loss_meter,
+                i, 0, a2d2_epoch, configer.get('lr', 'max_iter')+starti, lr, time_meter, loss_meter,
                 loss_pre_meter, loss_aux_meters, loss_contrast_meter, loss_domain_meter, kl_loss_meter)
             
 
-        if (i + 1) % 2000 == 0:
+        if (i + 1) % 100 == 0:
             save_pth = osp.join(configer.get('res_save_pth'), 'model_{}.pth'.format(i+1))
             logger.info('\nsave models to {}'.format(save_pth))
 
@@ -554,7 +594,7 @@ def train():
 
 def main():
 
-    local_rank = int(os.environ["LOCAL_RANK"])
+    # local_rank = int(os.environ["LOCAL_RANK"])
     # torch.cuda.set_device(args.local_rank)
     # dist.init_process_group(
     #     backend='nccl',
@@ -562,13 +602,13 @@ def main():
     #     world_size=torch.cuda.device_count(),
     #     rank=args.local_rank
     # )
-    torch.cuda.set_device(local_rank)
-    dist.init_process_group(
-        backend='nccl',
-        init_method='tcp://127.0.0.1:{}'.format(args.port),
-        world_size=torch.cuda.device_count(),
-        rank=local_rank
-    )
+    # torch.cuda.set_device(local_rank)
+    # dist.init_process_group(
+    #     backend='nccl',
+    #     init_method='tcp://127.0.0.1:{}'.format(args.port),
+    #     world_size=torch.cuda.device_count(),
+    #     rank=local_rank
+    # )
     
     if not osp.exists(configer.get('res_save_pth')): os.makedirs(configer.get('res_save_pth'))
 

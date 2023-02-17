@@ -31,7 +31,7 @@ from lib.ohem_ce_loss import OhemCELoss
 from lib.lr_scheduler import WarmupPolyLrScheduler
 from lib.meters import TimeMeter, AvgMeter
 from lib.logger import setup_logger, print_log_msg
-from lib.loss.loss_cross_datasets import CrossDatasetsLoss
+from lib.loss.loss_cross_datasets import CrossDatasetsLoss, CrossDatasetsCELoss
 from lib.class_remap import ClassRemap
 import lib.transform_cv2 as T
 
@@ -184,7 +184,8 @@ def set_model_dist(net):
     return net
 
 def set_contrast_loss(configer):
-    return CrossDatasetsLoss(configer)
+    return CrossDatasetsCELoss(configer)
+    # return CrossDatasetsLoss(configer)
 
 def set_meters(configer):
     time_meter = TimeMeter(configer.get('lr', 'max_iter'))
@@ -303,6 +304,7 @@ def train():
     is_dist = dist.is_initialized()
     writer = SummaryWriter(configer.get('res_save_pth'))
     use_ema = configer.get('use_ema')
+    with_mulbn = configer.get('contrast', 'with_mulbn')
     ## dataset
     dl_city, dl_cam, dl_a2d2 = get_data_loader(configer, aux_mode='train', distributed=is_dist)
     ## model
@@ -397,8 +399,7 @@ def train():
         lb_city = torch.squeeze(lb_city, 1)
         lb_cam = torch.squeeze(lb_cam, 1)
         lb_a2d2 = torch.squeeze(lb_a2d2, 1)
-        
-        # lb = torch.cat((lb_city, lb_cam), 0)
+
         im = [im_city, im_cam, im_a2d2]
         lb = [lb_city, lb_cam, lb_a2d2]
         
@@ -412,13 +413,8 @@ def train():
             std=(0.2071, 0.2088, 0.2090),
         )
         
-        # print(lb_city.shape)
-        # print(lb_cam.shape)
-        # perm_index = torch.randperm(im.shape[0])
-        # im = im[perm_index]
-        # lb = lb[perm_index]
         for j in range(0, n_datasets):
-            # print(j)
+
             dataset_lbs = j * torch.ones(lb[j].shape[0]).cuda()
             optim.zero_grad()
             with amp.autocast(enabled=configer.get('use_fp16')):
@@ -439,7 +435,7 @@ def train():
                     else:
                         net.set_train_dataset_aux(False)    
                                 
-                
+
                 enh_im = []
                 for k in range(0, n_datasets):
                     if k == j:
@@ -459,6 +455,7 @@ def train():
                         enh_im.append(im[j])
                 
                 out = net(im[j], *enh_im, dataset=j)
+
                 
                 # logits, *logits_aux = out['seg']
                 # emb = out['embed']

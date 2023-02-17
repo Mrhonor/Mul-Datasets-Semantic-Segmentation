@@ -36,51 +36,7 @@ class SegmentHead(nn.Module):
 
         return feats
 
-# class DomainClassifierHead(nn.Module):
-#     def __init__(self, dim_in, n_domain, n_bn=1):
-#         super(DomainClassifierHead, self).__init__()
 
-#         self.n_bn = n_bn
-
-#         self.drop = nn.Dropout(0.1)
-#         self.conv1 = ConvWNReLU(dim_in, 128, ks=3, stride=2, padding=1)
-#         self.conv2 = ConvWNReLU(128, 192, ks=3, stride=2, padding=1)
-#         self.conv3 = ConvWNReLU(192, 256, ks=3, stride=2, padding=1)
-#         self.conv_last = nn.Conv2d(256, n_domain, kernel_size=1) # out: 8 x 16
-            
-
-
-#     def forward(self, x, *other_x):
-#         if len(other_x) !=0:
-#             batch_size = [x.shape[0]]
-#             for i in range(0, len(other_x)):
-#                 batch_size.append(other_x[i].shape[0])
-#                 x = torch.cat((x, other_x[i]), 0)
-
-#         feat = self.drop(x)
-                
-#         feat = self.conv1(feat)
-#         feat = self.conv2(feat)
-#         feat = self.conv3(feat)
-        
-#         feat = self.conv_last(feat)
-            
-#         # feat = self.classifierHead(x)
-
-#         if self.classifier == 'convmlp' or self.classifier == 'convmlp_small':
-#             feat = torch.mean(feat, dim=[2,3])
-        
-#         feats = []
-#         if len(other_x) != 0:
-#             begin_index = 0
-#             for i in range(0, len(other_x) + 1):
-#                 end_index = begin_index + batch_size[i]
-#                 feats.append(feat[begin_index: end_index])
-#         else:
-#             feats.append(feat)
-            
-#         # feat = self.proj(feat)
-#         return feats
 
 class HRNet_W48_CONTRAST(nn.Module):
     """
@@ -117,6 +73,13 @@ class HRNet_W48_CONTRAST(nn.Module):
 
         trunc_normal_(self.prototypes, std=0.02)
         self.init_weights()    
+       
+        self.with_memory_bank = self.configer.get('contrast', 'memory_bank')
+        if self.with_memory_bank:
+            self.memory_bank_size = self.configer.get('contrast', 'memory_bank_size')
+            self.register_buffer("memory_bank", torch.randn(self.num_unify_classes, self.memory_bank_size, self.proj_dim))
+            self.memory_bank = nn.functional.normalize(self.memory_bank, p=2, dim=2)
+            self.register_buffer("memory_bank_ptr", torch.zeros(self.num_unify_classes, dtype=torch.long))
         
         # self.with_domain_adversarial = self.configer.get('network', 'with_domain_adversarial')
         # if self.with_domain_adversarial:

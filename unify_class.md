@@ -1,41 +1,47 @@
 "RD normal street", 0
 "sidewalk", 1
-"building", 2
-"wall", 3
-"fence", 4
-"pole", 5
-"traffic light", 6
-"traffic sign", 7
-"vegetation", 8
-"terrain", 9
-"sky", 10
-"person", 11
-"rider", 12
-"car", 13
-"truck", 14
-"bus", 15
-"train", 16
-"motorcycle", 17
-"bicycle", 18
-"Utility vehicle", 19
-"Sidebars", 20
-"Speed bumper", 21
-"Curbstone", 22
-"Solid line", 23
-"Irrelevant signs", 24
-"Road blocks", 25
-"Tractor", 26
-"Non-drivable street", 27
-"Zebra crossing", 28
-"Obstacles / trash", 29
-"RD restricted area", 30
-"Animals", 31
-"Signal corpus", 32
-"Drivable cobblestone", 33
-"Electronic traffic", 34
-"Slow drive area", 35
-"Parking area", 36
-"Painted driv. instr.", 37
-"Traffic guide obj.", 38
-"Dashed line", 39
-"Ego car", 40
+"Building(Grid)", 2
+"building", 3
+"wall(Grid)", 4
+"wall", 5
+"fence", 6
+"pole", 7
+"traffic light", 8
+"traffic sign", 9
+"vegetation", 10
+"terrain", 11
+"sky", 12
+"person", 13
+"Rider (Bicycle)", 14
+"Rider (Motor)", 15
+"car", 16
+"truck", 17
+"bus", 18
+"train", 19
+"motorcycle", 20
+"bicycle", 21
+"Utility vehicle", 22
+"Sidebars", 23
+"Speed bumper", 24
+"Curbstone", 25
+"Solid line", 26
+"Irrelevant signs", 27
+"Road blocks", 28
+"Tractor", 29
+"Non-drivable street", 30
+"Zebra crossing", 31
+"Obstacles / trash", 32
+"RD restricted area", 33
+"Animals", 34
+"Signal corpus(Pole)", 35
+"Signal corpus(Light)", 36
+"Drivable cobblestone", 37
+"Electronic traffic", 38
+"Slow drive area", 39
+"Parking area", 40
+"Painted driv. instr.", 41
+"Traffic guide obj.(Fence)", 42
+"Traffic guide obj.(Cone)", 43
+"Dashed line", 44
+"Ego car", 45
+
