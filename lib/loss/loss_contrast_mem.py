@@ -19,7 +19,7 @@ class PixelContrastLoss(nn.Module, ABC):
 
         self.configer = configer
         self.temperature = self.configer.get('contrast', 'temperature')
-        self.base_temperature = self.configer.get('contrast', 'base_temperature')
+        self.base_temperature = self.configer.get('contast', 'base_temperature')
 
         self.ignore_label = self.configer.get('loss', 'ignore_index')
 

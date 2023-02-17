@@ -76,7 +76,7 @@ def prototype_learning(configer, prototypes, _c, out_seg, gt_seg, update_prototy
 
     return proto_logits, proto_target, protos
 
-def KmeansProtoLearning(configer, memory_bank, _c, cluster_seg, gt_seg):
+def KmeansProtoLearning(configer, memory_bank, _c, cluster_seg, gt_seg, memory_bank_init):
     num_unify_classes = configer.get('num_unify_classes')
     num_prototype = configer.get('contrast', 'num_prototype')
     coefficient = configer.get('contrast', 'coefficient')

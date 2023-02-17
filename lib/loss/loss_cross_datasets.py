@@ -7,6 +7,7 @@ from lib.loss.loss_helper import NLLPlusLoss, WeightedNLLPlusLoss, MultiLabelCro
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from lib.module.memory_bank_helper import memory_bank_push
 from lib.class_remap import ClassRemap, ClassRemapOneHotLabel
 from lib.prototype_learning import prototype_learning, KmeansProtoLearning
 
@@ -374,34 +375,11 @@ class CrossDatasetsCELoss_KMeans(nn.Module):
         if self.use_contrast:
             self.contrast_criterion = PixelContrastLoss(configer=configer)
         
-            self.with_ppd = self.configer.get('contrast', 'with_ppd')
-            if self.with_ppd:
-                self.ppd_loss_weight = self.configer.get('contrast', 'ppd_loss_weight')
-                self.ppd_criterion = PixelPrototypeDistanceLoss(configer=configer)
-                
-            self.with_hard_lb_contrast = self.configer.get('contrast', 'with_hard_lb_contrast')
-            if self.with_hard_lb_contrast:
-                self.hard_lb_contrast_loss_weight = self.configer.get('contrast', 'hard_lb_contrast_loss_weight')
-                self.hard_lb_contrast_loss = PixelContrastLossMulProto(configer=configer)
-            
-            
-        
         self.upsample = self.configer.get('contrast', 'upsample')
         self.network_stride = self.configer.get('network', 'stride')
         
-        self.with_domain_adversarial = self.configer.get('network', 'with_domain_adversarial')
-        if self.with_domain_adversarial:
-            batch_sizes = torch.tensor([self.configer.get('dataset'+str(i), 'ims_per_gpu') for i in range(1, self.n_datasets+1)])
-            batch_size_sum = torch.sum(batch_sizes)
-            
-            weight_vector = F.normalize(batch_size_sum / batch_sizes, p=1, dim=0).cuda()
-            
-            self.domain_loss1 = torch.nn.CrossEntropyLoss(weight=weight_vector)
-            self.domain_loss2 = torch.nn.CrossEntropyLoss(weight=weight_vector)
-            self.domain_loss_weight = self.configer.get('loss', 'domain_loss_weight')
         
-        
-    def forward(self, preds, target, dataset_ids, is_warmup=False, init_memory_bank=False):
+    def forward(self, preds, target, dataset_ids, is_warmup=False):
         assert "seg" in preds
         
     
@@ -409,18 +387,15 @@ class CrossDatasetsCELoss_KMeans(nn.Module):
         if self.use_contrast:
             embedding = preds['embed']
         
-        if self.with_domain_adversarial:
-            domain_pred1, domain_pred2 = preds['domain']        
-
         b, c, h, w = logits.shape
 
         lb = target
  
 
         if "memory_bank" in preds:
-            memory_bank, memory_bank_ptr, prototypes = preds['memory_bank']
+            memory_bank, memory_bank_ptr, memory_bank_init, prototypes = preds['memory_bank']
         else:
-            memory_bank, memory_bank_ptr, prototypes = None, None
+            memory_bank, memory_bank_ptr, memory_bank_init, prototypes = None, None, None, None
 
         contrast_lb = lb[:, ::self.network_stride, ::self.network_stride]
         
@@ -429,9 +404,8 @@ class CrossDatasetsCELoss_KMeans(nn.Module):
             rearr_emb = rearrange(embedding, 'b c h w -> (b h w) c').detach()
             proto_target = self.AdaptiveSingleSegRemapping(contrast_lb, dataset_ids)
 
-            
-            memory_bank_push(self.configer, memory_bank, memory_bank_ptr, rearr_emb, proto_target)
-            if init_memory_bank == False:
+            memory_bank_push(self.configer, memory_bank, memory_bank_ptr, rearr_emb, proto_target, memory_bank_init, memory_bank_init, random_pick_ratio=0.1)
+            if self.IsInitMemoryBank(memory_bank_init) == False:
                 # proto_logits = torch.mm(rearr_emb, memory_bank.view(-1, memory_bank.shape[-1]).t())
                 
                 cluster_mask, constraint_mask = self.AdaptiveKMeansRemapping(contrast_lb, dataset_ids)
@@ -441,7 +415,7 @@ class CrossDatasetsCELoss_KMeans(nn.Module):
                 
                 
                 if cluster_mask.any():
-                    choice_cluster, _ = KmeansProtoLearning(self.configer, memory_bank, rearr_emb, cluster_mask, constraint_mask)
+                    choice_cluster, _ = KmeansProtoLearning(self.configer, memory_bank, rearr_emb, cluster_mask, constraint_mask, memory_bank_init)
                 
                     proto_target[cluster_mask] = choice_cluster       
                 # proto_targetOntHot = LabelToOneHot(proto_target, self.num_unify_classes)
@@ -470,8 +444,6 @@ class CrossDatasetsCELoss_KMeans(nn.Module):
                 # loss_aux = [aux_criterion_mul(aux, seg_label_mul+ seg_label_sig) for aux, aux_criterion_mul, aux_criterion_sig in zip(pred_aux, self.segLoss_aux_Mul, self.segLoss_aux_Sig)]
                 
                 loss = loss + self.aux_weight * sum(loss_aux)
-                
-            
                 
         else:
 
@@ -506,27 +478,9 @@ class CrossDatasetsCELoss_KMeans(nn.Module):
             #     loss_contrast = loss_contrast + self.ppd_loss_weight * loss_ppd
                 
             loss = loss + self.loss_weight * loss_contrast
-            
-            
 
-
-        if self.with_domain_adversarial:
-            domain_label = torch.ones(b, dtype=torch.int) 
-
-            if domain_pred1.is_cuda:
-                domain_label = domain_label.cuda()
-                
-            domain_label = domain_label * dataset_ids
-                
-            
-            loss_domain1 = self.domain_loss1(domain_pred1, domain_label)
-            loss_domain2 = self.domain_loss2(domain_pred2, domain_label)
-            loss_domain = loss_domain1 + loss_domain2
-            loss = loss + self.domain_loss_weight * loss_domain
-            
-            
         return loss, loss_seg, loss_aux, loss_contrast, loss_domain, new_proto
-
+            
 
 
     def AdaptiveSingleSegRemapping(self, lb, dataset_ids):
@@ -608,6 +562,12 @@ class CrossDatasetsCELoss_KMeans(nn.Module):
             
         return 
 
+    def IsInitMemoryBank(self, init_datas):
+        for i in init_datas:
+            if self.classRemapper.IsSingleRemaplb(i) and (i is False):
+                return False
+        return True
+
 def test_LabelToOneHot():
     lb = torch.tensor([2, 1,2,-1])
     print(LabelToOneHot(lb, 3))
@@ -623,4 +583,4 @@ if __name__ == "__main__":
     # seq = torch.randn(3,4)
     # print(seq)
     # print(loss_fuc(a,lb,seq))
-        
+       

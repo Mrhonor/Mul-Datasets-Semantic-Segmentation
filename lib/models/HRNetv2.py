@@ -80,6 +80,7 @@ class HRNet_W48_CONTRAST(nn.Module):
             self.register_buffer("memory_bank", torch.randn(self.num_unify_classes, self.memory_bank_size, self.proj_dim))
             self.memory_bank = nn.functional.normalize(self.memory_bank, p=2, dim=2)
             self.register_buffer("memory_bank_ptr", torch.zeros(self.num_unify_classes, dtype=torch.long))
+            self.register_buffer("memory_bank_init", torch.zeros(self.num_unify_classes, dtype=torch.bool))
         
         # self.with_domain_adversarial = self.configer.get('network', 'with_domain_adversarial')
         # if self.with_domain_adversarial:

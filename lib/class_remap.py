@@ -20,7 +20,15 @@ class ClassRemap():
         self.max_iter = self.configer.get('lr', 'max_iter')
         self.reweight = self.configer.get('loss', 'reweight')
         self._unpack()
+       
+    def IsSingleRemaplb(self, lb):
+        for i in range(0, self.n_datasets): 
+            for k, v in self.remapList[i].items():
+                if len(v) == 1 and v[0] == lb:
+                    return True
         
+        return False
+     
     def SingleSegRemapping(self, labels, dataset_id):
         ## 只输出 唯一映射部分
         ## dataset_id指定映射方案
