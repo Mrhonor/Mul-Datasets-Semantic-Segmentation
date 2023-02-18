@@ -90,8 +90,9 @@ def kmeans(
     while True:
 
         dis = pairwise_distance_function(X, initial_state)
-
-        dis[constraint_matrix] = 1e5 # use large value to avoid choice it
+        
+        if constraint_matrix != None:
+            dis[constraint_matrix] = 1e5 # use large value to avoid choice it
 
         choice_cluster = torch.argmin(dis, dim=1)
 

@@ -301,6 +301,7 @@ def train():
     is_dist = dist.is_initialized()
     writer = SummaryWriter(configer.get('res_save_pth'))
     use_ema = configer.get('use_ema')
+    use_contrast = configer.get('contrast', 'use_contrast')
     ## dataset
 
     # dl = get_single_data_loader(configer, aux_mode='train', distributed=is_dist)
@@ -463,30 +464,32 @@ def train():
                     adaptive_out['ema'] = ema_out
 
             if is_distributed():
-                adaptive_out['prototypes'] = net.module.prototypes
+                adaptive_out['prototypes'] = [net.module.memory_bank, net.module.memory_bank_ptr, net.module.memory_bank_init, net.module.prototypes]
             
             else:
-                adaptive_out['prototypes'] = net.prototypes
+                adaptive_out['prototypes'] = [net.memory_bank, net.memory_bank_ptr, net.memory_bank_init, net.prototypes]
                 
                 
 
-            if i < configer.get('lr', 'warmup_iters') or not configer.get('contrast', 'use_contrast'):
+            if i < configer.get('lr', 'warmup_iters') or not use_contrast:
                 is_warmup = True
                         
             else:
                 is_warmup = False
                 
-            backward_loss = contrast_losses(adaptive_out, lb, dataset_lbs, is_warmup)
-            kl_loss = None
-            loss_seg = backward_loss
-            loss_aux = None
-            loss_contrast = None
-            # backward_loss, loss_seg, loss_aux, loss_contrast, loss_domain, kl_loss, new_proto = contrast_losses(adaptive_out, lb, dataset_lbs, is_warmup)
+            if not use_contrast:
+                backward_loss = contrast_losses(adaptive_out, lb, dataset_lbs, is_warmup)
+                kl_loss = None
+                loss_seg = backward_loss
+                loss_aux = None
+                loss_contrast = None
+            else:
+                backward_loss, loss_seg, loss_aux, loss_contrast, loss_domain, kl_loss, new_proto = contrast_losses(adaptive_out, lb, dataset_lbs, is_warmup)
 
-        # if is_distributed():
-        #     net.module.PrototypesUpdate(new_proto)
-        # else:
-        #     net.PrototypesUpdate(new_proto)        
+        if is_distributed():
+            net.module.PrototypesUpdate(new_proto)
+        else:
+            net.PrototypesUpdate(new_proto)        
         
             
         # if with_memory and 'key' in out:
@@ -526,7 +529,7 @@ def train():
             if with_aux:
                 _ = [mter.update(lss.item()) for mter, lss in zip(loss_aux_meters, loss_aux)]
                 
-            if i >= configer.get('lr', 'warmup_iters') and configer.get('contrast', 'use_contrast'):
+            if i >= configer.get('lr', 'warmup_iters') and use_contrast:
                 loss_contrast_meter.update(loss_contrast.item())
 
         

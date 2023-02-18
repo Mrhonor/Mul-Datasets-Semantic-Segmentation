@@ -7,6 +7,7 @@ from lib.module.module_helper import ConvBNReLU
 from lib.module.projection import ProjectionHead
 from lib.module.domain_classifier_head import DomainClassifierHead
 from timm.models.layers import trunc_normal_
+from lib.class_remap import ClassRemap
 
 backbone_url = './res/hrnetv2_w48_imagenet_pretrained.pth'
 
@@ -81,7 +82,7 @@ class HRNet_W48_CONTRAST(nn.Module):
             self.memory_bank = nn.functional.normalize(self.memory_bank, p=2, dim=2)
             self.register_buffer("memory_bank_ptr", torch.zeros(self.num_unify_classes, dtype=torch.long))
             self.register_buffer("memory_bank_init", torch.zeros(self.num_unify_classes, dtype=torch.bool))
-        
+            
         # self.with_domain_adversarial = self.configer.get('network', 'with_domain_adversarial')
         # if self.with_domain_adversarial:
         #     self.DomainCls_head = DomainClassifierHead(in_channels, n_domain=self.n_datasets, )
@@ -260,6 +261,32 @@ class HRNet_W48_CONTRAST(nn.Module):
         loadStage4fuse(state, 'stage4.2.', newstate)
         
         self.backbone.load_state_dict(newstate, strict=False)
+        
+    def PrototypesUpdate(self, new_proto):
+        self.prototypes = nn.Parameter(F.normalize(new_proto, p=2, dim=-1),
+                                        requires_grad=False)
+
+    # def GenMemoryBank(self):
+    #     classRemapper = ClassRemap(self.configer)
+    #     self.memory_bank_size = self.configer.get('contrast', 'memory_bank_size')
+    #     self.memory_bank_map = []
+    #     for dataset_id in range(0, self.n_datasets):
+    #         memory_bank_map_this_dataset = []
+    #         len_dataset = self.configer.get('dataset'+str(dataset_id+1), 'n_cats')
+    #         for lb_id in range(0, len_dataset):
+    #             remap_lbs = lassRemapper.getAnyClassRemap(lb_id, dataset_id)
+    #             if len(remap_lbs) == 1:
+    #                 continue
+    #             else:
+    #                 for i in remap_lbs:
+    #                     if classRemapper.IsSingleRemaplb(i):
+                            
+                            
+        
+    #     self.register_buffer("memory_bank", torch.randn(self.num_unify_classes, self.memory_bank_size, self.proj_dim))
+    #     self.memory_bank = nn.functional.normalize(self.memory_bank, p=2, dim=2)
+    #     self.register_buffer("memory_bank_ptr", torch.zeros(self.num_unify_classes, dtype=torch.long))
+    #     self.register_buffer("memory_bank_init", torch.zeros(self.num_unify_classes, dtype=torch.bool))
         
 
     # newstate = loadpretrain(state)

@@ -231,6 +231,23 @@ class ClassRemapOneHotLabel(ClassRemap):
         super(ClassRemapOneHotLabel, self).__init__(configer)
         self.update_sim_thresh = self.configer.get('contrast', 'update_sim_thresh')
 
+    def SingleSegRemapping(self, labels, dataset_id):
+        ## 只输出 唯一映射部分
+        ## dataset_id指定映射方案
+        b, h, w = labels.shape
+        mask = torch.zeros(b,h,w,self.num_unify_classes, dtype=torch.bool)
+        if labels.is_cuda:
+            mask = mask.cuda()
+        
+        for k, v in self.remapList[dataset_id].items():
+            if len(v) > 1: 
+                continue
+
+            mask[labels==int(k), v[0]] = True
+
+            
+        return mask  
+
     def SegRemapping(self, labels, dataset_id):
         ## 输入 batchsize x H x W 输出 n x batch size x H x W
         ## 1表示目标类， 0表示非目标类
@@ -395,6 +412,27 @@ class ClassRemapOneHotLabel(ClassRemap):
           
         return contrast_lb_mask, seg_mask
   
+    def KMeansRemapping(self, labels, dataset_id):
+        ## 只输出 唯一映射部分
+        ## dataset_id指定映射方案
+        outLabels = []
+        
+        cluster_mask = torch.zeros_like(labels).bool() 
+        constraint_mask = torch.zeros((*(labels.shape), self.num_unify_classes), dtype=torch.bool)
+        if labels.is_cuda:
+            constraint_mask = constraint_mask.cuda()
+        
+        for k, v in self.remapList[dataset_id].items():
+            if len(v) > 1: 
+                expend_vector = torch.zeros(self.num_unify_classes, dtype=torch.bool)
+                if labels.is_cuda:
+                    expend_vector = expend_vector.cuda()
+
+                expend_vector[v] = True
+                cluster_mask[labels==int(k)] = True
+                constraint_mask[labels==int(k)] = expend_vector         
+            
+        return cluster_mask, constraint_mask
     
     def MultiProtoRemapping(self, labels, proto_logits, dataset_id, max_index_others=None):
         contrast_lb = labels[:, ::self.network_stride, ::self.network_stride]
