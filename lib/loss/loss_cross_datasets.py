@@ -383,8 +383,11 @@ class CrossDatasetsCELoss_KMeans(nn.Module):
     def forward(self, preds, target, dataset_ids, is_warmup=False):
         assert "seg" in preds
         
-    
-        logits, *logits_aux = preds['seg']
+        if self.with_aux: 
+            logits, *logits_aux = preds['seg']
+        else:
+            logits = preds['seg']
+        
         if self.use_contrast:
             embedding = preds['embed']
         
@@ -393,8 +396,8 @@ class CrossDatasetsCELoss_KMeans(nn.Module):
         lb = target
  
 
-        if "memory_bank" in preds:
-            memory_bank, memory_bank_ptr, memory_bank_init, prototypes = preds['memory_bank']
+        if "prototypes" in preds:
+            memory_bank, memory_bank_ptr, memory_bank_init, prototypes = preds['prototypes']
         else:
             memory_bank, memory_bank_ptr, memory_bank_init, prototypes = None, None, None, None
 
@@ -404,8 +407,7 @@ class CrossDatasetsCELoss_KMeans(nn.Module):
         if self.use_contrast:
             rearr_emb = rearrange(embedding, 'b c h w -> (b h w) c').detach()
             proto_target = self.AdaptiveSingleSegRemapping(contrast_lb, dataset_ids)
-
-            memory_bank_push(self.configer, memory_bank, memory_bank_ptr, rearr_emb, proto_target, memory_bank_init, memory_bank_init, random_pick_ratio=0.1)
+            memory_bank_push(self.configer, memory_bank, memory_bank_ptr, rearr_emb, proto_target, memory_bank_init, random_pick_ratio=0.1)
             if self.IsInitMemoryBank(memory_bank_init):
                 # 完成初始化
                 self.AdaptiveKMeansProtoLearning(contrast_lb, memory_bank, memory_bank_ptr, memory_bank_init, embedding, dataset_ids)
@@ -471,15 +473,29 @@ class CrossDatasetsCELoss_KMeans(nn.Module):
             
 
 
+
     def AdaptiveSingleSegRemapping(self, lb, dataset_ids):
-
         proto_mask = torch.zeros_like(lb)
-
+        
         for i in range(0, self.n_datasets):
             if not (dataset_ids == i).any():
                 continue
             
             proto_mask[dataset_ids==i] = self.classRemapper.SingleSegRemapping(lb[dataset_ids==i], i)
+        
+        return proto_mask.contiguous().view(-1)
+
+    def AdaptiveSingleSegRemappingOneHot(self, lb, dataset_ids):
+        b,h,w = lb.shape
+        proto_mask = torch.zeros(b,h,w,self.num_unify_classes, dtype=torch.bool)
+        if lb.is_cuda:
+            proto_mask = proto_mask.cuda()
+
+        for i in range(0, self.n_datasets):
+            if not (dataset_ids == i).any():
+                continue
+            
+            proto_mask[dataset_ids==i] = self.classRemapper.SingleSegRemappingOneHot(lb[dataset_ids==i], i)
         
         return proto_mask.contiguous().view(-1)
     
@@ -563,17 +579,22 @@ class CrossDatasetsCELoss_KMeans(nn.Module):
         # out_kmeans_lb = torch.zeros(b,h,w,self.num_unify_classes, dtype=torch.bool)
         # if lb.iscuda:
         #     out_kmeans_lb = out_kmeans_lb.cuda()
+        re_emb = rearrange(emb, 'b c h w -> b h w c')
              
         for ds_id in range(0, self.n_datasets):
             if not (dataset_ids == ds_id).any():
                 continue
                 
             this_lb = lb[dataset_ids==ds_id]
-            this_emb = emb[dataset_ids==ds_id]
+            this_emb = re_emb[dataset_ids==ds_id]
             # this_out_kmeans_lb = out_kmeans_lb[dataset_ids == ds_id]
-            len_dataset = self.configer.get('dataset'+str(dataset_id+1), 'n_cats')
+            len_dataset = self.configer.get('dataset'+str(ds_id+1), 'n_cats')
             for lb_id in range(0, len_dataset):
-                remap_lbs = lassRemapper.getAnyClassRemap(lb_id, dataset_id)
+                remap_lbs = self.classRemapper.getAnyClassRemap(lb_id, ds_id)
+                remap_lbs = torch.tensor(remap_lbs)
+                if lb.is_cuda:
+                    remap_lbs = remap_lbs.cuda()
+                    
                 if len(remap_lbs) == 1:
                     continue
 
@@ -581,13 +602,16 @@ class CrossDatasetsCELoss_KMeans(nn.Module):
                 for i in remap_lbs:
                     if not self.classRemapper.IsSingleRemaplb(i):
                         continue
+                    if not (this_lb == i).any():
+                        continue
                     
                     in_x = this_emb[this_lb==i]
                     len_in_x = len(in_x)
                     inited_lb = remap_lbs[memory_bank_init[remap_lbs]]
-                    this_memory = memory_bank[inited_lb]
-                    this_memory = rearrange(this_memory, 'b n d -> (b n) d')
-                    in_x = torch.cat((in_x, this_memory), dim=0)
+                    if inited_lb.any():
+                        this_memory = memory_bank[inited_lb]
+                        this_memory = rearrange(this_memory, 'b n d -> (b n) d')
+                        in_x = torch.cat((in_x, this_memory), dim=0)
                     cluster_centers = torch.zeros((len(remap_lbs), proj_dim), dtype=torch.float32)
                     if lb.is_cuda:
                         cluster_centers = cluster_centers.cuda()
@@ -599,32 +623,28 @@ class CrossDatasetsCELoss_KMeans(nn.Module):
                         else:
                             cluster_centers[k] = in_x[index]
                             index += 1 
+                    # 生成约束矩阵
+                    constraint_matrix = torch.zeros(in_x.shape[0], len(remap_lbs), dtype=torch.bool)
+                    index = 0
+                    for k in range(0, len(remap_lbs)):
+                        if inited_lb.any() and inited_lb[index] == remap_lbs[k]:
+                            constraint_vector = torch.zeros(len(remap_lbs), dtype=torch.bool)
+                            constraint_vector[k] = True
+                            constraint_matrix[len_in_x+index*memory_size:len_in_x+(index+1)*memory_size] = constraint_vector
+                            index += 1
+                    
+                    target_device = 'cpu'
+                    out_cluster = torch.zeros(len_in_x, self.num_unify_classes, dtype=torch.bool)
+                    if lb.is_cuda:
+                        constraint_matrix = constraint_matrix.cuda()
+                        target_device = 'cuda' 
+                        out_cluster = out_cluster.cuda()
+                            
+                    choice_cluster, initial_state = kmeans(in_x, len(remap_lbs), cluster_centers=cluster_centers, distance='cosine', device=target_device, constraint_matrix=constraint_matrix)
+                    
+                    out_cluster[remap_lbs[choice_cluster]] = True
+                    # this_out_kmeans_lb[this_lb==i] = out_cluster
                     break
-
-                # 生成约束矩阵
-                constraint_matrix = torch.zeros(in_x.shape[0], len(remap_lbs), dtype=torch.bool)
-                index = 0
-                for k in range(0, len(remap_lbs)):
-                    if inited_lb[index] == remap_lbs[k]:
-                        constraint_vector = torch.zeros(len(remap_lbs), dtype=torch.bool)
-                        constraint_vector[k] = True
-                        constraint_matrix[len_in_x+index*memory_size:len_in_x+(index+1)*memory_size] = constraint_vector
-                        index += 1
-                
-                target_device = 'cpu'
-                out_cluster = torch.zeros(len_in_x, self.num_unify_classes, dtype=torch.bool)
-                if lb.is_cuda:
-                    constraint_matrix = constraint_matrix.cuda()
-                    target_device = 'cuda' 
-                    out_cluster = out_cluster.cuda()
-                        
-                choice_cluster, initial_state = kmeans(in_x, len(remap_lbs), cluster_centers=cluster_centers, distance='cosine', device=target_device, constraint_matrix=constraint_matrix)
-                
-                out_cluster[remap_lbs[choice_cluster]] = True
-                # this_out_kmeans_lb[this_lb==i] = out_cluster
-                
-                # 根据结果进行push
-                memory_bank_push(self.configer, memory_bank, memory_bank_ptr, in_x, out_cluster, memory_bank_init)
             
             # out_kmeans_lb[dataset_ids==ds_id] = this_out_kmeans_lb
         

@@ -31,7 +31,7 @@ from lib.ohem_ce_loss import OhemCELoss
 from lib.lr_scheduler import WarmupPolyLrScheduler
 from lib.meters import TimeMeter, AvgMeter
 from lib.logger import setup_logger, print_log_msg
-from lib.loss.loss_cross_datasets import CrossDatasetsLoss, CrossDatasetsCELoss
+from lib.loss.loss_cross_datasets import CrossDatasetsLoss, CrossDatasetsCELoss, CrossDatasetsCELoss_KMeans
 from lib.class_remap import ClassRemap
 
 from tools.configer import Configer
@@ -184,7 +184,8 @@ def set_model_dist(net):
     return net
 
 def set_contrast_loss(configer):
-    return CrossDatasetsCELoss(configer)
+    return CrossDatasetsCELoss_KMeans(configer)
+    # return CrossDatasetsCELoss(configer)
     # return CrossDatasetsLoss(configer)
 
 def set_meters(configer):

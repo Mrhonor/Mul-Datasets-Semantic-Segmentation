@@ -57,7 +57,7 @@
       "16": [19],
       "17": [20],
       "18": [21],
-      "20": [22, 29, 32, 34, 45]
+      "19": [22, 29, 32, 34, 45]
     }, 
     "class_remap2":{ 
       "0": [12],
@@ -274,7 +274,7 @@
     "use_fp16": false,
     "use_sync_bn": false,
     "contrast": {
-      "use_contrast": false,
+      "use_contrast": true,
       "proj_dim": 256,
       "temperature": 0.07,
       "base_temperature": 0.07,
@@ -293,13 +293,13 @@
       "hard_lb_contrast_loss_weight": 1,
       "with_consistence": false,
       "consistent_loss_weight": 10,
-      "with_mulbn": true,
+      "with_mulbn": false,
       "memory_bank": true,
       "memory_bank_size": 5000
     },
     "res_save_pth": "res/Mds/",
     "network": {
-      "stride": 32,
+      "stride": 4,
       "with_domain_adversarial": false
     },
     "dataset_aux_head": {

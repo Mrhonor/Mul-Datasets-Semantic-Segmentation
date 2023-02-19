@@ -231,7 +231,7 @@ class ClassRemapOneHotLabel(ClassRemap):
         super(ClassRemapOneHotLabel, self).__init__(configer)
         self.update_sim_thresh = self.configer.get('contrast', 'update_sim_thresh')
 
-    def SingleSegRemapping(self, labels, dataset_id):
+    def SingleSegRemappingOneHot(self, labels, dataset_id):
         ## 只输出 唯一映射部分
         ## dataset_id指定映射方案
         b, h, w = labels.shape
@@ -243,7 +243,11 @@ class ClassRemapOneHotLabel(ClassRemap):
             if len(v) > 1: 
                 continue
 
-            mask[labels==int(k), v[0]] = True
+            lb_vector = torch.zeros(self.num_unify_classes, dtype=torch.bool)
+            if labels.is_cuda:
+                lb_vector = lb_vector.cuda()
+            lb_vector[v[0]] = True
+            mask[labels==int(k)] = lb_vector
 
             
         return mask  
