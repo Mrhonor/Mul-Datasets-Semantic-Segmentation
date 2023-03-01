@@ -413,7 +413,7 @@ class CrossDatasetsCELoss_KMeans(nn.Module):
                 self.AdaptiveKMeansProtoLearning(contrast_lb, memory_bank, memory_bank_ptr, memory_bank_init, embedding, dataset_ids)
                 new_proto_mean = F.normalize(new_proto_mean, p=2, dim=-1)
                 
-                prototypes = F.normalize(new_proto_mean * (1-coefficient) + prototypes * coefficient, p=2, dim=-1)
+                prototypes = F.normalize(new_proto_mean * (1 - self.coefficient) + prototypes * self.coefficient, p=2, dim=-1)
                                                 
                 
             else:
@@ -448,7 +448,7 @@ class CrossDatasetsCELoss_KMeans(nn.Module):
             # proto_targetOntHot 单标签， contrast_mask_label 多标签
             contrast_mask_label, seg_mask_mul = self.AdaptiveMultiProtoRemapping(lb, proto_logits, dataset_ids)
 
-            loss_contrast = self.hard_lb_contrast_loss(proto_logits, contrast_mask_label+proto_targetOntHot)
+            loss_contrast = self.hard_lb_contrast_loss(proto_logits, contrast_mask_label+proto_targetOneHot)
             
             loss_seg_mul = self.seg_criterion_mul(logits, seg_mask_mul)
             loss_seg = loss_seg_mul 
@@ -656,7 +656,37 @@ def test_LabelToOneHot():
     lb = torch.tensor([2, 1,2,-1])
     print(LabelToOneHot(lb, 3))
     
+def test_CrossDatasetsCELoss_KMeans():
+    from tools.configer import Configer
+    from tools.train_amp_contrast_single import set_model
+    configer = Configer('configs/test/test.json') 
+    loss_fuc = CrossDatasetsCELoss_KMeans(configer)
+    net = set_model(configer)
+    adaptive_out = {}
+    labels = torch.tensor([[2, 0, 0, 0],
+                           [2, 1, 1, 1],
+                           [2, 2, 1, 2],
+                           [0, 0, 0, 2]]).unsqueeze(0)
+    segment_queue = torch.tensor([[-1, 0], [1, 0], [0, 1], [0, -1]], dtype=torch.float) # 19 x 2
+    embed = torch.tensor([[[-0.1, 0.9],[0.9, 0.1]],
+                          [[-0.8, 0.2],[-0.1, 0.9]]]).unsqueeze(0)
+    # 
+    # embed = embed.permute(0, 3, 1, 2)
+    Shapedembed = embed.contiguous().view(-1, 2)
+    mul_segment_queue = torch.tensor([[[-1, 0], [0.9, 0.1], [-0.1, 1], [0, -1]],
+                                      [[-0.9, 0.1], [1, 0], [0, 1], [-0.1, -1.9]]], dtype=torch.float) # 19 x 2 x 2
+    proto_logits = torch.mm(Shapedembed, mul_segment_queue.view(-1, 2).T)
+    print(mul_segment_queue.view(-1, 2))
+    # print(proto_logits)
+    rearrange_logit = torch.zeros_like(proto_logits)
 
+    for i in range(0, 2):
+        rearrange_logit[:, i::2] = proto_logits[:, i*4:(i+1)*4]
+    print(rearrange_logit)
+    # adaptive_out = 
+    
+    adaptive_out['prototypes'] = [net.memory_bank, net.memory_bank_ptr, net.memory_bank_init, net.prototypes]
+    backward_loss, loss_seg, loss_aux, loss_contrast, loss_domain, kl_loss, new_proto = loss_fuc(adaptive_out, lb, dataset_lbs, is_warmup)
 
 if __name__ == "__main__":
     test_LabelToOneHot()
