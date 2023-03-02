@@ -129,7 +129,7 @@ labels_info_eval = [
     {"hasInstances": False, "category": "vehicle", "catid": 7, "name": "license plate", "ignoreInEval": True, "id": 34, "color": [0, 0, 142], "trainId": 19}
 ]
 
-labels_info_train = labels_info_eval
+# labels_info_train = labels_info_eval
 labels_info_eval = labels_info
 
 # labels_info_train = labels_info_eval
@@ -144,8 +144,8 @@ class CityScapes(BaseDataset):
                 dataroot, annpath, trans_func, mode)
     
         if mode == 'train':
-            # self.n_cats = 18
-            self.n_cats = 20
+            self.n_cats = 18
+            # self.n_cats = 20
         elif mode == 'eval':
             self.n_cats = 19
             # self.n_cats = 20

@@ -1,3 +1,6 @@
+
+import sys
+sys.path.insert(0, '/root/mr/Mul-Datasets-Semantic-Segmentation')
 from cmath import inf
 from distutils.command.config import config
 from traceback import print_tb
@@ -310,12 +313,13 @@ class CrossDatasetsCELoss(nn.Module):
         self.temperature = self.configer.get('contrast', 'temperature')
         self.with_mulbn = self.configer.get('contrast', 'with_mulbn')
         self.reweight = self.configer.get('loss', 'reweight')
+        self.ignore_index = self.configer.get('loss', 'ignore_index')
 
         self.n_cats = []
         for i in range(1, self.n_datasets+1):
             self.n_cats.append(self.configer.get('dataset'+str(i), 'n_cats'))
 
-        self.CELoss = torch.nn.CrossEntropyLoss()
+        self.CELoss = torch.nn.CrossEntropyLoss(ignore_index=255)
 
     def forward(self, preds, target, dataset_ids, is_warmup=False):
         self.with_aux = self.configer.get('loss', 'with_aux')
@@ -659,7 +663,7 @@ def test_LabelToOneHot():
 def test_CrossDatasetsCELoss_KMeans():
     from tools.configer import Configer
     from tools.train_amp_contrast_single import set_model
-    configer = Configer('configs/test/test.json') 
+    configer = Configer(configs='configs/test/test.json') 
     loss_fuc = CrossDatasetsCELoss_KMeans(configer)
     net = set_model(configer)
     adaptive_out = {}
@@ -688,8 +692,27 @@ def test_CrossDatasetsCELoss_KMeans():
     adaptive_out['prototypes'] = [net.memory_bank, net.memory_bank_ptr, net.memory_bank_init, net.prototypes]
     backward_loss, loss_seg, loss_aux, loss_contrast, loss_domain, kl_loss, new_proto = loss_fuc(adaptive_out, lb, dataset_lbs, is_warmup)
 
+
+def test_CrossDatasetsCELoss():
+    from tools.configer import Configer
+    from tools.train_amp_contrast_single import set_model
+    configer = Configer(configs='configs/test/test.json') 
+    loss_fuc = CrossDatasetsCELoss_KMeans(configer)
+    lb = torch.tensor([[[2,1],[0,1]],[[2,1],[1,2]]])
+    logits = torch.tensor([[[[1,2,3,4],[0,1,2,3]],[[2,3,4,1],[3,0,1,2]]],
+                           [[[3,1,2,0],[2,4,1,0]],[[3,1,0,2],[2,4,3,1]]]], dtype=torch.float)
+    logits = rearrange(logits, 'b h w c -> b c h w') 
+    RemapMatrix = loss_fuc.classRemapper.getRemapMatrix(0)
+    remap_logits = torch.einsum('bchw, nc -> bnhw', logits[0].unsqueeze(0), RemapMatrix)
+
+    CELoss = torch.nn.CrossEntropyLoss()
+    print(CELoss(remap_logits, lb[0].unsqueeze(0)))
+    
+    
+
 if __name__ == "__main__":
-    test_LabelToOneHot()
+    test_CrossDatasetsCELoss()
+    # test_LabelToOneHot()
     # loss_fuc = PixelPrototypeDistanceLoss()
     # a = torch.randn(2,4,3,2)
     # print(a)

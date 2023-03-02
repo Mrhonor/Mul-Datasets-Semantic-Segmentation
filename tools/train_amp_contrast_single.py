@@ -64,7 +64,7 @@ def parse_args():
     parse.add_argument('--local_rank', dest='local_rank', type=int, default=-1,)
     parse.add_argument('--port', dest='port', type=int, default=16855,)
     parse.add_argument('--finetune_from', type=str, default=None,)
-    parse.add_argument('--config', dest='config', type=str, default='configs/bisenetv2_city_cam_a2d2.json',)
+    parse.add_argument('--config', dest='config', type=str, default='configs/bisenetv2_city_cam.json',)
     return parse.parse_args()
 
 # 使用绝对路径
@@ -184,8 +184,8 @@ def set_model_dist(net):
     return net
 
 def set_contrast_loss(configer):
-    return CrossDatasetsCELoss_KMeans(configer)
-    # return CrossDatasetsCELoss(configer)
+    # return CrossDatasetsCELoss_KMeans(configer)
+    return CrossDatasetsCELoss(configer)
     # return CrossDatasetsLoss(configer)
 
 def set_meters(configer):
@@ -306,7 +306,8 @@ def train():
     ## dataset
 
     # dl = get_single_data_loader(configer, aux_mode='train', distributed=is_dist)
-    dl_city, dl_cam, dl_a2d2 = get_data_loader(configer, aux_mode='train', distributed=is_dist)
+    # dl_city, dl_cam, dl_a2d2 = get_data_loader(configer, aux_mode='train', distributed=is_dist)
+    dl_city, dl_cam = get_data_loader(configer, aux_mode='train', distributed=is_dist)
     
     ## model
     net = set_model(configer=configer)
@@ -333,7 +334,7 @@ def train():
     # dl_iter = iter(dl)
     city_iter = iter(dl_city)
     cam_iter = iter(dl_cam)
-    a2d2_iter = iter(dl_a2d2)
+    # a2d2_iter = iter(dl_a2d2)
     
     ## train loop
     # for it, (im, lb) in enumerate(dl):
@@ -393,23 +394,26 @@ def train():
             city_iter = iter(dl_city)
             im_city, lb_city = next(city_iter)
         city_epoch = i * configer.get('dataset1', 'ims_per_gpu') / 2976
-        try:
-            im_a2d2, lb_a2d2 = next(a2d2_iter)
-            if not im_a2d2.size()[0] == configer.get('dataset3', 'ims_per_gpu'):
-                raise StopIteration
-        except StopIteration:
-            a2d2_iter = iter(dl_a2d2)
-            im_a2d2, lb_a2d2 = next(a2d2_iter)
-        a2d2_epoch = i * configer.get('dataset3', 'ims_per_gpu') / 30000
+        # try:
+        #     im_a2d2, lb_a2d2 = next(a2d2_iter)
+        #     if not im_a2d2.size()[0] == configer.get('dataset3', 'ims_per_gpu'):
+        #         raise StopIteration
+        # except StopIteration:
+        #     a2d2_iter = iter(dl_a2d2)
+        #     im_a2d2, lb_a2d2 = next(a2d2_iter)
+        # a2d2_epoch = i * configer.get('dataset3', 'ims_per_gpu') / 30000
 
+        im = torch.cat((im_city, im_cam), dim=0)
+        lb = torch.cat((lb_city, lb_cam), dim=0)
 
-        im = torch.cat((im_city, im_cam, im_a2d2), dim=0)
-        lb = torch.cat((lb_city, lb_cam, lb_a2d2), dim=0)
+        # im = torch.cat((im_city, im_cam, im_a2d2), dim=0)
+        # lb = torch.cat((lb_city, lb_cam, lb_a2d2), dim=0)
 
         im = im.cuda()
         lb = lb.cuda()
         # dataset_lbs = torch.tensor(dataset_lbs).cuda()
-        dataset_lbs = torch.cat((torch.zeros(lb_city.shape[0], dtype=torch.int), torch.ones(lb_cam.shape[0], dtype=torch.int), 2*torch.ones(lb_a2d2.shape[0], dtype=torch.int)), dim=0)
+        # dataset_lbs = torch.cat((torch.zeros(lb_city.shape[0], dtype=torch.int), torch.ones(lb_cam.shape[0], dtype=torch.int), 2*torch.ones(lb_a2d2.shape[0], dtype=torch.int)), dim=0)
+        dataset_lbs = torch.cat((torch.zeros(lb_city.shape[0], dtype=torch.int), torch.ones(lb_cam.shape[0], dtype=torch.int)), dim=0)
         dataset_lbs = dataset_lbs.cuda()
         # print(dataset_lbs)
 
@@ -464,11 +468,12 @@ def train():
                     ema_out = ema_net(im)
                     adaptive_out['ema'] = ema_out
 
-            if is_distributed():
-                adaptive_out['prototypes'] = [net.module.memory_bank, net.module.memory_bank_ptr, net.module.memory_bank_init, net.module.prototypes]
-            
-            else:
-                adaptive_out['prototypes'] = [net.memory_bank, net.memory_bank_ptr, net.memory_bank_init, net.prototypes]
+            if configer.get('contrast', 'use_contrast'):
+                if is_distributed():
+                    adaptive_out['prototypes'] = [net.module.memory_bank, net.module.memory_bank_ptr, net.module.memory_bank_init, net.module.prototypes]
+                
+                else:
+                    adaptive_out['prototypes'] = [net.memory_bank, net.memory_bank_ptr, net.memory_bank_init, net.prototypes]
                 
                 
 
@@ -487,10 +492,11 @@ def train():
             else:
                 backward_loss, loss_seg, loss_aux, loss_contrast, loss_domain, kl_loss, new_proto = contrast_losses(adaptive_out, lb, dataset_lbs, is_warmup)
 
-        if is_distributed():
-            net.module.PrototypesUpdate(new_proto)
-        else:
-            net.PrototypesUpdate(new_proto)        
+        if use_contrast:
+            if is_distributed():
+                net.module.PrototypesUpdate(new_proto)
+            else:
+                net.PrototypesUpdate(new_proto)        
         
             
         # if with_memory and 'key' in out:
@@ -541,7 +547,7 @@ def train():
             lr = lr_schdr.get_lr()
             lr = sum(lr) / len(lr)
             print_log_msg(
-                i, 0, a2d2_epoch, configer.get('lr', 'max_iter')+starti, lr, time_meter, loss_meter,
+                i, 0, city_epoch, configer.get('lr', 'max_iter')+starti, lr, time_meter, loss_meter,
                 loss_pre_meter, loss_aux_meters, loss_contrast_meter, loss_domain_meter, kl_loss_meter)
             
 
@@ -597,22 +603,22 @@ def train():
 
 
 def main():
-
-    # local_rank = int(os.environ["LOCAL_RANK"])
-    # torch.cuda.set_device(args.local_rank)
-    # dist.init_process_group(
-    #     backend='nccl',
-    #     init_method='tcp://127.0.0.1:{}'.format(args.port),
-    #     world_size=torch.cuda.device_count(),
-    #     rank=args.local_rank
-    # )
-    # torch.cuda.set_device(local_rank)
-    # dist.init_process_group(
-    #     backend='nccl',
-    #     init_method='tcp://127.0.0.1:{}'.format(args.port),
-    #     world_size=torch.cuda.device_count(),
-    #     rank=local_rank
-    # )
+    if True:
+        local_rank = int(os.environ["LOCAL_RANK"])
+        # torch.cuda.set_device(args.local_rank)
+        # dist.init_process_group(
+        #     backend='nccl',
+        #     init_method='tcp://127.0.0.1:{}'.format(args.port),
+        #     world_size=torch.cuda.device_count(),
+        #     rank=args.local_rank
+        # )
+        torch.cuda.set_device(local_rank)
+        dist.init_process_group(
+            backend='nccl',
+            init_method='tcp://127.0.0.1:{}'.format(args.port),
+            world_size=torch.cuda.device_count(),
+            rank=local_rank
+        )
     
     if not osp.exists(configer.get('res_save_pth')): os.makedirs(configer.get('res_save_pth'))
 

@@ -12,16 +12,16 @@
     "dataset1": {
       "n_cats": 18,
       "data_reader": "CityScapes",
-      "im_root": "/data2/datasets",
+      "im_root": "/dev/dataset/",
       "train_im_anns":"datasets/Cityscapes/train.txt",
       "val_im_anns":"datasets/Cityscapes/val.txt", 
-      "ims_per_gpu": 6,
+      "ims_per_gpu": 4,
       "eval_ims_per_gpu": 2
     },
     "dataset2": {
       "n_cats": 12, 
       "data_reader": "CamVid",
-      "im_root": "/data2/datasets/CamVid",
+      "im_root": "/dev/dataset/CamVid",
       "train_im_anns":"datasets/CamVid/train.txt",
       "val_im_anns":"datasets/CamVid/test.txt", 
       "ims_per_gpu": 2,
@@ -125,7 +125,7 @@
     },
     "train": {
       "scales": [0.5, 1.0, 2.0],
-      "cropsize": [512, 512],
+      "cropsize": [512, 1024],
       "finetune": false,
       "finetune_from": "res/Mds/model_5000.pth"
     },
@@ -134,7 +134,7 @@
       "cropsize": [512, 512]
     },
     "use_fp16": false,
-    "use_sync_bn": false,
+    "use_sync_bn": true,
     "use_ema": false,
     "contrast": {
       "use_contrast": false,
@@ -156,7 +156,9 @@
       "hard_lb_contrast_loss_weight": 1,
       "with_consistence": false,
       "consistent_loss_weight": 10,
-      "with_mulbn": false
+      "with_mulbn": false,
+      "memory_bank": false,
+      "memory_bank_size": 5000
     },
     "res_save_pth": "res/Mds/",
     "network": {
