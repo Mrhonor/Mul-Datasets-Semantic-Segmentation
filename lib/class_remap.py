@@ -63,66 +63,62 @@ class ClassRemap():
             
         return outLabels
 
-    def ContrastRemapping(self, labels, embed, proto, dataset_id):
-        is_emb_upsampled = self.configer.get('contrast', 'upsample')
+    # def ContrastRemapping(self, labels, embed, proto, dataset_id):
         
-        # if is_emb_upsampled:
-        #     contrast_lb = labels[:, ::self.network_stride, ::self.network_stride]
-        # else:
-        contrast_lb = labels
+        # contrast_lb = labels[:, ::self.network_stride, ::self.network_stride]
             
-        # contrast_lb = labels
-        B, H, W = contrast_lb.shape
+        # # contrast_lb = labels
+        # B, H, W = contrast_lb.shape
         
-        mask = torch.ones_like(contrast_lb) * self.ignore_index
-        weight_mask = torch.zeros([B, H, W, self.num_unify_classes], dtype=torch.float32)
-        if embed.is_cuda:
-            weight_mask = weight_mask.cuda()
+        # mask = torch.ones_like(contrast_lb) * self.ignore_index
+        # weight_mask = torch.zeros([B, H, W, self.num_unify_classes], dtype=torch.float32)
+        # if embed.is_cuda:
+        #     weight_mask = weight_mask.cuda()
         
-        for k, v in self.remapList[dataset_id].items():
-            # 判断是否为空
-            if not (contrast_lb==int(k)).any():
-                continue
+        # for k, v in self.remapList[dataset_id].items():
+        #     # 判断是否为空
+        #     if not (contrast_lb==int(k)).any():
+        #         continue
             
             
-            if len(v) == 1: 
-                mask[contrast_lb==int(k)] = v[0]
+        #     if len(v) == 1: 
+        #         mask[contrast_lb==int(k)] = v[0]
                 
-                weight_vector = torch.zeros(self.num_unify_classes, dtype=torch.float32)
-                if weight_mask.is_cuda:
-                    weight_vector = weight_vector.cuda()
+        #         weight_vector = torch.zeros(self.num_unify_classes, dtype=torch.float32)
+        #         if weight_mask.is_cuda:
+        #             weight_vector = weight_vector.cuda()
                     
-                weight_vector[v[0]] = 1
-                weight_mask[contrast_lb==int(k)] = weight_vector
-            else:
-                # 在多映射情况下，找到内积最大的一项的标签
+        #         weight_vector[v[0]] = 1
+        #         weight_mask[contrast_lb==int(k)] = weight_vector
+        #     else:
+        #         # 在多映射情况下，找到内积最大的一项的标签
                 
-                shapeEmbed = embed.permute(0,2,3,1).detach()
-                # shapeEmbed = F.normalize(shapeEmbed, p=2, dim=-1)
-                # print(shapeEmbed[labels==int(k)].shape)
-                # print(proto.shape)
-                # print(proto[v].shape)
-                # n: b x h x w, d: dim, c:  num of class
-                simScore = torch.div(torch.einsum('nd,cd->nc', shapeEmbed[contrast_lb==int(k)], proto[v]), self.temperature)
-                MaxSimIndex = torch.max(simScore, dim=1)[1]
-                if mask.is_cuda:
-                    mask[contrast_lb==int(k)] = torch.tensor(v, dtype=torch.bool)[MaxSimIndex].cuda()
-                else:
-                    mask[contrast_lb==int(k)] = torch.tensor(v, dtype=torch.bool)[MaxSimIndex]
+        #         shapeEmbed = embed.permute(0,2,3,1).detach()
+        #         # shapeEmbed = F.normalize(shapeEmbed, p=2, dim=-1)
+        #         # print(shapeEmbed[labels==int(k)].shape)
+        #         # print(proto.shape)
+        #         # print(proto[v].shape)
+        #         # n: b x h x w, d: dim, c:  num of class
+        #         simScore = torch.div(torch.einsum('nd,cd->nc', shapeEmbed[contrast_lb==int(k)], proto[v]), self.temperature)
+        #         MaxSimIndex = torch.max(simScore, dim=1)[1]
+        #         if mask.is_cuda:
+        #             mask[contrast_lb==int(k)] = torch.tensor(v, dtype=torch.bool)[MaxSimIndex].cuda()
+        #         else:
+        #             mask[contrast_lb==int(k)] = torch.tensor(v, dtype=torch.bool)[MaxSimIndex]
                 
-                expend_vector = torch.zeros([simScore.shape[0], self.num_unify_classes], dtype=torch.float32)
-                if weight_mask.is_cuda:
-                    expend_vector = expend_vector.cuda()
+        #         expend_vector = torch.zeros([simScore.shape[0], self.num_unify_classes], dtype=torch.float32)
+        #         if weight_mask.is_cuda:
+        #             expend_vector = expend_vector.cuda()
                     
                 
-                expend_vector[:, v] = self.softmax(simScore)
+        #         expend_vector[:, v] = self.softmax(simScore)
                 
-                weight_mask[contrast_lb==int(k)] = expend_vector
+        #         weight_mask[contrast_lb==int(k)] = expend_vector
                 
-        # if is_emb_upsampled:
-        #     weight_mask = self.Upsample(weight_mask.permute(0,3,1,2)).permute(0,2,3,1)
+        # # if is_emb_upsampled:
+        # #     weight_mask = self.Upsample(weight_mask.permute(0,3,1,2)).permute(0,2,3,1)
           
-        return mask, weight_mask
+        # return mask, weight_mask
         
     def GetEqWeightMask(self, labels, dataset_id):
         B, H, W = labels.shape
@@ -589,67 +585,4 @@ class ClassRemapOneHotLabel(ClassRemap):
         return contrast_lb_mask, seg_mask
     
         
-    
-def test_ContrastRemapping():
-    configer = Configer(configs='configs/test.json')
-    classRemap = ClassRemapOneHotLabel(configer)
-    labels = torch.tensor([[2, 0, 0, 0],
-                           [2, 1, 1, 1],
-                           [2, 2, 1, 2],
-                           [0, 0, 0, 2]]).unsqueeze(0)
-    segment_queue = torch.tensor([[-1, 0], [1, 0], [0, 1], [0, -1]], dtype=torch.float) # 19 x 2
-    embed = torch.tensor([[[-0.1, 0.9],[0.9, 0.1]],
-                          [[-0.8, 0.2],[-0.1, 0.9]]]).unsqueeze(0)
-    # 
-    # embed = embed.permute(0, 3, 1, 2)
-    Shapedembed = embed.contiguous().view(-1, 2)
-    mul_segment_queue = torch.tensor([[[-1, 0], [0.9, 0.1], [-0.1, 1], [0, -1]],
-                                      [[-0.9, 0.1], [1, 0], [0, 1], [-0.1, -1.9]]], dtype=torch.float) # 19 x 2 x 2
-    proto_logits = torch.mm(Shapedembed, mul_segment_queue.view(-1, 2).T)
-    print(mul_segment_queue.view(-1, 2))
-    # print(proto_logits)
-    rearrange_logit = torch.zeros_like(proto_logits)
-
-    for i in range(0, 2):
-        rearrange_logit[:, i::2] = proto_logits[:, i*4:(i+1)*4]
-    print(rearrange_logit)
-    
-    # contrast_mask, seg_mask = classRemap.ContrastRemapping(labels, embed, segment_queue, 0)
-    contrast_mask, seg_mask = classRemap.MultiProtoRemapping(labels, rearrange_logit, 0)
-    print(contrast_mask)
-    print(seg_mask) 
-    
-def test_getReweightMatrix():
-    configer = Configer(configs='configs/test.json')
-    classRemap = ClassRemapOneHotLabel(configer)
-    labels = torch.tensor([[2, 0, 0, 0],
-                           [2, 1, 1, 1],
-                           [2, 2, 1, 3],
-                           [0, 0, 0, 2]]).unsqueeze(0)
-
-    print(classRemap.getReweightMatrix(labels, 1))
-
-        
-if __name__ == "__main__":
-    import sys
-    sys.path.insert(0, '/home/cxh/mr/BiSeNet')
-    from tools.configer import *
-    from math import sin, cos
-    from einops import rearrange
-    
-    # test_ContrastRemapping()
-    test_get_reweight_matrix()
-    # pi = 3.14
-
-    # configer = Configer(configs='configs/bisenetv2_city_cam.json')
-    # classRemap = ClassRemap(configer=configer)
-    # labels = torch.tensor([[[0, 6, 0], [1, 0, 1]]], dtype=torch.float) # 1 x 2 x 3
-    # embed = torch.tensor([[[[cos(pi/4), cos(pi/3), cos(2*pi/3)], [cos(7*pi/6), cos(3*pi/2), cos(5*pi/3)]], 
-    #                        [[sin(pi/4), sin(pi/3), sin(2*pi/3)], [sin(7*pi/6), sin(3*pi/2), sin(5*pi/3)]]]], requires_grad=True) # 1 x 1 x 2 x 3
-    # proto = torch.tensor([[-1, 0], [1, 0], [0, 1], [0, -1]], dtype=torch.float) # 19 x 2
-    # # print(classRemap.ContrastRemapping(labels, embed, proto, 2))
-    # print(classRemap.GetEqWeightMask(labels, 1))
-    # # print(classRemap.getAnyClassRemap(3, 0))
-    
-
     

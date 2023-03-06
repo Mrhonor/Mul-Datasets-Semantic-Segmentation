@@ -1,16 +1,22 @@
 {
-    "model_name": "bisenetv2_contrast",
+    "model_name": "hrnet_w48_contrast",
     "aux_mode": "train",
-    "n_datasets": 1,
+    "n_datasets": 2,
     "num_unify_classes": 19,
+    "hrnet": {
+      "cfg": "hrnet48",
+      "keep_imagenet_head": false,
+      "drop_stage4": false,
+      "full_res_stem": false
+    },
     "dataset1": {
-      "n_cats": 19,
+      "n_cats": 18,
       "data_reader": "CityScapes",
-      "im_root": "/home/cxh/datasets/",
+      "im_root": "/dev/dataset/",
       "train_im_anns":"datasets/Cityscapes/train.txt",
       "val_im_anns":"datasets/Cityscapes/val.txt", 
-      "ims_per_gpu": 8,
-      "eval_ims_per_gpu": 3
+      "ims_per_gpu": 4,
+      "eval_ims_per_gpu": 2
     },
     "n_bn": 1,
     "class_remap1":{
@@ -34,62 +40,86 @@
       "17": [17],
       "18": [18]
     }, 
+    "class_weight1":{
+      "0": 1, 
+      "1": 1,
+      "2": 1, 
+      "3": 1,
+      "4": 1,
+      "5": 1,
+      "6": 1,
+      "7": 1,
+      "8": 1,
+      "9": 1,
+      "10": 1,
+      "11": 1,
+      "12": 1,
+      "13": 1,
+      "14": 1,
+      "15": 1,
+      "16": 1,
+      "17": 1, 
+      "18": 1
+    },
     "class_remaper": "ClassRemapOneHotLabel",
     "loss":{
       "type": "MultiLabelCrossEntropyLoss",
-      "with_aux": true,
-      "aux_weight": 0.4,
+      "reweight": false,
+      "with_aux": false,
+      "aux_weight": 1,
       "aux_num": 4,
       "ignore_index": 255,
-      "domain_loss_weight": 0.3,
+      "domain_loss_weight": 1,
       "m": 0,
-      "gamma": 24
+      "gamma": 12
     },
     "lr": {
       "lr_start": 5e-3,
       "weight_decay": 5e-5,
       "warmup_iters": 0,
       "fix_param_iters": 0,
-      "max_iter": 100000
+      "max_iter": 50000
     },
     "train": {
       "scales": [0.5, 1.0, 2.0],
       "cropsize": [512, 1024],
       "finetune": false,
-      "finetune_from": "res/domain/model_5000.pth"
+      "finetune_from": "res/Mds/model_5000.pth"
     },
     "val": {
       "scales": [0.5, 0.75, 1.0, 1.25, 1.5, 1.75],
-      "cropsize": [512, 1024]
+      "cropsize": [512, 512]
     },
     "use_fp16": false,
     "use_sync_bn": false,
+    "use_ema": false,
     "contrast": {
-      "use_contrast": true,
+      "use_contrast": false,
       "proj_dim": 128,
       "temperature": 0.07,
       "base_temperature": 0.07,
       "max_samples": 4096,
-      "max_views": 250,
-      "stride": 8,
-      "loss_weight": 0.4,
-      "use_rmi": false,
-      "use_lovasz": false,
-      "with_memory": true,
-      "memory_size": 5000,
-      "pixel_update_freq": 10,
-      "coefficient": 0.99,
+      "max_views": 24,
+      "loss_weight": 1,
+      "num_prototype": 3,
+      "coefficient": 0.999,
       "upsample": false,
-      "update_confidence_thresh": 0.2,
-      "update_sim_thresh": 0.3,
+      "downsample": false,
+      "update_confidence_thresh": 0.1,
+      "update_sim_thresh": 0.4,
       "with_ppd": false,
       "ppd_loss_weight": 1,
       "with_hard_lb_contrast": true,
-      "hard_lb_contrast_loss_weight": 1
+      "hard_lb_contrast_loss_weight": 1,
+      "with_consistence": false,
+      "consistent_loss_weight": 10,
+      "with_mulbn": false,
+      "memory_bank": false,
+      "memory_bank_size": 5000
     },
-    "res_save_pth": "res/city/",
+    "res_save_pth": "res/Mds/",
     "network": {
-      "stride": 8,
+      "stride": 4,
       "with_domain_adversarial": false
     },
     "dataset_aux_head": {

@@ -150,7 +150,8 @@ class CityScapes(BaseDataset):
             self.n_cats = 19
             # self.n_cats = 20
         
-        self.lb_ignore = -1
+        # self.lb_ignore = -1
+        self.lb_ignore = 255
         self.lb_map = np.arange(256).astype(np.uint8)
         if mode == 'train':
             self.labels_info = labels_info_train

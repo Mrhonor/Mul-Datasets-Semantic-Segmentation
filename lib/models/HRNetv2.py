@@ -3,6 +3,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from lib.models.HRNet_backbone import HRNetBackbone
+from lib.models.hrnet_backbone_ori import HRNetBackbone_ori
 from lib.module.module_helper import ConvBNReLU
 from lib.module.projection import ProjectionHead
 from lib.module.domain_classifier_head import DomainClassifierHead
@@ -291,4 +292,99 @@ class HRNet_W48_CONTRAST(nn.Module):
 
     # newstate = loadpretrain(state)
     # net.backbone.load_state_dict(newstate, strict=False)
+       
+class HRNet_W48(nn.Module):
+    """
+    deep high-resolution representation learning for human pose estimation, CVPR2019
+    """
+
+    def __init__(self, configer):
+        super(HRNet_W48_CONTRAST, self).__init__()
+        self.configer = configer
+        self.aux_mode = self.configer.get('aux_mode')
+        self.n_bn = self.configer.get('n_bn')
+        self.num_unify_classes = self.configer.get('num_unify_classes')
+        self.n_datasets = self.configer.get('n_datasets')
+        self.backbone = HRNetBackbone_ori(configer)
+        self.proj_dim = self.configer.get('contrast', 'proj_dim')
+        self.full_res_stem = self.configer.get('hrnet', 'full_res_stem')
+        self.num_prototype = self.configer.get('contrast', 'num_prototype')
         
+        if self.full_res_stem:
+            up_fac = 1
+        else:
+            up_fac = 4
+
+        # extra added layers
+        in_channels = 720  # 48 + 96 + 192 + 384
+        self.cls_head = nn.Sequential(
+            nn.Conv2d(in_channels, in_channels, kernel_size=3, stride=1, padding=1),
+            ModuleHelper.BNReLU(in_channels, bn_type=self.configer.get('network', 'bn_type')),
+            nn.Dropout2d(0.10),
+            nn.Conv2d(in_channels, self.num_classes, kernel_size=1, stride=1, padding=0, bias=False)
+        )
+
+    def forward(self, x_):
+        x = self.backbone(x_)
+        _, _, h, w = x[0].size()
+
+        feat1 = x[0]
+        feat2 = F.interpolate(x[1], size=(h, w), mode="bilinear", align_corners=True)
+        feat3 = F.interpolate(x[2], size=(h, w), mode="bilinear", align_corners=True)
+        feat4 = F.interpolate(x[3], size=(h, w), mode="bilinear", align_corners=True)
+
+        feats = torch.cat([feat1, feat2, feat3, feat4], 1)
+        out = self.cls_head(feats)
+        out = F.interpolate(out, size=(x_.size(2), x_.size(3)), mode="bilinear", align_corners=True)
+        return out
+
+    def init_weights(self):
+        for name, module in self.named_modules():
+            if isinstance(module, (nn.Conv2d, nn.Linear)):
+                nn.init.kaiming_normal_(module.weight, mode='fan_out')
+                if not module.bias is None: nn.init.constant_(module.bias, 0)
+            # elif isinstance(module, nn.modules.batchnorm._BatchNorm):
+            #     if hasattr(module, 'last_bn') and module.last_bn:
+            #         nn.init.zeros_(module.weight)
+            #     else:
+            #         nn.init.ones_(module.weight)
+            #     nn.init.zeros_(module.bias)
+        for name, param in self.named_parameters():
+            if name.find('affine_weight') != -1:
+                if hasattr(param, 'last_bn') and param.last_bn:
+                    nn.init.zeros_(param)
+                else:
+                    nn.init.ones_(param)
+            elif name.find('affine_bias') != -1:
+                nn.init.zeros_(param)
+                
+        self.load_pretrain()
+
+        
+    def load_pretrain(self):
+        state = torch.load(backbone_url)
+        self.backbone.load_state_dict(state, strict=False)
+
+    def get_params(self):
+        def add_param_to_list(mod, wd_params, nowd_params):
+            for param in mod.parameters():
+                if param.requires_grad == False:
+                    continue
+                
+                if param.dim() == 1:
+                    nowd_params.append(param)
+                elif param.dim() == 4:
+                    wd_params.append(param)
+                else:
+                    nowd_params.append(param)
+                    # print(param.dim())
+                    # print(param)
+                    print(name)
+
+        wd_params, nowd_params, lr_mul_wd_params, lr_mul_nowd_params = [], [], [], []
+        for name, child in self.named_children():
+            if 'head' in name or 'aux' in name:
+                add_param_to_list(child, lr_mul_wd_params, lr_mul_nowd_params)
+            else:
+                add_param_to_list(child, wd_params, nowd_params)
+        return wd_params, nowd_params, lr_mul_wd_params, lr_mul_nowd_params

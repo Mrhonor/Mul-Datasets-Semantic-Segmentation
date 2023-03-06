@@ -29,7 +29,7 @@
       "2": [2, 3]
     }, 
     "class_remap2":{ 
-      "0": [3],
+      "0": [1,3],
       "1": [2],
       "2": [1],
       "3": [0]
@@ -62,7 +62,7 @@
       "lr_start": 1e-2,
       "weight_decay": 4e-5,
       "warmup_iters": 0,
-      "max_iter": 1
+      "max_iter": 100000
     },
     "train": {
       "scales": [1.0],
@@ -93,8 +93,7 @@
       "with_ppd": false,
       "ppd_loss_weight": 1,
       "with_hard_lb_contrast": true,
-      "hard_lb_contrast_loss_weight": 1,
-      "with_mulbn": false
+      "hard_lb_contrast_loss_weight": 1
     },
     "res_save_pth": "res/nll_loss/",
     "network": {
@@ -106,5 +105,5 @@
       "aux_iter": 10000
     },
     "optim": "AdamW",
-    "iter": 1
+    "iter": 0
 }
