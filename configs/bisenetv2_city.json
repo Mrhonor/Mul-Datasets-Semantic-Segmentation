@@ -1,7 +1,7 @@
 {
-    "model_name": "hrnet_w48_contrast",
+    "model_name": "hrnet_w48",
     "aux_mode": "train",
-    "n_datasets": 2,
+    "n_datasets": 1,
     "num_unify_classes": 19,
     "hrnet": {
       "cfg": "hrnet48",
@@ -10,7 +10,7 @@
       "full_res_stem": false
     },
     "dataset1": {
-      "n_cats": 18,
+      "n_cats": 19,
       "data_reader": "CityScapes",
       "im_root": "/dev/dataset/",
       "train_im_anns":"datasets/Cityscapes/train.txt",
@@ -120,7 +120,8 @@
     "res_save_pth": "res/Mds/",
     "network": {
       "stride": 4,
-      "with_domain_adversarial": false
+      "with_domain_adversarial": false,
+      "bn_type": "torchbn"
     },
     "dataset_aux_head": {
       "use_dataset_aux_head": false,

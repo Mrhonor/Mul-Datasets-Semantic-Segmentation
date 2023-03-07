@@ -632,7 +632,7 @@ def eval_model_contrast(configer, net):
 
     # dl_cam = get_data_loader(cfg_cam, mode='val', distributed=is_dist)
     # dl_city, dl_cam, dl_a2d2 = get_data_loader(configer, aux_mode='eval', distributed=is_dist)
-    dl_city, dl_cam = get_data_loader(configer, aux_mode='eval', distributed=is_dist)
+    dl_city = get_data_loader(configer, aux_mode='eval', distributed=is_dist)[0]
     net.eval()
     # net.train()
 
@@ -642,9 +642,10 @@ def eval_model_contrast(configer, net):
     single_scale = MscEvalV0_Contrast(configer, (1., ), False)
     
     mIOU_city = single_scale(net, dl_city, 19, CITY_ID)
-    mIOU_cam = single_scale(net, dl_cam, 12, CAM_ID)
+    # mIOU_cam = single_scale(net, dl_cam, 12, CAM_ID)
     # mIOU_a2d2 = single_scale(net, dl_a2d2, configer.get('dataset3', 'n_cats'), A2D2_ID)
     mIOU_a2d2 = 0
+    mIOU_cam = 0
 
     heads.append('single_scale')
     mious.append(mIOU_cam)

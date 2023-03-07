@@ -131,6 +131,7 @@ labels_info_eval = [
 
 # labels_info_train = labels_info_eval
 labels_info_eval = labels_info
+labels_info_train = labels_info
 
 # labels_info_train = labels_info_eval
 ## CityScapes -> {unify class1, unify class2, ...}
@@ -144,7 +145,8 @@ class CityScapes(BaseDataset):
                 dataroot, annpath, trans_func, mode)
     
         if mode == 'train':
-            self.n_cats = 18
+            # self.n_cats = 18
+            self.n_cats = 19
             # self.n_cats = 20
         elif mode == 'eval':
             self.n_cats = 19

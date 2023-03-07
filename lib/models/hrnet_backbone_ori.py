@@ -19,6 +19,7 @@ import numpy as np
 
 from lib.module.module_helper import ModuleHelper
 from lib.logger import Logger as Log
+from configs.hrnet_config import MODEL_CONFIGS
 
 if torch.__version__.startswith('1'):
     relu_inplace = True
@@ -745,7 +746,7 @@ class HighResolutionNext(nn.Module):
         return x
 
 
-def HRNetBackbone_ori(object):
+def HRNetBackbone_ori(configer):
     arch = configer.get('hrnet', 'cfg')
 
     if arch == 'hrnet2x20':

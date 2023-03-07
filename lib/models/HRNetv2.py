@@ -4,11 +4,12 @@ import torch.nn.functional as F
 
 from lib.models.HRNet_backbone import HRNetBackbone
 from lib.models.hrnet_backbone_ori import HRNetBackbone_ori
-from lib.module.module_helper import ConvBNReLU
+from lib.module.module_helper import ConvBNReLU, ModuleHelper
 from lib.module.projection import ProjectionHead
 from lib.module.domain_classifier_head import DomainClassifierHead
 from timm.models.layers import trunc_normal_
 from lib.class_remap import ClassRemap
+
 
 backbone_url = './res/hrnetv2_w48_imagenet_pretrained.pth'
 
@@ -299,7 +300,7 @@ class HRNet_W48(nn.Module):
     """
 
     def __init__(self, configer):
-        super(HRNet_W48_CONTRAST, self).__init__()
+        super(HRNet_W48, self).__init__()
         self.configer = configer
         self.aux_mode = self.configer.get('aux_mode')
         self.n_bn = self.configer.get('n_bn')
@@ -309,6 +310,7 @@ class HRNet_W48(nn.Module):
         self.proj_dim = self.configer.get('contrast', 'proj_dim')
         self.full_res_stem = self.configer.get('hrnet', 'full_res_stem')
         self.num_prototype = self.configer.get('contrast', 'num_prototype')
+        
         
         if self.full_res_stem:
             up_fac = 1
@@ -321,10 +323,10 @@ class HRNet_W48(nn.Module):
             nn.Conv2d(in_channels, in_channels, kernel_size=3, stride=1, padding=1),
             ModuleHelper.BNReLU(in_channels, bn_type=self.configer.get('network', 'bn_type')),
             nn.Dropout2d(0.10),
-            nn.Conv2d(in_channels, self.num_classes, kernel_size=1, stride=1, padding=0, bias=False)
+            nn.Conv2d(in_channels, self.num_unify_classes, kernel_size=1, stride=1, padding=0, bias=False)
         )
 
-    def forward(self, x_):
+    def forward(self, x_, dataset=0):
         x = self.backbone(x_)
         _, _, h, w = x[0].size()
 
@@ -336,7 +338,7 @@ class HRNet_W48(nn.Module):
         feats = torch.cat([feat1, feat2, feat3, feat4], 1)
         out = self.cls_head(feats)
         out = F.interpolate(out, size=(x_.size(2), x_.size(3)), mode="bilinear", align_corners=True)
-        return out
+        return {"seg": out}
 
     def init_weights(self):
         for name, module in self.named_modules():

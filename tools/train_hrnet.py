@@ -64,7 +64,7 @@ def parse_args():
     parse.add_argument('--local_rank', dest='local_rank', type=int, default=-1,)
     parse.add_argument('--port', dest='port', type=int, default=16855,)
     parse.add_argument('--finetune_from', type=str, default=None,)
-    parse.add_argument('--config', dest='config', type=str, default='configs/bisenetv2_city_cam.json',)
+    parse.add_argument('--config', dest='config', type=str, default='configs/bisenetv2_city.json',)
     return parse.parse_args()
 
 # 使用绝对路径
@@ -227,7 +227,7 @@ def train():
 
     # dl = get_single_data_loader(configer, aux_mode='train', distributed=is_dist)
     # dl_city, dl_cam, dl_a2d2 = get_data_loader(configer, aux_mode='train', distributed=is_dist)
-    dl_city, _ = get_data_loader(configer, aux_mode='train', distributed=is_dist)
+    dl_city = get_data_loader(configer, aux_mode='train', distributed=is_dist)[0]
     
     ## model
     net = set_model(configer=configer)
@@ -388,7 +388,7 @@ def train():
                 is_warmup = False
                 
             if not use_contrast:
-                logits = adaptive_out['pred']
+                logits = out['seg']
                 backward_loss = contrast_losses(logits, lb)
                 kl_loss = None
                 loss_seg = backward_loss
@@ -478,9 +478,12 @@ def train():
             
             if is_distributed():
                 state = net.module.state_dict()
+                if dist.get_rank() == 0: 
+                    torch.save(state, save_pth)
             else:
                 state = net.state_dict()
-            if dist.get_rank() == 0: torch.save(state, save_pth)
+                torch.save(state, save_pth)
+            
 
         lr_schdr.step()
 
@@ -508,7 +511,7 @@ def train():
 
 
 def main():
-    if True:
+    if False:
         local_rank = int(os.environ["LOCAL_RANK"])
         # torch.cuda.set_device(args.local_rank)
         # dist.init_process_group(
