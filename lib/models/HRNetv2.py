@@ -113,6 +113,7 @@ class HRNet_W48_CONTRAST(nn.Module):
             return out[0]
         elif self.aux_mode == 'pred':
             pred = out[0].argmax(dim=1)
+            return pred
         else:
             raise NotImplementedError
         
@@ -326,6 +327,24 @@ class HRNet_W48(nn.Module):
             nn.Conv2d(in_channels, self.num_unify_classes, kernel_size=1, stride=1, padding=0, bias=False)
         )
 
+        self.use_contrast = self.configer.get('contrast', 'use_contrast')
+        if self.use_contrast:
+            self.proj_head = ProjectionHead(dim_in=in_channels, proj_dim=self.proj_dim)
+            
+        self.prototypes = nn.Parameter(torch.zeros(self.num_unify_classes, self.num_prototype, self.proj_dim),
+                                       requires_grad=False)
+
+        trunc_normal_(self.prototypes, std=0.02)
+        # self.init_weights()    
+       
+        self.with_memory_bank = self.configer.get('contrast', 'memory_bank')
+        if self.with_memory_bank:
+            self.memory_bank_size = self.configer.get('contrast', 'memory_bank_size')
+            self.register_buffer("memory_bank", torch.randn(self.num_unify_classes, self.memory_bank_size, self.proj_dim))
+            self.memory_bank = nn.functional.normalize(self.memory_bank, p=2, dim=2)
+            self.register_buffer("memory_bank_ptr", torch.zeros(self.num_unify_classes, dtype=torch.long))
+            self.register_buffer("memory_bank_init", torch.zeros(self.num_unify_classes, dtype=torch.bool))
+
     def forward(self, x_, dataset=0):
         x = self.backbone(x_)
         _, _, h, w = x[0].size()
@@ -338,7 +357,18 @@ class HRNet_W48(nn.Module):
         feats = torch.cat([feat1, feat2, feat3, feat4], 1)
         out = self.cls_head(feats)
         out = F.interpolate(out, size=(x_.size(2), x_.size(3)), mode="bilinear", align_corners=True)
-        return {"seg": out}
+        if self.aux_mode == 'train':
+            emb = None
+            if self.use_contrast:
+                emb = self.proj_head(dataset, *feats)
+            return {"seg": out, 'embed': emb}
+        elif self.aux_mode == 'eval':
+            return out
+        elif self.aux_mode == 'pred':
+            pred = out[0].argmax(dim=1)
+            return pred
+        else:
+            raise NotImplementedError
 
     def init_weights(self):
         for name, module in self.named_modules():
@@ -390,3 +420,7 @@ class HRNet_W48(nn.Module):
             else:
                 add_param_to_list(child, wd_params, nowd_params)
         return wd_params, nowd_params, lr_mul_wd_params, lr_mul_nowd_params
+
+    def PrototypesUpdate(self, new_proto):
+        self.prototypes = nn.Parameter(F.normalize(new_proto, p=2, dim=-1),
+                                        requires_grad=False)

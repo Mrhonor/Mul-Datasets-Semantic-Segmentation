@@ -494,10 +494,11 @@ def train():
     writer.close()
     if is_distributed():
         state = net.module.state_dict()
+        if dist.get_rank() == 0: torch.save(state, save_pth)
     else:
         state = net.state_dict()
+        torch.save(state, save_pth)
 
-    if dist.get_rank() == 0: torch.save(state, save_pth)
 
     # logger.info('\nevaluating the final model')
     torch.cuda.empty_cache()

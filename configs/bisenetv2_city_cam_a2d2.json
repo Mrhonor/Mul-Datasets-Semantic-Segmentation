@@ -12,7 +12,7 @@
     "dataset1": {
       "n_cats": 20,
       "data_reader": "CityScapes",
-      "im_root": "D:/Study/code",
+      "im_root": "/dev/dataset/",
       "train_im_anns":"datasets/Cityscapes/train.txt",
       "val_im_anns":"datasets/Cityscapes/val.txt", 
       "ims_per_gpu": 1,
@@ -21,7 +21,7 @@
     "dataset2": {
       "n_cats": 13, 
       "data_reader": "CamVid",
-      "im_root": "D:/Study/code/CamVid",
+      "im_root": "/dev/dataset/CamVid",
       "train_im_anns":"datasets/CamVid/train.txt",
       "val_im_anns":"datasets/CamVid/test.txt", 
       "ims_per_gpu": 1,
@@ -30,10 +30,10 @@
     "dataset3": {
       "n_cats": 36, 
       "data_reader": "A2D2Data",
-      "im_root": "D:/Study/code/a2d2",
+      "im_root": "/dev/shm/dataset/a2d2",
       "train_im_anns":"datasets/A2D2/train.txt",
       "val_im_anns":"datasets/A2D2/val.txt", 
-      "ims_per_gpu": 1,
+      "ims_per_gpu": 2,
       "eval_ims_per_gpu": 2
     },
     "n_bn": 3,

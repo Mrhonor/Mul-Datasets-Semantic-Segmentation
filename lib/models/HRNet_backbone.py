@@ -765,5 +765,5 @@ def HRNetBackbone(configer):
         arch_net = HighResolutionNet(configer,
                                         bn_type='torchbn',
                                         bn_momentum=0.1)
-
+            
     return arch_net
