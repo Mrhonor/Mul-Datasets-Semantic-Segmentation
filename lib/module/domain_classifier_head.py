@@ -1,7 +1,6 @@
 import torch
 import torch.nn as nn
-from tools.module_helper import ModuleHelper
-from lib.module.module_helper import ConvBN, ConvBNReLU, ConvWNReLU
+from lib.module.module_helper import ConvBN, ConvBNReLU, ConvWNReLU, ModuleHelper
 
 class DomainClassifierHead(nn.Module):
     def __init__(self, dim_in, n_domain, classifier='convmlp', bn_type='torchsyncbn', n_bn=1):

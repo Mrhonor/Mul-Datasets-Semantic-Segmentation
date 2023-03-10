@@ -48,8 +48,7 @@ labels_info_train = [
     {"name": "Animal", "id": 28, "color": [64, 128, 64], "trainId": 9},
     {"name": "Bicyclist", "id": 29, "color": [0, 128, 192], "trainId": 10},
     {"name": "MotorcycleScooter", "id": 30, "color": [192, 0, 192], "trainId": 10},
-    {"name": "Void", "id": 31, "color": [0, 0, 0], "trainId": -1}
-    # {"name": "Void", "id": 31, "color": [0, 0, 0], "trainId": 12}
+    {"name": "Void", "id": 31, "color": [0, 0, 0], "trainId": 12}
 ]
 
 labels_info_eval = [
@@ -109,8 +108,8 @@ class CamVid(Dataset):
         self.trans_func = trans_func
         # self.n_cats = 13
         if mode == 'train':
-            # self.n_cats = 18
-            self.n_cats = 12
+            self.n_cats = 13
+            # self.n_cats = 12
             self.labels_info = labels_info_train
         elif mode == 'eval':
             self.n_cats = 11

@@ -62,9 +62,9 @@ def is_distributed():
 def parse_args():
     parse = argparse.ArgumentParser()
     parse.add_argument('--local_rank', dest='local_rank', type=int, default=-1,)
-    parse.add_argument('--port', dest='port', type=int, default=16855,)
+    parse.add_argument('--port', dest='port', type=int, default=16854,)
     parse.add_argument('--finetune_from', type=str, default=None,)
-    parse.add_argument('--config', dest='config', type=str, default='configs/bisenetv2_city_cam_a2d2.json',)
+    parse.add_argument('--config', dest='config', type=str, default='configs/CEloss_city_cam_a2d2.json',)
     return parse.parse_args()
 
 # 使用绝对路径
@@ -184,8 +184,8 @@ def set_model_dist(net):
     return net
 
 def set_contrast_loss(configer):
-    return CrossDatasetsCELoss_KMeans(configer)
-    # return CrossDatasetsCELoss(configer)
+    # return CrossDatasetsCELoss_KMeans(configer)
+    return CrossDatasetsCELoss(configer)
     # return CrossDatasetsLoss(configer)
 
 def set_meters(configer):
@@ -482,7 +482,7 @@ def train():
                 is_warmup = False
                 
             if not use_contrast:
-                backward_loss = contrast_losses(adaptive_out, lb, dataset_lbs, is_warmup)
+                backward_loss = contrast_losses(out, lb, dataset_lbs, is_warmup)
                 kl_loss = None
                 loss_seg = backward_loss
                 loss_aux = None

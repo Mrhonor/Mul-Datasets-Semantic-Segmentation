@@ -1,0 +1,72 @@
+WARNING:__main__:
+*****************************************
+Setting OMP_NUM_THREADS environment variable for each process to be 1 in default, to avoid your system being overloaded, please further tune the variable for optimal performance in your application as needed. 
+*****************************************
+/root/anaconda3/envs/mdseg/lib/python3.10/site-packages/torch/distributed/distributed_c10d.py:2387: UserWarning: torch.distributed._all_gather_base is a private function and will be deprecated. Please use torch.distributed.all_gather_into_tensor instead.
+  warnings.warn(
+/root/anaconda3/envs/mdseg/lib/python3.10/site-packages/torch/distributed/distributed_c10d.py:2387: UserWarning: torch.distributed._all_gather_base is a private function and will be deprecated. Please use torch.distributed.all_gather_into_tensor instead.
+  warnings.warn(
+Traceback (most recent call last):
+  File "/root/mr/Mul-Datasets-Semantic-Segmentation/tools/train_celoss_3datasets.py", line 637, in <module>
+    main()
+  File "/root/mr/Mul-Datasets-Semantic-Segmentation/tools/train_celoss_3datasets.py", line 625, in main
+    train()
+  File "/root/mr/Mul-Datasets-Semantic-Segmentation/tools/train_celoss_3datasets.py", line 485, in train
+    backward_loss = contrast_losses(adaptive_out, lb, dataset_lbs, is_warmup)
+  File "/root/anaconda3/envs/mdseg/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1194, in _call_impl
+    return forward_call(*input, **kwargs)
+  File "/root/mr/Mul-Datasets-Semantic-Segmentation/./lib/loss/loss_cross_datasets.py", line 342, in forward
+    remap_logits = torch.einsum('bchw, nc -> bnhw', logits[dataset_ids==i], RemapMatrix)
+IndexError: The shape of the mask [4] at index 0 does not match the shape of the indexed tensor [46, 512, 1024] at index 0
+Traceback (most recent call last):
+  File "/root/mr/Mul-Datasets-Semantic-Segmentation/tools/train_celoss_3datasets.py", line 637, in <module>
+    main()
+  File "/root/mr/Mul-Datasets-Semantic-Segmentation/tools/train_celoss_3datasets.py", line 625, in main
+    train()
+  File "/root/mr/Mul-Datasets-Semantic-Segmentation/tools/train_celoss_3datasets.py", line 485, in train
+    backward_loss = contrast_losses(adaptive_out, lb, dataset_lbs, is_warmup)
+  File "/root/anaconda3/envs/mdseg/lib/python3.10/site-packages/torch/nn/modules/module.py", line 1194, in _call_impl
+    return forward_call(*input, **kwargs)
+  File "/root/mr/Mul-Datasets-Semantic-Segmentation/./lib/loss/loss_cross_datasets.py", line 342, in forward
+    remap_logits = torch.einsum('bchw, nc -> bnhw', logits[dataset_ids==i], RemapMatrix)
+IndexError: The shape of the mask [4] at index 0 does not match the shape of the indexed tensor [46, 512, 1024] at index 0
+ERROR:torch.distributed.elastic.multiprocessing.api:failed (exitcode: 1) local_rank: 0 (pid: 26326) of binary: /root/anaconda3/envs/mdseg/bin/python
+Traceback (most recent call last):
+  File "/root/anaconda3/envs/mdseg/lib/python3.10/runpy.py", line 196, in _run_module_as_main
+    return _run_code(code, main_globals, None,
+  File "/root/anaconda3/envs/mdseg/lib/python3.10/runpy.py", line 86, in _run_code
+    exec(code, run_globals)
+  File "/root/anaconda3/envs/mdseg/lib/python3.10/site-packages/torch/distributed/run.py", line 766, in <module>
+    main()
+  File "/root/anaconda3/envs/mdseg/lib/python3.10/site-packages/torch/distributed/elastic/multiprocessing/errors/__init__.py", line 346, in wrapper
+    return f(*args, **kwargs)
+  File "/root/anaconda3/envs/mdseg/lib/python3.10/site-packages/torch/distributed/run.py", line 762, in main
+    run(args)
+  File "/root/anaconda3/envs/mdseg/lib/python3.10/site-packages/torch/distributed/run.py", line 753, in run
+    elastic_launch(
+  File "/root/anaconda3/envs/mdseg/lib/python3.10/site-packages/torch/distributed/launcher/api.py", line 132, in __call__
+    return launch_agent(self._config, self._entrypoint, list(args))
+  File "/root/anaconda3/envs/mdseg/lib/python3.10/site-packages/torch/distributed/launcher/api.py", line 246, in launch_agent
+    raise ChildFailedError(
+torch.distributed.elastic.multiprocessing.errors.ChildFailedError: 
+============================================================
+tools/train_celoss_3datasets.py FAILED
+------------------------------------------------------------
+Failures:
+[1]:
+  time      : 2023-03-10_11:00:41
+  host      : vgpu04.hpc.local
+  rank      : 1 (local_rank: 1)
+  exitcode  : 1 (pid: 26327)
+  error_file: <N/A>
+  traceback : To enable traceback see: https://pytorch.org/docs/stable/elastic/errors.html
+------------------------------------------------------------
+Root Cause (first observed failure):
+[0]:
+  time      : 2023-03-10_11:00:41
+  host      : vgpu04.hpc.local
+  rank      : 0 (local_rank: 0)
+  exitcode  : 1 (pid: 26326)
+  error_file: <N/A>
+  traceback : To enable traceback see: https://pytorch.org/docs/stable/elastic/errors.html
+============================================================

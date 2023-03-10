@@ -338,7 +338,8 @@ class CrossDatasetsCELoss(nn.Module):
             RemapMatrix = self.classRemapper.getRemapMatrix(i)
             if logits.is_cuda:
                 RemapMatrix = RemapMatrix.cuda()
-                
+            
+
             remap_logits = torch.einsum('bchw, nc -> bnhw', logits[dataset_ids==i], RemapMatrix)
             if loss is None:
                 loss = self.CELoss(remap_logits, target[dataset_ids==i])
@@ -379,6 +380,7 @@ class CrossDatasetsCELoss_KMeans(nn.Module):
         self.use_contrast = self.configer.get('contrast', 'use_contrast')
         if self.use_contrast:
             self.contrast_criterion = PixelContrastLoss(configer=configer)
+            self.hard_lb_contrast_loss = PixelContrastLossMulProto(configer=configer)
         
         self.upsample = self.configer.get('contrast', 'upsample')
         self.network_stride = self.configer.get('network', 'stride')
@@ -406,15 +408,15 @@ class CrossDatasetsCELoss_KMeans(nn.Module):
             memory_bank, memory_bank_ptr, memory_bank_init, prototypes = None, None, None, None
 
         contrast_lb = lb[:, ::self.network_stride, ::self.network_stride]
-        
         new_proto = None
         if self.use_contrast:
-            rearr_emb = rearrange(embedding, 'b c h w -> (b h w) c').detach()
+            rearr_emb = rearrange(embedding, 'b c h w -> (b h w) c')
             proto_target = self.AdaptiveSingleSegRemapping(contrast_lb, dataset_ids)
-            memory_bank_push(self.configer, memory_bank, memory_bank_ptr, rearr_emb, proto_target, memory_bank_init, random_pick_ratio=0.1)
+            memory_bank_push(self.configer, memory_bank, memory_bank_ptr, rearr_emb.detach(), proto_target, memory_bank_init, random_pick_ratio=0.1)
             if self.IsInitMemoryBank(memory_bank_init):
                 # 完成初始化
-                self.AdaptiveKMeansProtoLearning(contrast_lb, memory_bank, memory_bank_ptr, memory_bank_init, embedding, dataset_ids)
+                self.AdaptiveKMeansProtoLearning(contrast_lb, memory_bank, memory_bank_ptr, memory_bank_init, embedding.detach(), dataset_ids)
+                new_proto_mean = torch.mean(memory_bank, dim=1)
                 new_proto_mean = F.normalize(new_proto_mean, p=2, dim=-1)
                 
                 prototypes = F.normalize(new_proto_mean * (1 - self.coefficient) + prototypes * self.coefficient, p=2, dim=-1)
@@ -426,6 +428,7 @@ class CrossDatasetsCELoss_KMeans(nn.Module):
         loss_aux = None
         loss_domain = None
         loss_contrast = None
+        kl_loss = None
 
         if is_warmup or not self.use_contrast:
             # pred = F.interpolate(input=logits, size=(h, w), mode='bilinear', align_corners=True)
@@ -446,11 +449,10 @@ class CrossDatasetsCELoss_KMeans(nn.Module):
                 
         else:            
             proto_logits = torch.mm(rearr_emb, prototypes.view(-1, prototypes.shape[-1]).t())
-            
-            proto_targetOneHot = self.AdaptiveSingleSegRemapping(lb, dataset_ids)
+            proto_targetOneHot = self.AdaptiveSingleSegRemappingOneHot(contrast_lb, dataset_ids)
             
             # proto_targetOntHot 单标签， contrast_mask_label 多标签
-            contrast_mask_label, seg_mask_mul = self.AdaptiveMultiProtoRemapping(lb, proto_logits, dataset_ids)
+            contrast_mask_label, seg_mask_mul = self.AdaptiveMultiProtoRemapping(lb, proto_logits.detach(), dataset_ids)
 
             loss_contrast = self.hard_lb_contrast_loss(proto_logits, contrast_mask_label+proto_targetOneHot)
             
@@ -464,7 +466,7 @@ class CrossDatasetsCELoss_KMeans(nn.Module):
                 pred_aux = [F.interpolate(input=logit, size=(h, w), mode='bilinear', align_corners=True) for logit in logits_aux]
                 # loss_aux = [aux_criterion_sig(aux[0], seg_mask_sig) + aux_criterion_mul(aux[1], seg_mask_mul) for aux, aux_criterion_mul, aux_criterion_sig in zip(pred_aux, self.segLoss_aux_Mul, self.segLoss_aux_Sig)]
                 loss_aux = [aux_criterion_mul(aux, seg_mask_mul) for aux, aux_criterion_mul in zip(pred_aux, self.segLoss_aux_Mul)]
-                
+                 
                 loss = loss + self.aux_weight * sum(loss_aux)
                 
             # if self.with_ppd:
@@ -473,7 +475,7 @@ class CrossDatasetsCELoss_KMeans(nn.Module):
                 
             loss = loss + self.loss_weight * loss_contrast
 
-        return loss, loss_seg, loss_aux, loss_contrast, loss_domain, prototypes
+        return loss, loss_seg, loss_aux, loss_contrast, loss_domain, kl_loss, prototypes
             
 
 
@@ -501,7 +503,7 @@ class CrossDatasetsCELoss_KMeans(nn.Module):
             
             proto_mask[dataset_ids==i] = self.classRemapper.SingleSegRemappingOneHot(lb[dataset_ids==i], i)
         
-        return proto_mask.contiguous().view(-1)
+        return proto_mask
     
     def AdaptiveSegRemapping(self, lb, dataset_ids):
         b, h, w = lb.shape
@@ -591,9 +593,12 @@ class CrossDatasetsCELoss_KMeans(nn.Module):
                 
             this_lb = lb[dataset_ids==ds_id]
             this_emb = re_emb[dataset_ids==ds_id]
+            
             # this_out_kmeans_lb = out_kmeans_lb[dataset_ids == ds_id]
             len_dataset = self.configer.get('dataset'+str(ds_id+1), 'n_cats')
             for lb_id in range(0, len_dataset):
+                if not (this_lb == lb_id).any():
+                    continue
                 remap_lbs = self.classRemapper.getAnyClassRemap(lb_id, ds_id)
                 remap_lbs = torch.tensor(remap_lbs)
                 if lb.is_cuda:
@@ -604,12 +609,10 @@ class CrossDatasetsCELoss_KMeans(nn.Module):
 
                 # 找到无单标签映射类别，生成对应的带memory的聚类特征集
                 for i in remap_lbs:
-                    if not self.classRemapper.IsSingleRemaplb(i):
-                        continue
-                    if not (this_lb == i).any():
+                    if self.classRemapper.IsSingleRemaplb(i):
                         continue
                     
-                    in_x = this_emb[this_lb==i]
+                    in_x = this_emb[this_lb==lb_id]
                     len_in_x = len(in_x)
                     inited_lb = remap_lbs[memory_bank_init[remap_lbs]]
                     if inited_lb.any():
@@ -636,6 +639,8 @@ class CrossDatasetsCELoss_KMeans(nn.Module):
                             constraint_vector[k] = True
                             constraint_matrix[len_in_x+index*memory_size:len_in_x+(index+1)*memory_size] = constraint_vector
                             index += 1
+                            if index >= len(inited_lb):
+                                break
                     
                     target_device = 'cpu'
                     out_cluster = torch.zeros(len_in_x, self.num_unify_classes, dtype=torch.bool)
@@ -645,8 +650,8 @@ class CrossDatasetsCELoss_KMeans(nn.Module):
                         out_cluster = out_cluster.cuda()
                             
                     choice_cluster, initial_state = kmeans(in_x, len(remap_lbs), cluster_centers=cluster_centers, distance='cosine', device=target_device, constraint_matrix=constraint_matrix)
-                    
-                    out_cluster[remap_lbs[choice_cluster]] = True
+                    memory_bank_push(self.configer, memory_bank, memory_bank_ptr, in_x[:len_in_x], remap_lbs[choice_cluster[:len_in_x]], memory_bank_init, 0.1)
+                    # out_cluster[remap_lbs[choice_cluster]] = True
                     # this_out_kmeans_lb[this_lb==i] = out_cluster
                     break
             

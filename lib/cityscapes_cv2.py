@@ -129,9 +129,9 @@ labels_info_eval = [
     {"hasInstances": False, "category": "vehicle", "catid": 7, "name": "license plate", "ignoreInEval": True, "id": 34, "color": [0, 0, 142], "trainId": 19}
 ]
 
-# labels_info_train = labels_info_eval
+labels_info_train = labels_info_eval
 labels_info_eval = labels_info
-labels_info_train = labels_info
+# labels_info_train = labels_info
 
 # labels_info_train = labels_info_eval
 ## CityScapes -> {unify class1, unify class2, ...}
@@ -146,14 +146,14 @@ class CityScapes(BaseDataset):
     
         if mode == 'train':
             # self.n_cats = 18
-            self.n_cats = 19
-            # self.n_cats = 20
+            # self.n_cats = 19
+            self.n_cats = 20
         elif mode == 'eval':
             self.n_cats = 19
             # self.n_cats = 20
         
-        # self.lb_ignore = -1
-        self.lb_ignore = 255
+        self.lb_ignore = -1
+        # self.lb_ignore = 255
         self.lb_map = np.arange(256).astype(np.uint8)
         if mode == 'train':
             self.labels_info = labels_info_train

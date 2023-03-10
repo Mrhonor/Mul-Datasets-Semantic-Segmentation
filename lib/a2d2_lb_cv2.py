@@ -86,7 +86,7 @@ class A2D2Data(Dataset):
         for el in labels_info:
             self.lb_map[el['id']] = el['trainId']
 
-        self.ignore_lb = 255
+        self.ignore_lb = -1
 
         with open(annpath, 'r') as fr:
             pairs = fr.read().splitlines()

@@ -274,7 +274,7 @@
     "use_fp16": false,
     "use_sync_bn": true,
     "contrast": {
-      "use_contrast": true,
+      "use_contrast": false,
       "proj_dim": 128,
       "temperature": 0.07,
       "base_temperature": 0.07,
@@ -289,15 +289,15 @@
       "update_sim_thresh": 0.4,
       "with_ppd": false,
       "ppd_loss_weight": 1,
-      "with_hard_lb_contrast": true,
+      "with_hard_lb_contrast": false,
       "hard_lb_contrast_loss_weight": 1,
       "with_consistence": false,
       "consistent_loss_weight": 10,
       "with_mulbn": false,
-      "memory_bank": true,
+      "memory_bank": false,
       "memory_bank_size": 5000
     },
-    "res_save_pth": "res/Mds/",
+    "res_save_pth": "res/celoss/",
     "network": {
       "stride": 4,
       "with_domain_adversarial": false,

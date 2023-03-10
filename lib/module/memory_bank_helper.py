@@ -2,7 +2,7 @@ import torch
 
 def memory_bank_push(configer, memory_bank, memory_bank_ptr, _c, gt_seg, memory_bank_init, random_pick_ratio=1):
     num_unify_classes = configer.get('num_unify_classes')
-    num_prototype = configer.get('contrast', 'num_prototype')
+    memory_bank_size = configer.get('contrast', 'memory_bank_size')
     if random_pick_ratio > 1: 
         random_pick_ratio = 1
     elif random_pick_ratio < 0:
@@ -17,7 +17,7 @@ def memory_bank_push(configer, memory_bank, memory_bank_ptr, _c, gt_seg, memory_
             # pixel enqueue and dequeue
             num_pixel = this_feat.shape[0]
             perm = torch.randperm(num_pixel)
-            K = int(min(num_pixel, num_prototype) * random_pick_ratio)
+            K = int(min(num_pixel, memory_bank_size) * random_pick_ratio)
             
             if K == 0:
                 K += 1
@@ -26,15 +26,15 @@ def memory_bank_push(configer, memory_bank, memory_bank_ptr, _c, gt_seg, memory_
             
             ptr = int(memory_bank_ptr[i])
 
-            if ptr + K >= num_prototype:
-                remain_num = num_prototype - ptr
-                new_cir_num = ptr + K - num_prototype
+            if ptr + K >= memory_bank_size:
+                remain_num = memory_bank_size - ptr
+                new_cir_num = ptr + K - memory_bank_size
                 memory_bank[i, ptr:, :] = feat[:remain_num]
                 memory_bank[i, :new_cir_num, :] = feat[remain_num:]
                 memory_bank_ptr[i] = new_cir_num
             else:
                 memory_bank[i, ptr:ptr + K, :] = feat
-                memory_bank_ptr[i] = (memory_bank_ptr[i] + K) % num_prototype
+                memory_bank_ptr[i] = (memory_bank_ptr[i] + K) % memory_bank_size
                 memory_bank_init[i] = True
                 
 if __name__ == '__main__':

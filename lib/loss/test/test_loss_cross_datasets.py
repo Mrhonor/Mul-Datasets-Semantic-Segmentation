@@ -26,6 +26,55 @@ class Test_CrossDatasetsLoss_KMeans:
         init_datas = [True, True, True, False]
         assert loss_fuc.IsInitMemoryBank(init_datas) == True 
     
+    def test_AdaptiveKMeansProtoLearning(self):
+        configer = Configer(configs='configs/test/test_isSingleRemaplb.json') 
+        loss_fuc = CrossDatasetsCELoss_KMeans(configer)
+        lb = torch.tensor([[[0,2],
+                            [2,1]],
+                           [[2,0],
+                            [0,1]]])
+        
+        memory_bank = torch.tensor([[[0,1], [0.6,0.8]],
+                                    [[1,0], [0.8,0.6]],
+                                    [[0,-1], [-0.6,-0.8]],
+                                    [[0,0], [0,0]]])
+        
+        memory_bank_ptr = torch.tensor([0,0,0,0])
+        memory_bank_init = torch.tensor([True, True, True, False])
+
+        dataset_ids = torch.tensor([0,1])
+        embedding = torch.tensor([[[[0,1],[-1, 0.3]],
+                                   [[-0.3, -0.9],[1,0]]],
+                                  [[[0.9, 0.3],[-0.99, -0.1]],
+                                   [[0.9,0.3],[0.3, -0.9]]]])
+
+        embedding = rearrange(embedding, 'b h w c -> b c h w')
+         
+        loss_fuc.AdaptiveKMeansProtoLearning(lb, memory_bank, memory_bank_ptr, memory_bank_init, embedding, dataset_ids)
+        
+        true_memory_bank = torch.tensor([[[ 0.0000,  1.0000],
+                                        [ 0.6000,  0.8000]],
+
+                                        [[-0.9900, -0.1000],
+                                        [ 0.8000,  0.6000]],
+
+                                        [[-0.3000, -0.9000],
+                                        [-0.6000, -0.8000]],
+
+                                        [[-1.0000,  0.3000],
+                                        [ 0.9000,  0.3000]]])
+        
+        true_memory_bank_ptr = torch.tensor([0,1,1,0])
+        true_memory_bank_init = torch.tensor([True, True, True, True]) 
+
+        print(memory_bank)
+        print(memory_bank_ptr)
+        print(memory_bank_init)
+
+        assert memory_bank.equal(true_memory_bank)
+        assert memory_bank_ptr.equal(true_memory_bank_ptr)
+        assert memory_bank_init.equal(true_memory_bank_init)
+            
     # def test_AdaptiveSingleSegRemapping(self):
     #     configer = Configer(configs='configs/test/test_isSingleRemaplb.json') 
     #     loss_fuc = CrossDatasetsCELoss_KMeans(configer)

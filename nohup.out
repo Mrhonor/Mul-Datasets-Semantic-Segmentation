@@ -1,355 +1,3 @@
-/home/cxh/anaconda3/envs/bisenet/lib/python3.8/site-packages/torch/distributed/launch.py:178: FutureWarning: The module torch.distributed.launch is deprecated
-and will be removed in future. Use torchrun.
-Note that --use_env is set by default in torchrun.
-If your script expects `--local_rank` argument to be set, please
-change it to read from `os.environ['LOCAL_RANK']` instead. See 
-https://pytorch.org/docs/stable/distributed.html#launch-utility for 
-further instructions
-
-  warnings.warn(
-WARNING:torch.distributed.run:
-*****************************************
-Setting OMP_NUM_THREADS environment variable for each process to be 1 in default, to avoid your system being overloaded, please further tune the variable for optimal performance in your application as needed. 
-*****************************************
-WARNING:torch.distributed.elastic.agent.server.api:Received 2 death signal, shutting down workers
-WARNING:torch.distributed.elastic.multiprocessing.api:Sending process 12643 closing signal SIGINT
-WARNING:torch.distributed.elastic.multiprocessing.api:Sending process 12644 closing signal SIGINT
-WARNING:torch.distributed.elastic.multiprocessing.api:Sending process 12645 closing signal SIGINT
-WARNING:torch.distributed.elastic.multiprocessing.api:Sending process 12643 closing signal SIGTERM
-WARNING:torch.distributed.elastic.multiprocessing.api:Sending process 12644 closing signal SIGTERM
-WARNING:torch.distributed.elastic.multiprocessing.api:Sending process 12645 closing signal SIGTERM
-Traceback (most recent call last):
-  File "/home/cxh/anaconda3/envs/bisenet/lib/python3.8/site-packages/torch/distributed/elastic/agent/server/api.py", line 709, in run
-    result = self._invoke_run(role)
-  File "/home/cxh/anaconda3/envs/bisenet/lib/python3.8/site-packages/torch/distributed/elastic/agent/server/api.py", line 850, in _invoke_run
-    time.sleep(monitor_interval)
-  File "/home/cxh/anaconda3/envs/bisenet/lib/python3.8/site-packages/torch/distributed/elastic/multiprocessing/api.py", line 60, in _terminate_process_handler
-    raise SignalException(f"Process {os.getpid()} got signal: {sigval}", sigval=sigval)
-torch.distributed.elastic.multiprocessing.api.SignalException: Process 12633 got signal: 2
-
-During handling of the above exception, another exception occurred:
-
-Traceback (most recent call last):
-  File "/home/cxh/anaconda3/envs/bisenet/lib/python3.8/site-packages/torch/distributed/elastic/agent/server/api.py", line 716, in run
-    self._shutdown(e.sigval)
-  File "/home/cxh/anaconda3/envs/bisenet/lib/python3.8/site-packages/torch/distributed/elastic/agent/server/local_elastic_agent.py", line 193, in _shutdown
-    self._pcontext.close(death_sig)
-  File "/home/cxh/anaconda3/envs/bisenet/lib/python3.8/site-packages/torch/distributed/elastic/multiprocessing/api.py", line 330, in close
-    self._close(death_sig=death_sig, timeout=timeout)
-  File "/home/cxh/anaconda3/envs/bisenet/lib/python3.8/site-packages/torch/distributed/elastic/multiprocessing/api.py", line 707, in _close
-    handler.proc.wait(time_to_wait)
-  File "/home/cxh/anaconda3/envs/bisenet/lib/python3.8/subprocess.py", line 1083, in wait
-    return self._wait(timeout=timeout)
-  File "/home/cxh/anaconda3/envs/bisenet/lib/python3.8/subprocess.py", line 1800, in _wait
-    time.sleep(delay)
-  File "/home/cxh/anaconda3/envs/bisenet/lib/python3.8/site-packages/torch/distributed/elastic/multiprocessing/api.py", line 60, in _terminate_process_handler
-    raise SignalException(f"Process {os.getpid()} got signal: {sigval}", sigval=sigval)
-torch.distributed.elastic.multiprocessing.api.SignalException: Process 12633 got signal: 2
-
-During handling of the above exception, another exception occurred:
-
-Traceback (most recent call last):
-  File "/home/cxh/anaconda3/envs/bisenet/lib/python3.8/runpy.py", line 194, in _run_module_as_main
-    return _run_code(code, main_globals, None,
-  File "/home/cxh/anaconda3/envs/bisenet/lib/python3.8/runpy.py", line 87, in _run_code
-    exec(code, run_globals)
-  File "/home/cxh/anaconda3/envs/bisenet/lib/python3.8/site-packages/torch/distributed/launch.py", line 193, in <module>
-    main()
-  File "/home/cxh/anaconda3/envs/bisenet/lib/python3.8/site-packages/torch/distributed/launch.py", line 189, in main
-    launch(args)
-  File "/home/cxh/anaconda3/envs/bisenet/lib/python3.8/site-packages/torch/distributed/launch.py", line 174, in launch
-    run(args)
-  File "/home/cxh/anaconda3/envs/bisenet/lib/python3.8/site-packages/torch/distributed/run.py", line 752, in run
-    elastic_launch(
-  File "/home/cxh/anaconda3/envs/bisenet/lib/python3.8/site-packages/torch/distributed/launcher/api.py", line 131, in __call__
-    return launch_agent(self._config, self._entrypoint, list(args))
-  File "/home/cxh/anaconda3/envs/bisenet/lib/python3.8/site-packages/torch/distributed/launcher/api.py", line 236, in launch_agent
-    result = agent.run()
-  File "/home/cxh/anaconda3/envs/bisenet/lib/python3.8/site-packages/torch/distributed/elastic/metrics/api.py", line 125, in wrapper
-    result = f(*args, **kwargs)
-  File "/home/cxh/anaconda3/envs/bisenet/lib/python3.8/site-packages/torch/distributed/elastic/agent/server/api.py", line 721, in run
-    self._shutdown()
-  File "/home/cxh/anaconda3/envs/bisenet/lib/python3.8/site-packages/torch/distributed/elastic/agent/server/local_elastic_agent.py", line 193, in _shutdown
-    self._pcontext.close(death_sig)
-  File "/home/cxh/anaconda3/envs/bisenet/lib/python3.8/site-packages/torch/distributed/elastic/multiprocessing/api.py", line 330, in close
-    self._close(death_sig=death_sig, timeout=timeout)
-  File "/home/cxh/anaconda3/envs/bisenet/lib/python3.8/site-packages/torch/distributed/elastic/multiprocessing/api.py", line 707, in _close
-    handler.proc.wait(time_to_wait)
-  File "/home/cxh/anaconda3/envs/bisenet/lib/python3.8/subprocess.py", line 1083, in wait
-    return self._wait(timeout=timeout)
-  File "/home/cxh/anaconda3/envs/bisenet/lib/python3.8/subprocess.py", line 1800, in _wait
-    time.sleep(delay)
-  File "/home/cxh/anaconda3/envs/bisenet/lib/python3.8/site-packages/torch/distributed/elastic/multiprocessing/api.py", line 60, in _terminate_process_handler
-    raise SignalException(f"Process {os.getpid()} got signal: {sigval}", sigval=sigval)
-torch.distributed.elastic.multiprocessing.api.SignalException: Process 12633 got signal: 2
-/home/cxh/anaconda3/envs/bisenet/lib/python3.8/site-packages/torch/distributed/launch.py:178: FutureWarning: The module torch.distributed.launch is deprecated
-and will be removed in future. Use torchrun.
-Note that --use_env is set by default in torchrun.
-If your script expects `--local_rank` argument to be set, please
-change it to read from `os.environ['LOCAL_RANK']` instead. See 
-https://pytorch.org/docs/stable/distributed.html#launch-utility for 
-further instructions
-
-  warnings.warn(
-WARNING:torch.distributed.run:
-*****************************************
-Setting OMP_NUM_THREADS environment variable for each process to be 1 in default, to avoid your system being overloaded, please further tune the variable for optimal performance in your application as needed. 
-*****************************************
-/home/cxh/anaconda3/envs/bisenet/lib/python3.8/site-packages/torch/nn/functional.py:1960: UserWarning: nn.functional.sigmoid is deprecated. Use torch.sigmoid instead.
-  warnings.warn("nn.functional.sigmoid is deprecated. Use torch.sigmoid instead.")
-/home/cxh/anaconda3/envs/bisenet/lib/python3.8/site-packages/torch/nn/functional.py:1960: UserWarning: nn.functional.sigmoid is deprecated. Use torch.sigmoid instead.
-  warnings.warn("nn.functional.sigmoid is deprecated. Use torch.sigmoid instead.")
-/home/cxh/anaconda3/envs/bisenet/lib/python3.8/site-packages/torch/nn/functional.py:1960: UserWarning: nn.functional.sigmoid is deprecated. Use torch.sigmoid instead.
-  warnings.warn("nn.functional.sigmoid is deprecated. Use torch.sigmoid instead.")
-Traceback (most recent call last):
-  File "tools/train_amp_contrast.py", line 502, in <module>
-    main()
-  File "tools/train_amp_contrast.py", line 498, in main
-    train()
-  File "tools/train_amp_contrast.py", line 375, in train
-    backward_loss0, loss_seg0, loss_aux0 = contrast_losses[CITY_ID](city_out, lb_city, CITY_ID, True)
-  File "/home/cxh/anaconda3/envs/bisenet/lib/python3.8/site-packages/torch/nn/modules/module.py", line 1130, in _call_impl
-    return forward_call(*input, **kwargs)
-  File "/home/cxh/mr/BiSeNet/./lib/loss_cross_datasets.py", line 73, in forward
-    return loss, loss_seg, loss_aux
-UnboundLocalError: local variable 'loss' referenced before assignment
-Traceback (most recent call last):
-  File "tools/train_amp_contrast.py", line 502, in <module>
-    main()
-  File "tools/train_amp_contrast.py", line 498, in main
-    train()
-  File "tools/train_amp_contrast.py", line 375, in train
-    backward_loss0, loss_seg0, loss_aux0 = contrast_losses[CITY_ID](city_out, lb_city, CITY_ID, True)
-  File "/home/cxh/anaconda3/envs/bisenet/lib/python3.8/site-packages/torch/nn/modules/module.py", line 1130, in _call_impl
-    return forward_call(*input, **kwargs)
-  File "/home/cxh/mr/BiSeNet/./lib/loss_cross_datasets.py", line 73, in forward
-    return loss, loss_seg, loss_aux
-UnboundLocalError: local variable 'loss' referenced before assignment
-Traceback (most recent call last):
-  File "tools/train_amp_contrast.py", line 502, in <module>
-    main()
-  File "tools/train_amp_contrast.py", line 498, in main
-    train()
-  File "tools/train_amp_contrast.py", line 375, in train
-    backward_loss0, loss_seg0, loss_aux0 = contrast_losses[CITY_ID](city_out, lb_city, CITY_ID, True)
-  File "/home/cxh/anaconda3/envs/bisenet/lib/python3.8/site-packages/torch/nn/modules/module.py", line 1130, in _call_impl
-    return forward_call(*input, **kwargs)
-  File "/home/cxh/mr/BiSeNet/./lib/loss_cross_datasets.py", line 73, in forward
-    return loss, loss_seg, loss_aux
-UnboundLocalError: local variable 'loss' referenced before assignment
-ERROR:torch.distributed.elastic.multiprocessing.api:failed (exitcode: 1) local_rank: 0 (pid: 15544) of binary: /home/cxh/anaconda3/envs/bisenet/bin/python
-Traceback (most recent call last):
-  File "/home/cxh/anaconda3/envs/bisenet/lib/python3.8/runpy.py", line 194, in _run_module_as_main
-    return _run_code(code, main_globals, None,
-  File "/home/cxh/anaconda3/envs/bisenet/lib/python3.8/runpy.py", line 87, in _run_code
-    exec(code, run_globals)
-  File "/home/cxh/anaconda3/envs/bisenet/lib/python3.8/site-packages/torch/distributed/launch.py", line 193, in <module>
-    main()
-  File "/home/cxh/anaconda3/envs/bisenet/lib/python3.8/site-packages/torch/distributed/launch.py", line 189, in main
-    launch(args)
-  File "/home/cxh/anaconda3/envs/bisenet/lib/python3.8/site-packages/torch/distributed/launch.py", line 174, in launch
-    run(args)
-  File "/home/cxh/anaconda3/envs/bisenet/lib/python3.8/site-packages/torch/distributed/run.py", line 752, in run
-    elastic_launch(
-  File "/home/cxh/anaconda3/envs/bisenet/lib/python3.8/site-packages/torch/distributed/launcher/api.py", line 131, in __call__
-    return launch_agent(self._config, self._entrypoint, list(args))
-  File "/home/cxh/anaconda3/envs/bisenet/lib/python3.8/site-packages/torch/distributed/launcher/api.py", line 245, in launch_agent
-    raise ChildFailedError(
-torch.distributed.elastic.multiprocessing.errors.ChildFailedError: 
-============================================================
-tools/train_amp_contrast.py FAILED
-------------------------------------------------------------
-Failures:
-[1]:
-  time      : 2022-09-19_20:25:56
-  host      : vgpu01.hpc.local
-  rank      : 1 (local_rank: 1)
-  exitcode  : 1 (pid: 15545)
-  error_file: <N/A>
-  traceback : To enable traceback see: https://pytorch.org/docs/stable/elastic/errors.html
-[2]:
-  time      : 2022-09-19_20:25:56
-  host      : vgpu01.hpc.local
-  rank      : 2 (local_rank: 2)
-  exitcode  : 1 (pid: 15546)
-  error_file: <N/A>
-  traceback : To enable traceback see: https://pytorch.org/docs/stable/elastic/errors.html
-------------------------------------------------------------
-Root Cause (first observed failure):
-[0]:
-  time      : 2022-09-19_20:25:56
-  host      : vgpu01.hpc.local
-  rank      : 0 (local_rank: 0)
-  exitcode  : 1 (pid: 15544)
-  error_file: <N/A>
-  traceback : To enable traceback see: https://pytorch.org/docs/stable/elastic/errors.html
-============================================================
-/home/cxh/anaconda3/envs/bisenet/lib/python3.8/site-packages/torch/distributed/launch.py:178: FutureWarning: The module torch.distributed.launch is deprecated
-and will be removed in future. Use torchrun.
-Note that --use_env is set by default in torchrun.
-If your script expects `--local_rank` argument to be set, please
-change it to read from `os.environ['LOCAL_RANK']` instead. See 
-https://pytorch.org/docs/stable/distributed.html#launch-utility for 
-further instructions
-
-  warnings.warn(
-WARNING:torch.distributed.run:
-*****************************************
-Setting OMP_NUM_THREADS environment variable for each process to be 1 in default, to avoid your system being overloaded, please further tune the variable for optimal performance in your application as needed. 
-*****************************************
-/home/cxh/anaconda3/envs/bisenet/lib/python3.8/site-packages/torch/nn/functional.py:1960: UserWarning: nn.functional.sigmoid is deprecated. Use torch.sigmoid instead.
-  warnings.warn("nn.functional.sigmoid is deprecated. Use torch.sigmoid instead.")
-/home/cxh/anaconda3/envs/bisenet/lib/python3.8/site-packages/torch/nn/functional.py:1960: UserWarning: nn.functional.sigmoid is deprecated. Use torch.sigmoid instead.
-  warnings.warn("nn.functional.sigmoid is deprecated. Use torch.sigmoid instead.")
-/home/cxh/anaconda3/envs/bisenet/lib/python3.8/site-packages/torch/nn/functional.py:1960: UserWarning: nn.functional.sigmoid is deprecated. Use torch.sigmoid instead.
-  warnings.warn("nn.functional.sigmoid is deprecated. Use torch.sigmoid instead.")
-iter: 100/150000, Cam_epoch: 0.42217484008528783, CityScapes_epoch: 0.09979838709677419, lr: 0.006280, eta: 1 day, 4:13:02, time: 68.44, loss: 10.7557, loss_pre: 2.1924, loss_contrast: -1.0000, loss_aux0: 2.3040, loss_aux1: 1.9867, loss_aux2: 2.0251, loss_aux3: 2.2475
-iter: 200/150000, Cam_epoch: 0.8486140724946695, CityScapes_epoch: 0.2006048387096774, lr: 0.007906, eta: 1 day, 3:23:18, time: 63.85, loss: 8.8591, loss_pre: 1.8811, loss_contrast: -1.0000, loss_aux0: 1.9489, loss_aux1: 1.6251, loss_aux2: 1.5627, loss_aux3: 1.8413
-iter: 300/150000, Cam_epoch: 1.275053304904051, CityScapes_epoch: 0.3014112903225806, lr: 0.009953, eta: 1 day, 3:07:53, time: 64.09, loss: 8.2737, loss_pre: 1.7086, loss_contrast: -1.0000, loss_aux0: 1.7440, loss_aux1: 1.5479, loss_aux2: 1.4848, loss_aux3: 1.7883
-iter: 400/150000, Cam_epoch: 1.7014925373134329, CityScapes_epoch: 0.4022177419354839, lr: 0.012531, eta: 1 day, 3:00:09, time: 64.18, loss: 7.6709, loss_pre: 1.5715, loss_contrast: -1.0000, loss_aux0: 1.6264, loss_aux1: 1.4561, loss_aux2: 1.3896, loss_aux3: 1.6274
-iter: 500/150000, Cam_epoch: 2.1279317697228146, CityScapes_epoch: 0.5030241935483871, lr: 0.015775, eta: 1 day, 2:53:17, time: 63.82, loss: 7.3725, loss_pre: 1.5186, loss_contrast: -1.0000, loss_aux0: 1.6578, loss_aux1: 1.4717, loss_aux2: 1.3698, loss_aux3: 1.3544
-iter: 600/150000, Cam_epoch: 2.5543710021321964, CityScapes_epoch: 0.6038306451612904, lr: 0.019860, eta: 1 day, 2:48:25, time: 63.83, loss: 7.2473, loss_pre: 1.5012, loss_contrast: -1.0000, loss_aux0: 1.6604, loss_aux1: 1.4526, loss_aux2: 1.3380, loss_aux3: 1.2951
-iter: 700/150000, Cam_epoch: 2.9808102345415777, CityScapes_epoch: 0.7046370967741935, lr: 0.025002, eta: 1 day, 2:46:10, time: 64.26, loss: 7.0190, loss_pre: 1.4545, loss_contrast: -1.0000, loss_aux0: 1.6049, loss_aux1: 1.4132, loss_aux2: 1.2976, loss_aux3: 1.2488
-iter: 800/150000, Cam_epoch: 3.4072494669509594, CityScapes_epoch: 0.8054435483870968, lr: 0.031475, eta: 1 day, 2:43:11, time: 63.93, loss: 6.5058, loss_pre: 1.3158, loss_contrast: -1.0000, loss_aux0: 1.5227, loss_aux1: 1.3198, loss_aux2: 1.2010, loss_aux3: 1.1465
-iter: 900/150000, Cam_epoch: 3.833688699360341, CityScapes_epoch: 0.90625, lr: 0.039625, eta: 1 day, 2:40:35, time: 63.92, loss: 6.5284, loss_pre: 1.1864, loss_contrast: -1.0000, loss_aux0: 1.5557, loss_aux1: 1.3619, loss_aux2: 1.2430, loss_aux3: 1.1814
-iter: 1000/150000, Cam_epoch: 4.2601279317697225, CityScapes_epoch: 1.0070564516129032, lr: 0.049885, eta: 1 day, 2:38:51, time: 64.14, loss: 7.0068, loss_pre: 1.2421, loss_contrast: -1.0000, loss_aux0: 1.6842, loss_aux1: 1.4803, loss_aux2: 1.3350, loss_aux3: 1.2653
-
-save models to res/model_1000.pth
-  0%|          | 0/167 [00:00<?, ?it/s]  1%|          | 1/167 [00:00<02:41,  1.03it/s]  1%|          | 2/167 [00:01<01:26,  1.90it/s]  2%|▏         | 3/167 [00:01<01:01,  2.66it/s]  2%|▏         | 4/167 [00:01<00:49,  3.30it/s]  3%|▎         | 5/167 [00:01<00:43,  3.76it/s]  4%|▎         | 6/167 [00:01<00:39,  4.10it/s]  4%|▍         | 7/167 [00:02<00:36,  4.42it/s]  5%|▍         | 8/167 [00:02<00:32,  4.84it/s]  5%|▌         | 9/167 [00:02<00:33,  4.66it/s]  6%|▌         | 10/167 [00:02<00:32,  4.84it/s]  7%|▋         | 11/167 [00:02<00:32,  4.87it/s]  7%|▋         | 12/167 [00:03<00:31,  4.89it/s]  8%|▊         | 13/167 [00:03<00:31,  4.87it/s]  8%|▊         | 14/167 [00:03<00:31,  4.87it/s]  9%|▉         | 15/167 [00:03<00:30,  4.98it/s] 10%|▉         | 16/167 [00:03<00:28,  5.32it/s] 10%|█         | 17/167 [00:04<00:31,  4.74it/s] 11%|█         | 18/167 [00:04<00:30,  4.86it/s] 11%|█▏        | 19/167 [00:04<00:29,  4.95it/s] 12%|█▏        | 20/167 [00:04<00:28,  5.19it/s] 13%|█▎        | 21/167 [00:04<00:29,  4.94it/s] 13%|█▎        | 22/167 [00:05<00:28,  5.02it/s] 14%|█▍        | 23/167 [00:05<00:28,  5.05it/s] 14%|█▍        | 24/167 [00:05<00:28,  4.93it/s] 15%|█▍        | 25/167 [00:05<00:28,  5.07it/s] 16%|█▌        | 26/167 [00:05<00:27,  5.17it/s] 16%|█▌        | 27/167 [00:06<00:27,  5.09it/s] 17%|█▋        | 28/167 [00:06<00:26,  5.34it/s] 17%|█▋        | 29/167 [00:06<00:26,  5.18it/s] 18%|█▊        | 30/167 [00:06<00:26,  5.15it/s] 19%|█▊        | 31/167 [00:06<00:27,  4.95it/s] 19%|█▉        | 32/167 [00:07<00:25,  5.33it/s] 20%|█▉        | 33/167 [00:07<00:26,  5.00it/s] 20%|██        | 34/167 [00:07<00:26,  5.10it/s] 21%|██        | 35/167 [00:07<00:25,  5.17it/s] 22%|██▏       | 36/167 [00:07<00:25,  5.19it/s] 22%|██▏       | 37/167 [00:08<00:27,  4.79it/s] 23%|██▎       | 38/167 [00:08<00:26,  4.92it/s] 23%|██▎       | 39/167 [00:08<00:25,  5.09it/s] 24%|██▍       | 40/167 [00:08<00:23,  5.37it/s] 25%|██▍       | 41/167 [00:08<00:22,  5.53it/s] 25%|██▌       | 42/167 [00:09<00:22,  5.50it/s] 26%|██▌       | 43/167 [00:09<00:23,  5.18it/s] 26%|██▋       | 44/167 [00:09<00:22,  5.42it/s] 27%|██▋       | 45/167 [00:09<00:23,  5.20it/s] 28%|██▊       | 46/167 [00:09<00:23,  5.11it/s] 28%|██▊       | 47/167 [00:10<00:23,  5.00it/s] 29%|██▊       | 48/167 [00:10<00:24,  4.79it/s] 29%|██▉       | 49/167 [00:10<00:24,  4.76it/s] 30%|██▉       | 50/167 [00:10<00:23,  4.91it/s] 31%|███       | 51/167 [00:10<00:23,  5.02it/s] 31%|███       | 52/167 [00:11<00:22,  5.23it/s] 32%|███▏      | 53/167 [00:11<00:25,  4.51it/s] 32%|███▏      | 54/167 [00:11<00:24,  4.58it/s] 33%|███▎      | 55/167 [00:11<00:23,  4.70it/s] 34%|███▎      | 56/167 [00:11<00:24,  4.53it/s] 34%|███▍      | 57/167 [00:12<00:24,  4.54it/s] 35%|███▍      | 58/167 [00:12<00:22,  4.75it/s] 35%|███▌      | 59/167 [00:12<00:22,  4.90it/s] 36%|███▌      | 60/167 [00:12<00:21,  4.96it/s] 37%|███▋      | 61/167 [00:12<00:21,  4.85it/s] 37%|███▋      | 62/167 [00:13<00:21,  4.87it/s] 38%|███▊      | 63/167 [00:13<00:21,  4.95it/s] 38%|███▊      | 64/167 [00:13<00:22,  4.65it/s] 39%|███▉      | 65/167 [00:13<00:21,  4.66it/s] 40%|███▉      | 66/167 [00:14<00:21,  4.75it/s] 40%|████      | 67/167 [00:14<00:20,  4.99it/s] 41%|████      | 68/167 [00:14<00:20,  4.84it/s] 41%|████▏     | 69/167 [00:14<00:20,  4.84it/s] 42%|████▏     | 70/167 [00:14<00:18,  5.14it/s] 43%|████▎     | 71/167 [00:14<00:17,  5.36it/s] 43%|████▎     | 72/167 [00:15<00:17,  5.29it/s] 44%|████▎     | 73/167 [00:15<00:17,  5.33it/s] 44%|████▍     | 74/167 [00:15<00:18,  5.09it/s] 45%|████▍     | 75/167 [00:15<00:17,  5.26it/s] 46%|████▌     | 76/167 [00:15<00:17,  5.13it/s] 46%|████▌     | 77/167 [00:16<00:18,  4.89it/s] 47%|████▋     | 78/167 [00:16<00:17,  4.96it/s] 47%|████▋     | 79/167 [00:16<00:16,  5.29it/s] 48%|████▊     | 80/167 [00:16<00:17,  5.06it/s] 49%|████▊     | 81/167 [00:16<00:17,  5.01it/s] 49%|████▉     | 82/167 [00:17<00:17,  4.84it/s] 50%|████▉     | 83/167 [00:17<00:16,  5.06it/s] 50%|█████     | 84/167 [00:17<00:15,  5.25it/s] 51%|█████     | 85/167 [00:17<00:16,  5.05it/s] 51%|█████▏    | 86/167 [00:17<00:15,  5.17it/s] 52%|█████▏    | 87/167 [00:18<00:15,  5.29it/s] 53%|█████▎    | 88/167 [00:18<00:15,  5.02it/s] 53%|█████▎    | 89/167 [00:18<00:15,  4.88it/s] 54%|█████▍    | 90/167 [00:18<00:15,  4.95it/s] 54%|█████▍    | 91/167 [00:18<00:14,  5.11it/s] 55%|█████▌    | 92/167 [00:19<00:14,  5.13it/s] 56%|█████▌    | 93/167 [00:19<00:14,  4.97it/s] 56%|█████▋    | 94/167 [00:19<00:14,  5.03it/s] 57%|█████▋    | 95/167 [00:19<00:13,  5.16it/s] 57%|█████▋    | 96/167 [00:19<00:14,  5.04it/s] 58%|█████▊    | 97/167 [00:20<00:14,  4.94it/s] 59%|█████▊    | 98/167 [00:20<00:13,  5.00it/s] 59%|█████▉    | 99/167 [00:20<00:13,  5.01it/s] 60%|█████▉    | 100/167 [00:20<00:14,  4.72it/s] 60%|██████    | 101/167 [00:20<00:14,  4.70it/s] 61%|██████    | 102/167 [00:21<00:13,  4.85it/s] 62%|██████▏   | 103/167 [00:21<00:12,  5.14it/s] 62%|██████▏   | 104/167 [00:21<00:11,  5.37it/s] 63%|██████▎   | 105/167 [00:21<00:12,  5.11it/s] 63%|██████▎   | 106/167 [00:21<00:11,  5.29it/s] 64%|██████▍   | 107/167 [00:22<00:11,  5.34it/s] 65%|██████▍   | 108/167 [00:22<00:11,  5.13it/s] 65%|██████▌   | 109/167 [00:22<00:11,  5.14it/s] 66%|██████▌   | 110/167 [00:22<00:10,  5.18it/s] 66%|██████▋   | 111/167 [00:22<00:10,  5.33it/s] 67%|██████▋   | 112/167 [00:23<00:10,  5.09it/s] 68%|██████▊   | 113/167 [00:23<00:10,  5.23it/s] 68%|██████▊   | 114/167 [00:23<00:09,  5.37it/s] 69%|██████▉   | 115/167 [00:23<00:09,  5.37it/s] 69%|██████▉   | 116/167 [00:23<00:10,  5.10it/s] 70%|███████   | 117/167 [00:24<00:10,  4.91it/s] 71%|███████   | 118/167 [00:24<00:09,  5.00it/s] 71%|███████▏  | 119/167 [00:24<00:09,  5.29it/s] 72%|███████▏  | 120/167 [00:24<00:08,  5.34it/s] 72%|███████▏  | 121/167 [00:24<00:08,  5.30it/s] 73%|███████▎  | 122/167 [00:24<00:08,  5.52it/s] 74%|███████▎  | 123/167 [00:25<00:07,  5.52it/s] 74%|███████▍  | 124/167 [00:25<00:08,  4.92it/s] 75%|███████▍  | 125/167 [00:25<00:08,  4.77it/s] 75%|███████▌  | 126/167 [00:25<00:08,  4.84it/s] 76%|███████▌  | 127/167 [00:25<00:08,  4.97it/s] 77%|███████▋  | 128/167 [00:26<00:08,  4.40it/s] 77%|███████▋  | 129/167 [00:26<00:08,  4.30it/s] 78%|███████▊  | 130/167 [00:26<00:08,  4.35it/s] 78%|███████▊  | 131/167 [00:26<00:07,  4.72it/s] 79%|███████▉  | 132/167 [00:27<00:07,  4.89it/s] 80%|███████▉  | 133/167 [00:27<00:07,  4.82it/s] 80%|████████  | 134/167 [00:27<00:06,  4.94it/s] 81%|████████  | 135/167 [00:27<00:06,  4.75it/s] 81%|████████▏ | 136/167 [00:27<00:06,  4.77it/s] 82%|████████▏ | 137/167 [00:28<00:06,  4.85it/s] 83%|████████▎ | 138/167 [00:28<00:05,  4.89it/s] 83%|████████▎ | 139/167 [00:28<00:05,  5.03it/s] 84%|████████▍ | 140/167 [00:28<00:05,  4.92it/s] 84%|████████▍ | 141/167 [00:28<00:05,  4.96it/s] 85%|████████▌ | 142/167 [00:29<00:05,  4.97it/s] 86%|████████▌ | 143/167 [00:29<00:04,  5.22it/s] 86%|████████▌ | 144/167 [00:29<00:04,  5.31it/s] 87%|████████▋ | 145/167 [00:29<00:04,  5.38it/s] 87%|████████▋ | 146/167 [00:29<00:04,  5.20it/s] 88%|████████▊ | 147/167 [00:30<00:03,  5.37it/s] 89%|████████▊ | 148/167 [00:30<00:03,  5.49it/s] 89%|████████▉ | 149/167 [00:30<00:03,  5.47it/s] 90%|████████▉ | 150/167 [00:30<00:03,  5.38it/s] 90%|█████████ | 151/167 [00:30<00:02,  5.63it/s] 91%|█████████ | 152/167 [00:30<00:02,  5.41it/s] 92%|█████████▏| 153/167 [00:31<00:02,  5.45it/s] 92%|█████████▏| 154/167 [00:31<00:02,  5.49it/s] 93%|█████████▎| 155/167 [00:31<00:02,  5.39it/s] 93%|█████████▎| 156/167 [00:31<00:01,  5.64it/s] 94%|█████████▍| 157/167 [00:31<00:01,  5.15it/s] 95%|█████████▍| 158/167 [00:32<00:01,  5.27it/s] 95%|█████████▌| 159/167 [00:32<00:01,  5.11it/s] 96%|█████████▌| 160/167 [00:32<00:01,  5.48it/s] 96%|█████████▋| 161/167 [00:32<00:01,  5.56it/s] 97%|█████████▋| 162/167 [00:32<00:00,  5.29it/s] 98%|█████████▊| 163/167 [00:32<00:00,  5.45it/s] 98%|█████████▊| 164/167 [00:33<00:00,  5.44it/s] 99%|█████████▉| 165/167 [00:33<00:00,  5.71it/s] 99%|█████████▉| 166/167 [00:33<00:00,  5.74it/s]100%|██████████| 167/167 [00:33<00:00,  5.60it/s]100%|██████████| 167/167 [00:33<00:00,  4.95it/s]
-  0%|          | 0/20 [00:00<?, ?it/s]  5%|▌         | 1/20 [00:01<00:23,  1.26s/it] 10%|█         | 2/20 [00:01<00:12,  1.46it/s] 15%|█▌        | 3/20 [00:01<00:08,  2.04it/s] 20%|██        | 4/20 [00:02<00:06,  2.40it/s] 25%|██▌       | 5/20 [00:02<00:05,  2.80it/s] 30%|███       | 6/20 [00:02<00:04,  2.85it/s] 35%|███▌      | 7/20 [00:02<00:04,  3.00it/s] 40%|████      | 8/20 [00:03<00:03,  3.24it/s] 45%|████▌     | 9/20 [00:03<00:03,  3.07it/s] 50%|█████     | 10/20 [00:03<00:03,  3.24it/s] 55%|█████▌    | 11/20 [00:04<00:02,  3.48it/s] 60%|██████    | 12/20 [00:04<00:02,  3.29it/s] 65%|██████▌   | 13/20 [00:04<00:02,  3.39it/s] 70%|███████   | 14/20 [00:04<00:01,  3.63it/s] 75%|███████▌  | 15/20 [00:05<00:01,  3.76it/s] 80%|████████  | 16/20 [00:05<00:01,  3.84it/s] 85%|████████▌ | 17/20 [00:05<00:00,  4.02it/s] 90%|█████████ | 18/20 [00:05<00:00,  4.06it/s] 95%|█████████▌| 19/20 [00:06<00:00,  4.17it/s]100%|██████████| 20/20 [00:06<00:00,  4.83it/s]100%|██████████| 20/20 [00:06<00:00,  3.16it/s]
-Cam single mIOU is: 0.21649007499217987
-CityScapes single mIOU is: 0.13771238923072815
-
-|         |   single_scale |
-|---------+----------------|
-| 0.21649 |       0.137712 |
-iter: 1100/150000, Cam_epoch: 4.686567164179104, CityScapes_epoch: 1.1078629032258065, lr: 0.049970, eta: 1 day, 6:36:28, time: 170.28, loss: 7.8151, loss_pre: 1.1788, loss_contrast: 5.1083, loss_aux0: 1.5102, loss_aux1: 1.3072, loss_aux2: 1.1779, loss_aux3: 1.1085
-WARNING:torch.distributed.elastic.agent.server.api:Received 1 death signal, shutting down workers
-WARNING:torch.distributed.elastic.multiprocessing.api:Sending process 18749 closing signal SIGHUP
-WARNING:torch.distributed.elastic.multiprocessing.api:Sending process 18750 closing signal SIGHUP
-WARNING:torch.distributed.elastic.multiprocessing.api:Sending process 18751 closing signal SIGHUP
-Traceback (most recent call last):
-  File "/home/cxh/anaconda3/envs/bisenet/lib/python3.8/runpy.py", line 194, in _run_module_as_main
-    return _run_code(code, main_globals, None,
-  File "/home/cxh/anaconda3/envs/bisenet/lib/python3.8/runpy.py", line 87, in _run_code
-    exec(code, run_globals)
-  File "/home/cxh/anaconda3/envs/bisenet/lib/python3.8/site-packages/torch/distributed/launch.py", line 193, in <module>
-    main()
-  File "/home/cxh/anaconda3/envs/bisenet/lib/python3.8/site-packages/torch/distributed/launch.py", line 189, in main
-    launch(args)
-  File "/home/cxh/anaconda3/envs/bisenet/lib/python3.8/site-packages/torch/distributed/launch.py", line 174, in launch
-    run(args)
-  File "/home/cxh/anaconda3/envs/bisenet/lib/python3.8/site-packages/torch/distributed/run.py", line 752, in run
-    elastic_launch(
-  File "/home/cxh/anaconda3/envs/bisenet/lib/python3.8/site-packages/torch/distributed/launcher/api.py", line 131, in __call__
-    return launch_agent(self._config, self._entrypoint, list(args))
-  File "/home/cxh/anaconda3/envs/bisenet/lib/python3.8/site-packages/torch/distributed/launcher/api.py", line 236, in launch_agent
-    result = agent.run()
-  File "/home/cxh/anaconda3/envs/bisenet/lib/python3.8/site-packages/torch/distributed/elastic/metrics/api.py", line 125, in wrapper
-    result = f(*args, **kwargs)
-  File "/home/cxh/anaconda3/envs/bisenet/lib/python3.8/site-packages/torch/distributed/elastic/agent/server/api.py", line 709, in run
-    result = self._invoke_run(role)
-  File "/home/cxh/anaconda3/envs/bisenet/lib/python3.8/site-packages/torch/distributed/elastic/agent/server/api.py", line 850, in _invoke_run
-    time.sleep(monitor_interval)
-  File "/home/cxh/anaconda3/envs/bisenet/lib/python3.8/site-packages/torch/distributed/elastic/multiprocessing/api.py", line 60, in _terminate_process_handler
-    raise SignalException(f"Process {os.getpid()} got signal: {sigval}", sigval=sigval)
-torch.distributed.elastic.multiprocessing.api.SignalException: Process 18739 got signal: 1
-/home/cxh/anaconda3/envs/bisenet/lib/python3.8/site-packages/torch/distributed/launch.py:178: FutureWarning: The module torch.distributed.launch is deprecated
-and will be removed in future. Use torchrun.
-Note that --use_env is set by default in torchrun.
-If your script expects `--local_rank` argument to be set, please
-change it to read from `os.environ['LOCAL_RANK']` instead. See 
-https://pytorch.org/docs/stable/distributed.html#launch-utility for 
-further instructions
-
-  warnings.warn(
-WARNING:torch.distributed.run:
-*****************************************
-Setting OMP_NUM_THREADS environment variable for each process to be 1 in default, to avoid your system being overloaded, please further tune the variable for optimal performance in your application as needed. 
-*****************************************
-WARNING:torch.distributed.elastic.multiprocessing.api:Sending process 50743 closing signal SIGTERM
-WARNING:torch.distributed.elastic.multiprocessing.api:Sending process 50744 closing signal SIGTERM
-WARNING:torch.distributed.elastic.multiprocessing.api:Sending process 50745 closing signal SIGTERM
-Traceback (most recent call last):
-  File "/home/cxh/anaconda3/envs/bisenet/lib/python3.8/site-packages/torch/distributed/elastic/agent/server/api.py", line 709, in run
-    result = self._invoke_run(role)
-  File "/home/cxh/anaconda3/envs/bisenet/lib/python3.8/site-packages/torch/distributed/elastic/agent/server/api.py", line 850, in _invoke_run
-    time.sleep(monitor_interval)
-  File "/home/cxh/anaconda3/envs/bisenet/lib/python3.8/site-packages/torch/distributed/elastic/multiprocessing/api.py", line 60, in _terminate_process_handler
-    raise SignalException(f"Process {os.getpid()} got signal: {sigval}", sigval=sigval)
-torch.distributed.elastic.multiprocessing.api.SignalException: Process 50739 got signal: 1
-
-During handling of the above exception, another exception occurred:
-
-Traceback (most recent call last):
-  File "/home/cxh/anaconda3/envs/bisenet/lib/python3.8/runpy.py", line 194, in _run_module_as_main
-    return _run_code(code, main_globals, None,
-  File "/home/cxh/anaconda3/envs/bisenet/lib/python3.8/runpy.py", line 87, in _run_code
-    exec(code, run_globals)
-  File "/home/cxh/anaconda3/envs/bisenet/lib/python3.8/site-packages/torch/distributed/launch.py", line 193, in <module>
-    main()
-  File "/home/cxh/anaconda3/envs/bisenet/lib/python3.8/site-packages/torch/distributed/launch.py", line 189, in main
-    launch(args)
-  File "/home/cxh/anaconda3/envs/bisenet/lib/python3.8/site-packages/torch/distributed/launch.py", line 174, in launch
-    run(args)
-  File "/home/cxh/anaconda3/envs/bisenet/lib/python3.8/site-packages/torch/distributed/run.py", line 752, in run
-    elastic_launch(
-  File "/home/cxh/anaconda3/envs/bisenet/lib/python3.8/site-packages/torch/distributed/launcher/api.py", line 131, in __call__
-    return launch_agent(self._config, self._entrypoint, list(args))
-  File "/home/cxh/anaconda3/envs/bisenet/lib/python3.8/site-packages/torch/distributed/launcher/api.py", line 236, in launch_agent
-    result = agent.run()
-  File "/home/cxh/anaconda3/envs/bisenet/lib/python3.8/site-packages/torch/distributed/elastic/metrics/api.py", line 125, in wrapper
-    result = f(*args, **kwargs)
-  File "/home/cxh/anaconda3/envs/bisenet/lib/python3.8/site-packages/torch/distributed/elastic/agent/server/api.py", line 715, in run
-    log.warning(f"Received {e.sigval} death signal, shutting down workers")
-  File "/home/cxh/anaconda3/envs/bisenet/lib/python3.8/logging/__init__.py", line 1458, in warning
-    self._log(WARNING, msg, args, **kwargs)
-  File "/home/cxh/anaconda3/envs/bisenet/lib/python3.8/logging/__init__.py", line 1577, in _log
-    fn, lno, func, sinfo = self.findCaller(stack_info, stacklevel)
-  File "/home/cxh/anaconda3/envs/bisenet/lib/python3.8/logging/__init__.py", line 1533, in findCaller
-    filename = os.path.normcase(co.co_filename)
-  File "/home/cxh/anaconda3/envs/bisenet/lib/python3.8/site-packages/torch/distributed/elastic/multiprocessing/api.py", line 60, in _terminate_process_handler
-    raise SignalException(f"Process {os.getpid()} got signal: {sigval}", sigval=sigval)
-torch.distributed.elastic.multiprocessing.api.SignalException: Process 50739 got signal: 1
-[W 2022-11-20 10:23:28.486 LabApp] 'ip' has moved from NotebookApp to ServerApp. This config will be passed to ServerApp. Be sure to update your config before our next release.
-[W 2022-11-20 10:23:28.486 LabApp] 'password' has moved from NotebookApp to ServerApp. This config will be passed to ServerApp. Be sure to update your config before our next release.
-[W 2022-11-20 10:23:28.486 LabApp] 'password' has moved from NotebookApp to ServerApp. This config will be passed to ServerApp. Be sure to update your config before our next release.
-[W 2022-11-20 10:23:28.486 LabApp] 'port' has moved from NotebookApp to ServerApp. This config will be passed to ServerApp. Be sure to update your config before our next release.
-[W 2022-11-20 10:23:28.486 LabApp] 'allow_remote_access' has moved from NotebookApp to ServerApp. This config will be passed to ServerApp. Be sure to update your config before our next release.
-[I 2022-11-20 10:23:28.501 ServerApp] jupyterlab | extension was successfully linked.
-[I 2022-11-20 10:23:28.517 ServerApp] nbclassic | extension was successfully linked.
-[I 2022-11-20 10:23:28.831 ServerApp] notebook_shim | extension was successfully linked.
-[W 2022-11-20 10:23:28.900 ServerApp] WARNING: The Jupyter server is listening on all IP addresses and not using encryption. This is not recommended.
-[I 2022-11-20 10:23:28.902 ServerApp] notebook_shim | extension was successfully loaded.
-[I 2022-11-20 10:23:28.903 LabApp] JupyterLab extension loaded from /home/cxh/anaconda3/envs/bisenet/lib/python3.8/site-packages/jupyterlab
-[I 2022-11-20 10:23:28.903 LabApp] JupyterLab application directory is /home/cxh/anaconda3/envs/bisenet/share/jupyter/lab
-[I 2022-11-20 10:23:28.907 ServerApp] jupyterlab | extension was successfully loaded.
-[I 2022-11-20 10:23:28.911 ServerApp] nbclassic | extension was successfully loaded.
-[I 2022-11-20 10:23:28.912 ServerApp] The port 14923 is already in use, trying another port.
-[I 2022-11-20 10:23:28.912 ServerApp] Serving notebooks from local directory: /home/cxh/mr/BiSeNet
-[I 2022-11-20 10:23:28.912 ServerApp] Jupyter Server 1.18.1 is running at:
-[I 2022-11-20 10:23:28.912 ServerApp] http://localhost:14924/lab
-[I 2022-11-20 10:23:28.912 ServerApp]  or http://127.0.0.1:14924/lab
-[I 2022-11-20 10:23:28.913 ServerApp] Use Control-C to stop this server and shut down all kernels (twice to skip confirmation).
-[I 2022-11-20 10:23:56.509 ServerApp] 302 GET / (::1) 1.72ms
-[W 2022-11-20 10:23:58.115 LabApp] Could not determine jupyterlab build status without nodejs
-[I 2022-11-20 10:23:58.490 ServerApp] New terminal with automatic name: 1
-[I 2022-11-20 11:46:26.550 ServerApp] 302 GET / (::1) 1.03ms
-[W 2022-11-20 11:46:28.274 LabApp] Could not determine jupyterlab build status without nodejs
-[I 2022-11-21 10:43:25.325 ServerApp] 302 GET / (::1) 2.08ms
-[W 2022-11-21 10:43:27.198 LabApp] Could not determine jupyterlab build status without nodejs
-[I 2022-11-21 20:20:10.860 ServerApp] 302 GET / (::1) 0.99ms
-[W 2022-11-21 20:20:12.760 LabApp] Could not determine jupyterlab build status without nodejs
-[I 2022-11-22 09:46:50.556 ServerApp] 302 GET / (::1) 1.55ms
-[W 2022-11-22 09:46:52.135 LabApp] Could not determine jupyterlab build status without nodejs
-[I 2022-11-22 16:26:27.432 ServerApp] 302 GET / (::1) 1.11ms
-[I 2022-11-22 16:26:27.433 ServerApp] 302 GET / (::1) 0.72ms
-[I 2022-11-22 16:26:27.437 ServerApp] 302 GET / (::1) 0.45ms
-[W 2022-11-22 16:26:29.032 LabApp] Could not determine jupyterlab build status without nodejs
-[I 2022-11-22 19:01:03.823 ServerApp] 302 GET / (::1) 0.61ms
-[W 2022-11-22 19:01:05.817 LabApp] Could not determine jupyterlab build status without nodejs
-[I 2022-11-22 22:57:39.027 ServerApp] 302 GET / (::1) 0.76ms
-[W 2022-11-22 22:57:40.706 LabApp] Could not determine jupyterlab build status without nodejs
 WARNING:__main__:
 *****************************************
 Setting OMP_NUM_THREADS environment variable for each process to be 1 in default, to avoid your system being overloaded, please further tune the variable for optimal performance in your application as needed. 
@@ -396,44 +44,6 @@ Although never is often better than *right* now.
 If the implementation is hard to explain, it's a bad idea.
 If the implementation is easy to explain, it may be a good idea.
 Namespaces are one honking great idea -- let's do more of those!
-iter: 100/100000, Cam_epoch: 1.2665245202558635, CityScapes_epoch: 0.19959677419354838, lr: 0.004996, eta: 1 day, 8:19:48, time: 117.67, loss: 15.9552, loss_seg: 0.8597, loss_contrast: 1.2748, loss_domain:  8.7051, loss_aux0: 1.7607, loss_aux1: 1.3328, loss_aux2: 1.0823, loss_aux3: 0.9398
-iter: 200/100000, Cam_epoch: 2.5458422174840085, CityScapes_epoch: 0.4012096774193548, lr: 0.004991, eta: 1 day, 7:48:05, time: 112.91, loss: 6.2323, loss_seg: 0.5967, loss_contrast: 0.9095, loss_domain:  0.8643, loss_aux0: 1.3430, loss_aux1: 1.0315, loss_aux2: 0.8141, loss_aux3: 0.6733
-iter: 300/100000, Cam_epoch: 3.8251599147121533, CityScapes_epoch: 0.6028225806451613, lr: 0.004987, eta: 1 day, 7:35:58, time: 112.86, loss: 6.3855, loss_seg: 0.5042, loss_contrast: 0.7919, loss_domain:  1.5282, loss_aux0: 1.2896, loss_aux1: 0.9677, loss_aux2: 0.7239, loss_aux3: 0.5799
-iter: 400/100000, Cam_epoch: 5.104477611940299, CityScapes_epoch: 0.8044354838709677, lr: 0.004982, eta: 1 day, 7:31:38, time: 113.52, loss: 5.8175, loss_seg: 0.4791, loss_contrast: 0.7469, loss_domain:  1.2685, loss_aux0: 1.2129, loss_aux1: 0.8987, loss_aux2: 0.6672, loss_aux3: 0.5442
-iter: 500/100000, Cam_epoch: 6.383795309168444, CityScapes_epoch: 1.0060483870967742, lr: 0.004978, eta: 1 day, 7:29:57, time: 114.02, loss: 5.4317, loss_seg: 0.4427, loss_contrast: 0.6704, loss_domain:  1.1765, loss_aux0: 1.1744, loss_aux1: 0.8541, loss_aux2: 0.6189, loss_aux3: 0.4947
-WARNING:torch.distributed.elastic.agent.server.api:Received 1 death signal, shutting down workers
-WARNING:torch.distributed.elastic.multiprocessing.api:Sending process 29244 closing signal SIGHUP
-WARNING:torch.distributed.elastic.multiprocessing.api:Sending process 29245 closing signal SIGHUP
-Traceback (most recent call last):
-  File "/home/cxh/anaconda3/envs/bisenet/lib/python3.8/runpy.py", line 194, in _run_module_as_main
-    return _run_code(code, main_globals, None,
-  File "/home/cxh/anaconda3/envs/bisenet/lib/python3.8/runpy.py", line 87, in _run_code
-    exec(code, run_globals)
-  File "/home/cxh/anaconda3/envs/bisenet/lib/python3.8/site-packages/torch/distributed/run.py", line 765, in <module>
-    main()
-  File "/home/cxh/anaconda3/envs/bisenet/lib/python3.8/site-packages/torch/distributed/elastic/multiprocessing/errors/__init__.py", line 345, in wrapper
-    return f(*args, **kwargs)
-  File "/home/cxh/anaconda3/envs/bisenet/lib/python3.8/site-packages/torch/distributed/run.py", line 761, in main
-    run(args)
-  File "/home/cxh/anaconda3/envs/bisenet/lib/python3.8/site-packages/torch/distributed/run.py", line 752, in run
-    elastic_launch(
-  File "/home/cxh/anaconda3/envs/bisenet/lib/python3.8/site-packages/torch/distributed/launcher/api.py", line 131, in __call__
-    return launch_agent(self._config, self._entrypoint, list(args))
-  File "/home/cxh/anaconda3/envs/bisenet/lib/python3.8/site-packages/torch/distributed/launcher/api.py", line 236, in launch_agent
-    result = agent.run()
-  File "/home/cxh/anaconda3/envs/bisenet/lib/python3.8/site-packages/torch/distributed/elastic/metrics/api.py", line 125, in wrapper
-    result = f(*args, **kwargs)
-  File "/home/cxh/anaconda3/envs/bisenet/lib/python3.8/site-packages/torch/distributed/elastic/agent/server/api.py", line 709, in run
-    result = self._invoke_run(role)
-  File "/home/cxh/anaconda3/envs/bisenet/lib/python3.8/site-packages/torch/distributed/elastic/agent/server/api.py", line 850, in _invoke_run
-    time.sleep(monitor_interval)
-  File "/home/cxh/anaconda3/envs/bisenet/lib/python3.8/site-packages/torch/distributed/elastic/multiprocessing/api.py", line 60, in _terminate_process_handler
-    raise SignalException(f"Process {os.getpid()} got signal: {sigval}", sigval=sigval)
-torch.distributed.elastic.multiprocessing.api.SignalException: Process 29237 got signal: 1
-WARNING:__main__:
-*****************************************
-Setting OMP_NUM_THREADS environment variable for each process to be 1 in default, to avoid your system being overloaded, please further tune the variable for optimal performance in your application as needed. 
-*****************************************
 The Zen of Python, by Tim Peters
 
 Beautiful is better than ugly.
@@ -455,207 +65,24 @@ Although never is often better than *right* now.
 If the implementation is hard to explain, it's a bad idea.
 If the implementation is easy to explain, it may be a good idea.
 Namespaces are one honking great idea -- let's do more of those!
-The Zen of Python, by Tim Peters
-
-Beautiful is better than ugly.
-Explicit is better than implicit.
-Simple is better than complex.
-Complex is better than complicated.
-Flat is better than nested.
-Sparse is better than dense.
-Readability counts.
-Special cases aren't special enough to break the rules.
-Although practicality beats purity.
-Errors should never pass silently.
-Unless explicitly silenced.
-In the face of ambiguity, refuse the temptation to guess.
-There should be one-- and preferably only one --obvious way to do it.
-Although that way may not be obvious at first unless you're Dutch.
-Now is better than never.
-Although never is often better than *right* now.
-If the implementation is hard to explain, it's a bad idea.
-If the implementation is easy to explain, it may be a good idea.
-Namespaces are one honking great idea -- let's do more of those!
-WARNING:torch.distributed.elastic.agent.server.api:Received 1 death signal, shutting down workers
-WARNING:torch.distributed.elastic.multiprocessing.api:Sending process 33616 closing signal SIGHUP
-WARNING:torch.distributed.elastic.multiprocessing.api:Sending process 33617 closing signal SIGHUP
-Traceback (most recent call last):
-  File "/home/cxh/anaconda3/envs/bisenet/lib/python3.8/runpy.py", line 194, in _run_module_as_main
-    return _run_code(code, main_globals, None,
-  File "/home/cxh/anaconda3/envs/bisenet/lib/python3.8/runpy.py", line 87, in _run_code
-    exec(code, run_globals)
-  File "/home/cxh/anaconda3/envs/bisenet/lib/python3.8/site-packages/torch/distributed/run.py", line 765, in <module>
-    main()
-  File "/home/cxh/anaconda3/envs/bisenet/lib/python3.8/site-packages/torch/distributed/elastic/multiprocessing/errors/__init__.py", line 345, in wrapper
-    return f(*args, **kwargs)
-  File "/home/cxh/anaconda3/envs/bisenet/lib/python3.8/site-packages/torch/distributed/run.py", line 761, in main
-    run(args)
-  File "/home/cxh/anaconda3/envs/bisenet/lib/python3.8/site-packages/torch/distributed/run.py", line 752, in run
-    elastic_launch(
-  File "/home/cxh/anaconda3/envs/bisenet/lib/python3.8/site-packages/torch/distributed/launcher/api.py", line 131, in __call__
-    return launch_agent(self._config, self._entrypoint, list(args))
-  File "/home/cxh/anaconda3/envs/bisenet/lib/python3.8/site-packages/torch/distributed/launcher/api.py", line 236, in launch_agent
-    result = agent.run()
-  File "/home/cxh/anaconda3/envs/bisenet/lib/python3.8/site-packages/torch/distributed/elastic/metrics/api.py", line 125, in wrapper
-    result = f(*args, **kwargs)
-  File "/home/cxh/anaconda3/envs/bisenet/lib/python3.8/site-packages/torch/distributed/elastic/agent/server/api.py", line 709, in run
-    result = self._invoke_run(role)
-  File "/home/cxh/anaconda3/envs/bisenet/lib/python3.8/site-packages/torch/distributed/elastic/agent/server/api.py", line 850, in _invoke_run
-    time.sleep(monitor_interval)
-  File "/home/cxh/anaconda3/envs/bisenet/lib/python3.8/site-packages/torch/distributed/elastic/multiprocessing/api.py", line 60, in _terminate_process_handler
-    raise SignalException(f"Process {os.getpid()} got signal: {sigval}", sigval=sigval)
-torch.distributed.elastic.multiprocessing.api.SignalException: Process 33612 got signal: 1
-WARNING:__main__:
-*****************************************
-Setting OMP_NUM_THREADS environment variable for each process to be 1 in default, to avoid your system being overloaded, please further tune the variable for optimal performance in your application as needed. 
-*****************************************
-The Zen of Python, by Tim Peters
-
-Beautiful is better than ugly.
-Explicit is better than implicit.
-Simple is better than complex.
-Complex is better than complicated.
-Flat is better than nested.
-Sparse is better than dense.
-Readability counts.
-Special cases aren't special enough to break the rules.
-Although practicality beats purity.
-Errors should never pass silently.
-Unless explicitly silenced.
-In the face of ambiguity, refuse the temptation to guess.
-There should be one-- and preferably only one --obvious way to do it.
-Although that way may not be obvious at first unless you're Dutch.
-Now is better than never.
-Although never is often better than *right* now.
-If the implementation is hard to explain, it's a bad idea.
-If the implementation is easy to explain, it may be a good idea.
-Namespaces are one honking great idea -- let's do more of those!
-The Zen of Python, by Tim Peters
-
-Beautiful is better than ugly.
-Explicit is better than implicit.
-Simple is better than complex.
-Complex is better than complicated.
-Flat is better than nested.
-Sparse is better than dense.
-Readability counts.
-Special cases aren't special enough to break the rules.
-Although practicality beats purity.
-Errors should never pass silently.
-Unless explicitly silenced.
-In the face of ambiguity, refuse the temptation to guess.
-There should be one-- and preferably only one --obvious way to do it.
-Although that way may not be obvious at first unless you're Dutch.
-Now is better than never.
-Although never is often better than *right* now.
-If the implementation is hard to explain, it's a bad idea.
-If the implementation is easy to explain, it may be a good idea.
-Namespaces are one honking great idea -- let's do more of those!
-WARNING:torch.distributed.elastic.agent.server.api:Received 1 death signal, shutting down workers
-WARNING:torch.distributed.elastic.multiprocessing.api:Sending process 35905 closing signal SIGHUP
-WARNING:torch.distributed.elastic.multiprocessing.api:Sending process 35906 closing signal SIGHUP
-Traceback (most recent call last):
-  File "/home/cxh/anaconda3/envs/bisenet/lib/python3.8/runpy.py", line 194, in _run_module_as_main
-    return _run_code(code, main_globals, None,
-  File "/home/cxh/anaconda3/envs/bisenet/lib/python3.8/runpy.py", line 87, in _run_code
-    exec(code, run_globals)
-  File "/home/cxh/anaconda3/envs/bisenet/lib/python3.8/site-packages/torch/distributed/run.py", line 765, in <module>
-    main()
-  File "/home/cxh/anaconda3/envs/bisenet/lib/python3.8/site-packages/torch/distributed/elastic/multiprocessing/errors/__init__.py", line 345, in wrapper
-    return f(*args, **kwargs)
-  File "/home/cxh/anaconda3/envs/bisenet/lib/python3.8/site-packages/torch/distributed/run.py", line 761, in main
-    run(args)
-  File "/home/cxh/anaconda3/envs/bisenet/lib/python3.8/site-packages/torch/distributed/run.py", line 752, in run
-    elastic_launch(
-  File "/home/cxh/anaconda3/envs/bisenet/lib/python3.8/site-packages/torch/distributed/launcher/api.py", line 131, in __call__
-    return launch_agent(self._config, self._entrypoint, list(args))
-  File "/home/cxh/anaconda3/envs/bisenet/lib/python3.8/site-packages/torch/distributed/launcher/api.py", line 236, in launch_agent
-    result = agent.run()
-  File "/home/cxh/anaconda3/envs/bisenet/lib/python3.8/site-packages/torch/distributed/elastic/metrics/api.py", line 125, in wrapper
-    result = f(*args, **kwargs)
-  File "/home/cxh/anaconda3/envs/bisenet/lib/python3.8/site-packages/torch/distributed/elastic/agent/server/api.py", line 709, in run
-    result = self._invoke_run(role)
-  File "/home/cxh/anaconda3/envs/bisenet/lib/python3.8/site-packages/torch/distributed/elastic/agent/server/api.py", line 850, in _invoke_run
-    time.sleep(monitor_interval)
-  File "/home/cxh/anaconda3/envs/bisenet/lib/python3.8/site-packages/torch/distributed/elastic/multiprocessing/api.py", line 60, in _terminate_process_handler
-    raise SignalException(f"Process {os.getpid()} got signal: {sigval}", sigval=sigval)
-torch.distributed.elastic.multiprocessing.api.SignalException: Process 35896 got signal: 1
-[W 2022-11-24 17:35:08.687 LabApp] 'ip' has moved from NotebookApp to ServerApp. This config will be passed to ServerApp. Be sure to update your config before our next release.
-[W 2022-11-24 17:35:08.687 LabApp] 'password' has moved from NotebookApp to ServerApp. This config will be passed to ServerApp. Be sure to update your config before our next release.
-[W 2022-11-24 17:35:08.687 LabApp] 'password' has moved from NotebookApp to ServerApp. This config will be passed to ServerApp. Be sure to update your config before our next release.
-[W 2022-11-24 17:35:08.687 LabApp] 'port' has moved from NotebookApp to ServerApp. This config will be passed to ServerApp. Be sure to update your config before our next release.
-[W 2022-11-24 17:35:08.687 LabApp] 'allow_remote_access' has moved from NotebookApp to ServerApp. This config will be passed to ServerApp. Be sure to update your config before our next release.
-[I 2022-11-24 17:35:08.696 ServerApp] jupyterlab | extension was successfully linked.
-[I 2022-11-24 17:35:08.706 ServerApp] nbclassic | extension was successfully linked.
-[I 2022-11-24 17:35:08.964 ServerApp] notebook_shim | extension was successfully linked.
-[W 2022-11-24 17:35:09.059 ServerApp] WARNING: The Jupyter server is listening on all IP addresses and not using encryption. This is not recommended.
-[I 2022-11-24 17:35:09.062 ServerApp] notebook_shim | extension was successfully loaded.
-[I 2022-11-24 17:35:09.063 LabApp] JupyterLab extension loaded from /home/cxh/anaconda3/envs/bisenet/lib/python3.8/site-packages/jupyterlab
-[I 2022-11-24 17:35:09.064 LabApp] JupyterLab application directory is /home/cxh/anaconda3/envs/bisenet/share/jupyter/lab
-[I 2022-11-24 17:35:09.069 ServerApp] jupyterlab | extension was successfully loaded.
-[I 2022-11-24 17:35:09.076 ServerApp] nbclassic | extension was successfully loaded.
-[I 2022-11-24 17:35:09.076 ServerApp] The port 14923 is already in use, trying another port.
-[I 2022-11-24 17:35:09.077 ServerApp] The port 14924 is already in use, trying another port.
-[I 2022-11-24 17:35:09.077 ServerApp] Serving notebooks from local directory: /home/cxh/mr/BiSeNet
-[I 2022-11-24 17:35:09.077 ServerApp] Jupyter Server 1.18.1 is running at:
-[I 2022-11-24 17:35:09.077 ServerApp] http://localhost:14925/lab
-[I 2022-11-24 17:35:09.077 ServerApp]  or http://127.0.0.1:14925/lab
-[I 2022-11-24 17:35:09.077 ServerApp] Use Control-C to stop this server and shut down all kernels (twice to skip confirmation).
-[I 2022-11-24 17:39:43.927 ServerApp] Interrupted...
-[W 2022-11-24 17:39:49.811 LabApp] 'ip' has moved from NotebookApp to ServerApp. This config will be passed to ServerApp. Be sure to update your config before our next release.
-[W 2022-11-24 17:39:49.811 LabApp] 'password' has moved from NotebookApp to ServerApp. This config will be passed to ServerApp. Be sure to update your config before our next release.
-[W 2022-11-24 17:39:49.811 LabApp] 'password' has moved from NotebookApp to ServerApp. This config will be passed to ServerApp. Be sure to update your config before our next release.
-[W 2022-11-24 17:39:49.811 LabApp] 'port' has moved from NotebookApp to ServerApp. This config will be passed to ServerApp. Be sure to update your config before our next release.
-[W 2022-11-24 17:39:49.811 LabApp] 'allow_remote_access' has moved from NotebookApp to ServerApp. This config will be passed to ServerApp. Be sure to update your config before our next release.
-[I 2022-11-24 17:39:49.820 ServerApp] jupyterlab | extension was successfully linked.
-[I 2022-11-24 17:39:49.830 ServerApp] nbclassic | extension was successfully linked.
-[I 2022-11-24 17:39:50.003 ServerApp] notebook_shim | extension was successfully linked.
-[W 2022-11-24 17:39:50.042 ServerApp] WARNING: The Jupyter server is listening on all IP addresses and not using encryption. This is not recommended.
-[I 2022-11-24 17:39:50.043 ServerApp] notebook_shim | extension was successfully loaded.
-[I 2022-11-24 17:39:50.044 LabApp] JupyterLab extension loaded from /home/cxh/anaconda3/envs/bisenet/lib/python3.8/site-packages/jupyterlab
-[I 2022-11-24 17:39:50.044 LabApp] JupyterLab application directory is /home/cxh/anaconda3/envs/bisenet/share/jupyter/lab
-[I 2022-11-24 17:39:50.047 ServerApp] jupyterlab | extension was successfully loaded.
-[I 2022-11-24 17:39:50.051 ServerApp] nbclassic | extension was successfully loaded.
-[I 2022-11-24 17:39:50.051 ServerApp] The port 14923 is already in use, trying another port.
-[I 2022-11-24 17:39:50.051 ServerApp] The port 14924 is already in use, trying another port.
-[I 2022-11-24 17:39:50.051 ServerApp] Serving notebooks from local directory: /home/cxh/mr/BiSeNet
-[I 2022-11-24 17:39:50.051 ServerApp] Jupyter Server 1.18.1 is running at:
-[I 2022-11-24 17:39:50.052 ServerApp] http://localhost:14925/lab
-[I 2022-11-24 17:39:50.052 ServerApp]  or http://127.0.0.1:14925/lab
-[I 2022-11-24 17:39:50.052 ServerApp] Use Control-C to stop this server and shut down all kernels (twice to skip confirmation).
-[I 2022-11-24 17:40:47.095 ServerApp] 302 GET / (::1) 1.68ms
-[I 2022-11-24 17:40:47.118 LabApp] 302 GET /lab? (::1) 1.81ms
-[I 2022-11-24 17:40:52.802 ServerApp] 302 POST /login?next=%2Flab%3F (::1) 62.34ms
-[W 2022-11-24 17:40:55.347 LabApp] Could not determine jupyterlab build status without nodejs
-[I 2022-11-24 17:40:55.899 ServerApp] New terminal with automatic name: 1
-[I 2022-11-24 23:37:10.127 ServerApp] 302 GET / (::1) 1.92ms
-[W 2022-11-24 23:37:11.714 LabApp] Could not determine jupyterlab build status without nodejs
-[I 2022-11-25 11:07:02.339 ServerApp] 302 GET / (::1) 1.30ms
-[I 2022-11-25 11:07:02.390 LabApp] 302 GET /lab? (::1) 1.07ms
-[I 2022-11-25 11:07:15.490 ServerApp] 302 POST /login?next=%2Flab%3F (::1) 53.60ms
-[W 2022-11-25 11:07:18.804 LabApp] Could not determine jupyterlab build status without nodejs
-[I 2022-11-25 18:35:58.845 ServerApp] 302 GET / (::1) 1.31ms
-[W 2022-11-25 18:36:00.551 LabApp] Could not determine jupyterlab build status without nodejs
-[I 2022-11-25 20:37:21.735 ServerApp] 302 GET / (::1) 1.38ms
-[W 2022-11-25 20:37:32.546 LabApp] Could not determine jupyterlab build status without nodejs
-[I 2022-11-25 20:38:05.909 ServerApp] New terminal with automatic name: 2
-[W 2022-11-25 22:20:02.865 ServerApp] WebSocket ping timeout after 119986 ms.
-[W 2022-11-25 22:20:05.951 ServerApp] WebSocket ping timeout after 119994 ms.
-[I 2022-11-26 09:58:38.656 ServerApp] 302 GET / (::1) 1.39ms
-[W 2022-11-26 09:58:40.273 LabApp] Could not determine jupyterlab build status without nodejs
-[I 2022-11-26 12:32:16.976 ServerApp] 302 GET / (::1) 0.59ms
-[W 2022-11-26 12:32:18.530 LabApp] Could not determine jupyterlab build status without nodejs
-[I 2022-11-27 10:43:54.180 ServerApp] 302 GET / (::1) 1.30ms
-[W 2022-11-27 10:43:56.116 LabApp] Could not determine jupyterlab build status without nodejs
-[I 2022-11-27 19:35:02.244 ServerApp] 302 GET / (::1) 1.25ms
-[W 2022-11-27 19:35:04.744 LabApp] Could not determine jupyterlab build status without nodejs
-[I 2022-11-27 23:12:00.957 ServerApp] 302 GET / (::1) 0.83ms
-[W 2022-11-27 23:12:03.042 LabApp] Could not determine jupyterlab build status without nodejs
-[I 2022-11-28 11:40:00.832 ServerApp] 302 GET / (::1) 3.53ms
-[W 2022-11-28 11:40:02.857 LabApp] Could not determine jupyterlab build status without nodejs
-[I 2022-11-29 23:03:42.883 ServerApp] 302 GET / (::1) 2.05ms
-[W 2022-11-29 23:03:45.042 LabApp] Could not determine jupyterlab build status without nodejs
-[I 2022-12-01 21:05:21.202 ServerApp] 302 GET / (::1) 1.06ms
-[W 2022-12-01 21:05:23.279 LabApp] Could not determine jupyterlab build status without nodejs
-[I 2022-12-01 23:29:22.147 ServerApp] 302 GET / (::1) 2.75ms
-[W 2022-12-01 23:29:24.366 LabApp] Could not determine jupyterlab build status without nodejs
+/root/anaconda3/envs/mdseg/lib/python3.10/site-packages/torch/distributed/distributed_c10d.py:2387: UserWarning: torch.distributed._all_gather_base is a private function and will be deprecated. Please use torch.distributed.all_gather_into_tensor instead.
+  warnings.warn(
+/root/anaconda3/envs/mdseg/lib/python3.10/site-packages/torch/distributed/distributed_c10d.py:2387: UserWarning: torch.distributed._all_gather_base is a private function and will be deprecated. Please use torch.distributed.all_gather_into_tensor instead.
+  warnings.warn(
+/root/anaconda3/envs/mdseg/lib/python3.10/site-packages/torch/distributed/distributed_c10d.py:2387: UserWarning: torch.distributed._all_gather_base is a private function and will be deprecated. Please use torch.distributed.all_gather_into_tensor instead.
+  warnings.warn(
+Reducer buckets have been rebuilt in this iteration.
+iter: 100/100000, Cam_epoch: 0, CityScapes_epoch: 0.03326612903225806, lr: 0.004996, eta: 1 day, 15:02:44, time: 142.11, loss: 8.0310, loss_seg: 4.4066, loss_contrast: 3.6244, loss_domain:  -1.0000, kl_loss: -1.0000, loss_aux0: -1.0000, loss_aux1: -1.0000, loss_aux2: -1.0000, loss_aux3: -1.0000
+iter: 200/100000, Cam_epoch: 0, CityScapes_epoch: 0.06686827956989247, lr: 0.004991, eta: 1 day, 14:26:57, time: 136.67, loss: 7.8486, loss_seg: 4.5149, loss_contrast: 3.3336, loss_domain:  -1.0000, kl_loss: -1.0000, loss_aux0: -1.0000, loss_aux1: -1.0000, loss_aux2: -1.0000, loss_aux3: -1.0000
+iter: 300/100000, Cam_epoch: 0, CityScapes_epoch: 0.10047043010752688, lr: 0.004987, eta: 1 day, 14:03:10, time: 134.80, loss: 6.9925, loss_seg: 3.7710, loss_contrast: 3.2215, loss_domain:  -1.0000, kl_loss: -1.0000, loss_aux0: -1.0000, loss_aux1: -1.0000, loss_aux2: -1.0000, loss_aux3: -1.0000
+iter: 400/100000, Cam_epoch: 0, CityScapes_epoch: 0.13407258064516128, lr: 0.004982, eta: 1 day, 13:54:25, time: 135.84, loss: 6.5439, loss_seg: 3.4112, loss_contrast: 3.1327, loss_domain:  -1.0000, kl_loss: -1.0000, loss_aux0: -1.0000, loss_aux1: -1.0000, loss_aux2: -1.0000, loss_aux3: -1.0000
+iter: 500/100000, Cam_epoch: 0, CityScapes_epoch: 0.1676747311827957, lr: 0.004978, eta: 1 day, 13:47:41, time: 135.67, loss: 6.0986, loss_seg: 3.0749, loss_contrast: 3.0237, loss_domain:  -1.0000, kl_loss: -1.0000, loss_aux0: -1.0000, loss_aux1: -1.0000, loss_aux2: -1.0000, loss_aux3: -1.0000
+iter: 600/100000, Cam_epoch: 0, CityScapes_epoch: 0.2012768817204301, lr: 0.004973, eta: 1 day, 13:46:10, time: 137.02, loss: 5.8819, loss_seg: 2.9371, loss_contrast: 2.9448, loss_domain:  -1.0000, kl_loss: -1.0000, loss_aux0: -1.0000, loss_aux1: -1.0000, loss_aux2: -1.0000, loss_aux3: -1.0000
+iter: 700/100000, Cam_epoch: 0, CityScapes_epoch: 0.23487903225806453, lr: 0.004969, eta: 1 day, 13:44:42, time: 137.14, loss: 5.6161, loss_seg: 2.8064, loss_contrast: 2.8097, loss_domain:  -1.0000, kl_loss: -1.0000, loss_aux0: -1.0000, loss_aux1: -1.0000, loss_aux2: -1.0000, loss_aux3: -1.0000
+iter: 800/100000, Cam_epoch: 0, CityScapes_epoch: 0.26848118279569894, lr: 0.004964, eta: 1 day, 13:47:35, time: 139.34, loss: 5.5215, loss_seg: 2.7493, loss_contrast: 2.7722, loss_domain:  -1.0000, kl_loss: -1.0000, loss_aux0: -1.0000, loss_aux1: -1.0000, loss_aux2: -1.0000, loss_aux3: -1.0000
+iter: 900/100000, Cam_epoch: 0, CityScapes_epoch: 0.3020833333333333, lr: 0.004960, eta: 1 day, 13:41:05, time: 134.85, loss: 5.5141, loss_seg: 2.7579, loss_contrast: 2.7562, loss_domain:  -1.0000, kl_loss: -1.0000, loss_aux0: -1.0000, loss_aux1: -1.0000, loss_aux2: -1.0000, loss_aux3: -1.0000
+iter: 1000/100000, Cam_epoch: 0, CityScapes_epoch: 0.33568548387096775, lr: 0.004955, eta: 1 day, 13:41:38, time: 138.62, loss: 5.5405, loss_seg: 2.7499, loss_contrast: 2.7906, loss_domain:  -1.0000, kl_loss: -1.0000, loss_aux0: -1.0000, loss_aux1: -1.0000, loss_aux2: -1.0000, loss_aux3: -1.0000
+iter: 1100/100000, Cam_epoch: 0, CityScapes_epoch: 0.36928763440860213, lr: 0.004951, eta: 1 day, 13:41:55, time: 138.78, loss: 5.3378, loss_seg: 2.6453, loss_contrast: 2.6925, loss_domain:  -1.0000, kl_loss: -1.0000, loss_aux0: -1.0000, loss_aux1: -1.0000, loss_aux2: -1.0000, loss_aux3: -1.0000
+iter: 1200/100000, Cam_epoch: 0, CityScapes_epoch: 0.40288978494623656, lr: 0.004946, eta: 1 day, 13:42:51, time: 139.57, loss: 5.2156, loss_seg: 2.5764, loss_contrast: 2.6392, loss_domain:  -1.0000, kl_loss: -1.0000, loss_aux0: -1.0000, loss_aux1: -1.0000, loss_aux2: -1.0000, loss_aux3: -1.0000
+iter: 1300/100000, Cam_epoch: 0, CityScapes_epoch: 0.43649193548387094, lr: 0.004942, eta: 1 day, 13:47:11, time: 142.66, loss: 5.4833, loss_seg: 2.7222, loss_contrast: 2.7612, loss_domain:  -1.0000, kl_loss: -1.0000, loss_aux0: -1.0000, loss_aux1: -1.0000, loss_aux2: -1.0000, loss_aux3: -1.0000
+iter: 1400/100000, Cam_epoch: 0, CityScapes_epoch: 0.4700940860215054, lr: 0.004937, eta: 1 day, 13:50:28, time: 142.58, loss: 5.0284, loss_seg: 2.4728, loss_contrast: 2.5556, loss_domain:  -1.0000, kl_loss: -1.0000, loss_aux0: -1.0000, loss_aux1: -1.0000, loss_aux2: -1.0000, loss_aux3: -1.0000

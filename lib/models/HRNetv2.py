@@ -5,7 +5,7 @@ import torch.nn.functional as F
 from lib.models.HRNet_backbone import HRNetBackbone
 from lib.models.hrnet_backbone_ori import HRNetBackbone_ori
 from lib.module.module_helper import ConvBNReLU, ModuleHelper
-from lib.module.projection import ProjectionHead
+from lib.module.projection import ProjectionHead, ProjectionHeadOri
 from lib.module.domain_classifier_head import DomainClassifierHead
 from timm.models.layers import trunc_normal_
 from lib.class_remap import ClassRemap
@@ -329,9 +329,9 @@ class HRNet_W48(nn.Module):
 
         self.use_contrast = self.configer.get('contrast', 'use_contrast')
         if self.use_contrast:
-            self.proj_head = ProjectionHead(dim_in=in_channels, proj_dim=self.proj_dim)
+            self.proj_head = ProjectionHeadOri(dim_in=in_channels, proj_dim=self.proj_dim, bn_type=self.configer.get('network', 'bn_type'))
             
-        self.prototypes = nn.Parameter(torch.zeros(self.num_unify_classes, self.num_prototype, self.proj_dim),
+        self.prototypes = nn.Parameter(torch.zeros(self.num_unify_classes, self.proj_dim),
                                        requires_grad=False)
 
         trunc_normal_(self.prototypes, std=0.02)
@@ -360,7 +360,7 @@ class HRNet_W48(nn.Module):
         if self.aux_mode == 'train':
             emb = None
             if self.use_contrast:
-                emb = self.proj_head(dataset, *feats)
+                emb = self.proj_head(feats)
             return {"seg": out, 'embed': emb}
         elif self.aux_mode == 'eval':
             return out

@@ -143,9 +143,9 @@ class MscEvalV0_Contrast(object):
             preds = torch.argmax(probs, dim=1)
 
 
-            if dataset_id == CAM_ID:
+            # if dataset_id == CAM_ID:
                 # CityScapes数据集一一对应不需要逆映射
-                preds = self.class_Remaper.ReverseSegRemap(preds, dataset_id)
+            preds = self.class_Remaper.ReverseSegRemap(preds, dataset_id)
 
             keep = label != self.ignore_label
 
@@ -631,8 +631,8 @@ def eval_model_contrast(configer, net):
     n_datasets = configer.get("n_datasets")
 
     # dl_cam = get_data_loader(cfg_cam, mode='val', distributed=is_dist)
-    # dl_city, dl_cam, dl_a2d2 = get_data_loader(configer, aux_mode='eval', distributed=is_dist)
-    dl_city = get_data_loader(configer, aux_mode='eval', distributed=is_dist)[0]
+    dl_city, dl_cam, dl_a2d2 = get_data_loader(configer, aux_mode='eval', distributed=is_dist)
+    # dl_city = get_data_loader(configer, aux_mode='eval', distributed=is_dist)[0]
     net.eval()
     # net.train()
 
@@ -642,10 +642,8 @@ def eval_model_contrast(configer, net):
     single_scale = MscEvalV0_Contrast(configer, (1., ), False)
     
     mIOU_city = single_scale(net, dl_city, 19, CITY_ID)
-    # mIOU_cam = single_scale(net, dl_cam, 12, CAM_ID)
-    # mIOU_a2d2 = single_scale(net, dl_a2d2, configer.get('dataset3', 'n_cats'), A2D2_ID)
-    mIOU_a2d2 = 0
-    mIOU_cam = 0
+    mIOU_cam = single_scale(net, dl_cam, 11, CAM_ID)
+    mIOU_a2d2 = single_scale(net, dl_a2d2, configer.get('dataset3', 'n_cats'), A2D2_ID)
 
     heads.append('single_scale')
     mious.append(mIOU_cam)
