@@ -642,7 +642,7 @@ def eval_model_contrast(configer, net):
     single_scale = MscEvalV0_Contrast(configer, (1., ), False)
     
     mIOU_city = single_scale(net, dl_city, 19, CITY_ID)
-    mIOU_cam = single_scale(net, dl_cam, 11, CAM_ID)
+    mIOU_cam = single_scale(net, dl_cam, 12, CAM_ID)
     mIOU_a2d2 = single_scale(net, dl_a2d2, configer.get('dataset3', 'n_cats'), A2D2_ID)
 
     heads.append('single_scale')
@@ -758,7 +758,7 @@ def parse_args():
     parse.add_argument('--local_rank', dest='local_rank', type=int, default=-1,)
     parse.add_argument('--port', dest='port', type=int, default=16745,)
     parse.add_argument('--finetune_from', type=str, default=None,)
-    parse.add_argument('--config', dest='config', type=str, default='configs/bisenetv2_eval.json',)
+    parse.add_argument('--config', dest='config', type=str, default='configs/bisenetv2_city_cam_a2d2.json',)
     return parse.parse_args()
 
 

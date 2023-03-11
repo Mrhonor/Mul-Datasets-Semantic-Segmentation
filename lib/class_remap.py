@@ -2,6 +2,8 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+CITY_ID = 0
+CAM_ID = 1
 
 class ClassRemap():
     def __init__(self, configer=None):
@@ -188,6 +190,13 @@ class ClassRemap():
         # logits : B x h x w
         Remap_pred = torch.ones_like(preds) * 0
         for k, v in self.remapList[dataset_id].items():
+            if dataset_id == CITY_ID:
+                if k == 19:
+                    break
+            elif dataset_id == CAM_ID:
+                if k == 12:
+                    break
+                
             for lb in v:
                 Remap_pred[preds == int(lb)] = int(k)
                 

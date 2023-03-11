@@ -248,7 +248,7 @@
       "with_aux": false,
       "aux_weight": 1,
       "aux_num": 4,
-      "ignore_index": -1,
+      "ignore_index": 255,
       "domain_loss_weight": 1,
       "m": 0,
       "gamma": 12

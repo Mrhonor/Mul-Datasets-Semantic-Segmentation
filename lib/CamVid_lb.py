@@ -55,7 +55,7 @@ labels_info_eval = [
     {"name": "Sky", "id": 0, "color": [128, 128, 128], "trainId": 0},
     {"name": "Bridge", "id": 1, "color": [0, 128, 64], "trainId": 1},
     {"name": "Building", "id": 2, "color": [128, 0, 0], "trainId": 1},
-    {"name": "Wall", "id": 3, "color": [64, 192, 0], "trainId": 1},
+    {"name": "Wall", "id": 3, "color": [64, 192, 0], "trainId": 11},
     {"name": "Tunnel", "id": 4, "color": [64, 0, 64], "trainId": 1},
     {"name": "Archway", "id": 5, "color": [192, 0, 128], "trainId": 1},
     {"name": "Column_Pole", "id": 6, "color": [192, 192, 128], "trainId": 2},
@@ -112,7 +112,7 @@ class CamVid(Dataset):
             # self.n_cats = 12
             self.labels_info = labels_info_train
         elif mode == 'eval':
-            self.n_cats = 11
+            self.n_cats = 12
             self.labels_info = labels_info_eval
             
         self.lb_map = np.arange(256).astype(np.uint8)
