@@ -365,7 +365,7 @@ class HRNet_W48(nn.Module):
         elif self.aux_mode == 'eval':
             return out
         elif self.aux_mode == 'pred':
-            pred = out[0].argmax(dim=1)
+            pred = out.argmax(dim=1)
             return pred
         else:
             raise NotImplementedError

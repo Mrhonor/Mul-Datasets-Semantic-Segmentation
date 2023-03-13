@@ -1,8 +1,14 @@
 {
-  "model_name": "bisenetv2_contrast",
-  "aux_mode": "pred",
-  "n_datasets": 2,
-  "num_unify_classes": 19,
+  "model_name": "hrnet_w48",
+  "aux_mode": "train",
+  "n_datasets": 3,
+  "num_unify_classes": 46,
+  "hrnet": {
+    "cfg": "hrnet48",
+    "keep_imagenet_head": false,
+    "drop_stage4": false,
+    "full_res_stem": false
+  },
   "dataset1": {
     "n_cats": 20,
     "data_reader": "CityScapes",
@@ -118,7 +124,7 @@
   "use_sync_bn": false,
   "contrast": {
     "use_contrast": true,
-    "proj_dim": 256,
+    "proj_dim": 128,
     "temperature": 0.07,
     "base_temperature": 0.07,
     "max_samples": 4096,
@@ -137,12 +143,15 @@
     "with_ppd": false,
     "ppd_loss_weight": 1,
     "with_hard_lb_contrast": true,
-    "hard_lb_contrast_loss_weight": 1
+    "hard_lb_contrast_loss_weight": 1,
+    "memory_bank": true,
+    "memory_bank_size": 5000
   },
   "res_save_pth": "res/Mds/",
   "network": {
     "stride": 32,
-    "with_domain_adversarial": false
+    "with_domain_adversarial": false,
+    "bn_type": "torchbn"
   },
   "dataset_aux_head": {
     "use_dataset_aux_head": false,
