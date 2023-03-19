@@ -9,7 +9,6 @@ from lib.module.projection import ProjectionHead, ProjectionHeadOri
 from lib.module.domain_classifier_head import DomainClassifierHead
 from timm.models.layers import trunc_normal_
 from lib.class_remap import ClassRemap
-import clip
 
 
 backbone_url = './res/hrnetv2_w48_imagenet_pretrained.pth'
@@ -521,7 +520,7 @@ class HRNet_W48_CLIP(nn.Module):
             elif name.find('affine_bias') != -1:
                 nn.init.zeros_(param)
                 
-        
+
         
         self.load_pretrain()
 
