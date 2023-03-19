@@ -611,6 +611,7 @@ def main():
         #     world_size=torch.cuda.device_count(),
         #     rank=args.local_rank
         # )
+        
         torch.cuda.set_device(local_rank)
         dist.init_process_group(
             backend='nccl',

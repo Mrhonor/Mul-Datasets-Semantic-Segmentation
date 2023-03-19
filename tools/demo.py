@@ -22,7 +22,7 @@ parse = argparse.ArgumentParser()
 
 parse.add_argument('--weight_path', type=str, default='res/celoss/best_model_95000.pth',)
 parse.add_argument('--config', dest='config', type=str, default='configs/bisenetv2_eval.json',)
-parse.add_argument('--img_path', dest='img_path', type=str, default='0006R0_f01650.png',)
+parse.add_argument('--img_path', dest='img_path', type=str, default='43.jpg',)
 args = parse.parse_args()
 # cfg = set_cfg_from_file(args.config)
 configer = Configer(configs=args.config)
