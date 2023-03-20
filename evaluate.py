@@ -101,7 +101,7 @@ class MscEvalV0_Contrast(object):
     def __init__(self, configer, scales=(0.5, ), flip=False, ignore_label=255):
         self.configer = configer
         self.num_unify_classes = self.configer.get('num_unify_classes')
-        self.class_Remaper = ClassRemap(configer=self.configer)
+        # self.class_Remaper = ClassRemap(configer=self.configer)
         self.scales = scales
         self.flip = flip
         self.ignore_label = ignore_label
@@ -118,8 +118,10 @@ class MscEvalV0_Contrast(object):
 
             label = label.squeeze(1).cuda()
             size = label.size()[-2:]
+            # probs = torch.zeros(
+            #         (N, self.num_unify_classes, H, W), dtype=torch.float32).cuda().detach()
             probs = torch.zeros(
-                    (N, self.num_unify_classes, H, W), dtype=torch.float32).cuda().detach()
+                    (N, n_classes, H, W), dtype=torch.float32).cuda().detach()
 
             for scale in self.scales:
                 sH, sW = int(scale * H), int(scale * W)
@@ -145,7 +147,7 @@ class MscEvalV0_Contrast(object):
 
             # if dataset_id == CAM_ID:
                 # CityScapes数据集一一对应不需要逆映射
-            preds = self.class_Remaper.ReverseSegRemap(preds, dataset_id)
+            # preds = self.class_Remaper.ReverseSegRemap(preds, dataset_id)
 
             keep = label != self.ignore_label
 

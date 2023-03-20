@@ -9,7 +9,7 @@ from lib.module.projection import ProjectionHead, ProjectionHeadOri
 from lib.module.domain_classifier_head import DomainClassifierHead
 from timm.models.layers import trunc_normal_
 from lib.class_remap import ClassRemap
-
+import clip
 
 backbone_url = './res/hrnetv2_w48_imagenet_pretrained.pth'
 
@@ -450,30 +450,11 @@ class HRNet_W48_CLIP(nn.Module):
 
         # extra added layers
         in_channels = 720  # 48 + 96 + 192 + 384
-        self.cls_head = nn.Sequential(
-            nn.Conv2d(in_channels, in_channels, kernel_size=3, stride=1, padding=1),
-            ModuleHelper.BNReLU(in_channels, bn_type=self.configer.get('network', 'bn_type')),
-            nn.Dropout2d(0.10),
-            nn.Conv2d(in_channels, self.num_unify_classes, kernel_size=1, stride=1, padding=0, bias=False)
-        )
 
-        self.use_contrast = self.configer.get('contrast', 'use_contrast')
-        if self.use_contrast:
-            self.proj_head = ProjectionHeadOri(dim_in=in_channels, proj_dim=self.proj_dim, bn_type=self.configer.get('network', 'bn_type'))
+        self.proj_head = ProjectionHeadOri(dim_in=in_channels, proj_dim=512, bn_type=self.configer.get('network', 'bn_type'))
             
-        self.prototypes = nn.Parameter(torch.zeros(self.num_unify_classes, self.proj_dim),
-                                       requires_grad=False)
-
-        trunc_normal_(self.prototypes, std=0.02)
         self.init_weights()    
        
-        self.with_memory_bank = self.configer.get('contrast', 'memory_bank')
-        if self.with_memory_bank:
-            self.memory_bank_size = self.configer.get('contrast', 'memory_bank_size')
-            self.register_buffer("memory_bank", torch.randn(self.num_unify_classes, self.memory_bank_size, self.proj_dim))
-            self.memory_bank = nn.functional.normalize(self.memory_bank, p=2, dim=2)
-            self.register_buffer("memory_bank_ptr", torch.zeros(self.num_unify_classes, dtype=torch.long))
-            self.register_buffer("memory_bank_init", torch.zeros(self.num_unify_classes, dtype=torch.bool))
 
     def forward(self, x_, dataset=0):
         x = self.backbone(x_)
@@ -485,18 +466,17 @@ class HRNet_W48_CLIP(nn.Module):
         feat4 = F.interpolate(x[3], size=(h, w), mode="bilinear", align_corners=True)
 
         feats = torch.cat([feat1, feat2, feat3, feat4], 1)
-        out = self.cls_head(feats)
-        out = F.interpolate(out, size=(x_.size(2), x_.size(3)), mode="bilinear", align_corners=True)
+        emb = self.proj_head(feats)
         if self.aux_mode == 'train':
-            emb = None
-            if self.use_contrast:
-                emb = self.proj_head(feats)
-            return {"seg": out, 'embed': emb}
+            return {'seg':emb}
         elif self.aux_mode == 'eval':
-            return out
+            logits = torch.einsum('bchw, nc -> bnhw', emb, self.text_feature_vecs[dataset])
+            
+            return logits
         elif self.aux_mode == 'pred':
-            pred = out.argmax(dim=1)
-            return pred
+            # pred = out.argmax(dim=1)
+            # return pred
+            return
         else:
             raise NotImplementedError
 
@@ -519,11 +499,19 @@ class HRNet_W48_CLIP(nn.Module):
                     nn.init.ones_(param)
             elif name.find('affine_bias') != -1:
                 nn.init.zeros_(param)
-                
-
-        
+                        
+        self.get_encode_lb_vec()
         self.load_pretrain()
 
+    def get_encode_lb_vec(self):
+        self.text_feature_vecs = []
+        with torch.no_grad():
+            clip_model, _ = clip.load("ViT-B/32", device="cuda")
+            for i in range(0, self.n_datasets):
+                lb_name = self.configer.get("dataset"+str(i+1), "label_names")
+                text = clip.tokenize(lb_name).cuda()
+                text_features = clip_model.encode_text(text).type(torch.float32)
+                self.text_feature_vecs.append(text_features)
         
     def load_pretrain(self):
         state = torch.load(backbone_url)
@@ -552,7 +540,3 @@ class HRNet_W48_CLIP(nn.Module):
             else:
                 add_param_to_list(child, wd_params, nowd_params)
         return wd_params, nowd_params, lr_mul_wd_params, lr_mul_nowd_params
-
-    def PrototypesUpdate(self, new_proto):
-        self.prototypes = nn.Parameter(F.normalize(new_proto, p=2, dim=-1),
-                                        requires_grad=False)

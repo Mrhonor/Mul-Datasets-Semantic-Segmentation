@@ -147,7 +147,7 @@ class CityScapes(BaseDataset):
         if mode == 'train':
             # self.n_cats = 18
             # self.n_cats = 19
-            self.n_cats = 20
+            self.n_cats = 19
         elif mode == 'eval':
             self.n_cats = 19
             # self.n_cats = 20
@@ -156,7 +156,7 @@ class CityScapes(BaseDataset):
         # self.lb_ignore = 255
         self.lb_map = np.arange(256).astype(np.uint8)
         if mode == 'train':
-            self.labels_info = labels_info_train
+            self.labels_info = labels_info_eval
         elif mode == 'eval':
             self.labels_info = labels_info_eval
             
