@@ -108,9 +108,9 @@ class CamVid(Dataset):
         self.trans_func = trans_func
         # self.n_cats = 13
         if mode == 'train':
-            self.n_cats = 13
-            # self.n_cats = 12
-            self.labels_info = labels_info_train
+            # self.n_cats = 13
+            self.n_cats = 12
+            self.labels_info = labels_info_eval
         elif mode == 'eval':
             self.n_cats = 12
             self.labels_info = labels_info_eval
