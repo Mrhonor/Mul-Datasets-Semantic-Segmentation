@@ -1,8 +1,9 @@
 {
     "model_name": "hrnet_w48_clip",
-    "aux_mode": "train",
+    "aux_mode": "eval",
     "n_datasets": 3,
     "num_unify_classes": 46,
+    "unify_classes_name": ["riding and driving normal street", "sidewalk", "Grid Building", "Building", "Grid Wall", "wall", "fence", "pole", "traffic light", "traffic sign", "vegetation", "terrain", "sky", "person", "Bicycle Rider", "Motor Rider", "car", "truck", "bus", "train", "motorcycle", "bicycle", "Utility vehicle", "Sidebars", "Speed bumper", "Curbstone", "Solid line", "Irrelevant signs", "Road blocks", "Tractor", "Non-drivable street", "Zebra crossing", "Obstacles or trash", "Riding and Driving restricted area", "Animals", "Signal corpus of Pole", "Signal corpus of traffic light", "Drivable cobblestone", "Electronic traffic", "Slow drive area", "Parking area", "Painted Driving Instructions", "Traffic guide fence", "Traffic guide cone", " Dashed line", " ego car"],
     "hrnet": {
       "cfg": "hrnet48",
       "keep_imagenet_head": false,
@@ -16,7 +17,7 @@
       "train_im_anns":"datasets/Cityscapes/train.txt",
       "val_im_anns":"datasets/Cityscapes/val.txt", 
       "ims_per_gpu": 2,
-      "eval_ims_per_gpu": 2,
+      "eval_ims_per_gpu": 8,
       "label_names": ["road", "sidewalk", "building", "wall", "fence", "pole", "traffic light", "traffic sign", "vegetation", "terrain", "sky", "person", "rider", "car", "truck", "bus", "train", "motorcycle", "bicycle"]
     },
     "dataset2": {
@@ -26,18 +27,18 @@
       "train_im_anns":"datasets/CamVid/train.txt",
       "val_im_anns":"datasets/CamVid/test.txt", 
       "ims_per_gpu": 2,
-      "eval_ims_per_gpu": 2,
+      "eval_ims_per_gpu": 8,
       "label_names": ["Sky", "Building", "Column_Pole", "Road", "Sidewalk", "Tree", "SignSymbol", "Fence", "Car", "Pedestrian", "Bicyclist", "Wall"]
     },
     "dataset3": {
-      "n_cats": 38, 
+      "n_cats": 36, 
       "data_reader": "A2D2Data",
       "im_root": "/dev/shm/dataset/a2d2",
       "train_im_anns":"datasets/A2D2/train.txt",
       "val_im_anns":"datasets/A2D2/val.txt", 
       "ims_per_gpu": 4,
-      "eval_ims_per_gpu": 2,
-      "label_names": ["Car", "Bicycle", "Pedestrian", "Truck", "Small vehicles", "Traffic signal", "traffic sign", "Utility vehicle", "Sidebars", "Speed bumper", "Curbstone", "Solid line", "Irrelevant signs", "Road blocks", "Tractor", "Non-drivable street", "Zebra crossing", "Obstacles / trash", "Poles", "RD restricted area", "Animals", "Grid structure", "Signal corpus", "Drivable cobblestone", "Electronic traffic", "Slow drive area", "Nature object", "Parking area", "Sidewalk", "Ego car", "Painted driv. instr.", "Traffic guide obj.", "Dash line", "RD normal street", "Sky", "Buildings", "Blurred area", "Rain dirt"]
+      "eval_ims_per_gpu": 8,
+      "label_names": ["Car", "Bicycle", "Pedestrian", "Truck", "Small vehicles", "Traffic signal", "traffic sign", "Utility vehicle", "Sidebars", "Speed bumper", "Curbstone", "Solid line", "Irrelevant signs", "Road blocks", "Tractor", "Non-drivable street", "Zebra crossing", "Obstacles / trash", "Poles", "RD restricted area", "Animals", "Grid structure", "Signal corpus", "Drivable cobblestone", "Electronic traffic", "Slow drive area", "Nature object", "Parking area", "Sidewalk", "Ego car", "Painted driv. instr.", "Traffic guide obj.", "Dash line", "RD normal street", "Sky", "Buildings"]
     },
     "n_bn": 3,
     "class_remap1":{
@@ -59,8 +60,7 @@
       "15": [18],
       "16": [19],
       "17": [20],
-      "18": [21],
-      "19": [22, 29, 32, 34, 45]
+      "18": [21]
     }, 
     "class_remap2":{ 
       "0": [12],
@@ -74,8 +74,7 @@
       "8": [16, 17, 18, 19, 22, 29],
       "9": [13, 34],
       "10": [14, 15, 20, 21],
-      "11": [4, 5],
-      "12": [32, 45]
+      "11": [4, 5]
     },
     "class_remap3":{ 
       "0": [16],
@@ -249,6 +248,7 @@
       "type": "MultiLabelCrossEntropyLoss",
       "reweight": false,
       "with_aux": false,
+      "with_unify_label": true,
       "aux_weight": 1,
       "aux_num": 4,
       "ignore_index": 255,
@@ -267,8 +267,8 @@
     "train": {
       "scales": [0.5, 1.0, 2.0],
       "cropsize": [512, 1024],
-      "finetune": true,
-      "finetune_from": "res/celoss/model_5000.pth"
+      "finetune": false,
+      "finetune_from": "res/celoss/model_final.pth"
     },
     "val": {
       "scales": [0.5, 0.75, 1.0, 1.25, 1.5, 1.75],

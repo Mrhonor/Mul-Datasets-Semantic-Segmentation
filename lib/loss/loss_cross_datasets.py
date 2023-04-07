@@ -672,6 +672,9 @@ class CrossDatasetsCELoss_CLIP(nn.Module):
         self.with_mulbn = self.configer.get('contrast', 'with_mulbn')
         self.reweight = self.configer.get('loss', 'reweight')
         self.ignore_index = self.configer.get('loss', 'ignore_index')
+        self.with_unify_label = self.configer.get('loss', 'with_unify_label')
+        if self.with_unify_label:
+            self.classRemapper = eval(self.configer.get('class_remaper'))(configer=self.configer)
 
         self.n_cats = []
         for i in range(1, self.n_datasets+1):
@@ -684,12 +687,23 @@ class CrossDatasetsCELoss_CLIP(nn.Module):
         text_feature_vecs = preds['prototypes']
         
         loss = None
+        if self.with_unify_label:
+            logits = remap_logits = torch.einsum('bchw, nc -> bnhw', logits, text_feature_vecs[self.n_datasets])
+        
         for i in range(0, self.n_datasets):
             if not (dataset_ids == i).any():
                 continue
             
-            remap_logits = torch.einsum('bchw, nc -> bnhw', logits[dataset_ids==i], text_feature_vecs[i])
-            remap_logits = F.interpolate(remap_logits, size=(target.size(1), target.size(2)), mode="bilinear", align_corners=True)
+            RemapMatrix = self.classRemapper.getRemapMatrix(i)
+            if logits.is_cuda:
+                RemapMatrix = RemapMatrix.cuda()
+            
+            if self.with_unify_label:
+                remap_logits = torch.einsum('bchw, nc -> bnhw', logits[dataset_ids==i], RemapMatrix)
+                remap_logits = F.interpolate(remap_logits, size=(target.size(1), target.size(2)), mode="bilinear", align_corners=True)
+            else:
+                remap_logits = torch.einsum('bchw, nc -> bnhw', logits[dataset_ids==i], text_feature_vecs[i])
+                remap_logits = F.interpolate(remap_logits, size=(target.size(1), target.size(2)), mode="bilinear", align_corners=True)
             
             if loss is None:
                 loss = self.CELoss(remap_logits, target[dataset_ids==i])

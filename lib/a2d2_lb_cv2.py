@@ -130,17 +130,17 @@ labels_info_eval = [
     {"name": "Rain dirt", "id": 54, "color": [53, 46, 82], "trainId": 37}
 ]
 
-labels_info = labels_info_eval
+# labels_info = labels_info_eval
 
 class A2D2Data(Dataset):
     def __init__(self, dataroot, annpath, trans_func=None, mode='train'):
         super(A2D2Data, self).__init__()
-        assert mode in ('train', 'eval', 'test')
+        # assert mode in ('train', 'eval', 'test')
 
         self.mode = mode
         self.trans_func = trans_func
-        self.n_cats = 38
-        # self.n_cats = 36
+        # self.n_cats = 38
+        self.n_cats = 36
         self.lb_map = np.arange(256).astype(np.uint8)
 
         for el in labels_info:
@@ -176,6 +176,8 @@ class A2D2Data(Dataset):
     def __getitem__(self, idx):
         impth = self.img_paths[idx]
         lbpth = self.lb_paths[idx]
+        
+        
         img = cv2.imread(impth)[:, :, ::-1]
         # img = cv2.resize(img, (1920, 1280))
         label = np.array(Image.open(lbpth).convert('RGB'))
@@ -190,6 +192,9 @@ class A2D2Data(Dataset):
             im_lb = self.trans_func(im_lb)
         im_lb = self.to_tensor(im_lb)
         img, label = im_lb['im'], im_lb['lb']
+        if self.mode == 'ret_path':
+            return impth, label.unsqueeze(0).detach()
+        
         return img.detach(), label.unsqueeze(0).detach()
         # return img.detach()
 

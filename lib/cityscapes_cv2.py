@@ -145,12 +145,11 @@ class CityScapes(BaseDataset):
                 dataroot, annpath, trans_func, mode)
     
         if mode == 'train':
-            # self.n_cats = 18
-            # self.n_cats = 19
             self.n_cats = 19
         elif mode == 'eval':
             self.n_cats = 19
-            # self.n_cats = 20
+        else:
+            self.n_cats = 19
         
         self.lb_ignore = -1
         # self.lb_ignore = 255
@@ -158,6 +157,8 @@ class CityScapes(BaseDataset):
         if mode == 'train':
             self.labels_info = labels_info_eval
         elif mode == 'eval':
+            self.labels_info = labels_info_eval
+        else:
             self.labels_info = labels_info_eval
             
         for el in self.labels_info:
