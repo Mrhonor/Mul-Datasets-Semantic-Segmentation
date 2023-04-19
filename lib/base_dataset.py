@@ -20,7 +20,7 @@ class BaseDataset(Dataset):
     '''
     def __init__(self, dataroot, annpath, trans_func=None, mode='train'):
         super(BaseDataset, self).__init__()
-        assert mode in ('train', 'eval', 'test')
+        # assert mode in ('train', 'eval', 'test')
         self.mode = mode
         self.trans_func = trans_func
 
@@ -38,7 +38,7 @@ class BaseDataset(Dataset):
         self.len = len(self.img_paths)
 
     def __getitem__(self, idx):
-        impth, lbpth = self.img_paths[idx], self.lb_paths[idx]
+        impth, lbpth = self.img_paths[idx], self.lb_paths[idx]        
         img, label = self.get_image(impth, lbpth)
         if not self.lb_map is None:
             label = self.lb_map[label]
@@ -47,6 +47,9 @@ class BaseDataset(Dataset):
             im_lb = self.trans_func(im_lb)
         im_lb = self.to_tensor(im_lb)
         img, label = im_lb['im'], im_lb['lb']
+        if self.mode == 'ret_path':
+            return impth, label
+        
         return img.detach(), label.unsqueeze(0).detach()
         # return img.detach()
 

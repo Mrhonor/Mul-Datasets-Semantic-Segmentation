@@ -9,7 +9,6 @@ sys.path.insert(0, '.')
 import os
 import os.path as osp
 
-sys.path.append('/root/autodl-tmp/project/BiSeNet')  # 指定绝对路径防止出现无法import文件
 
 import logging
 import argparse
@@ -101,7 +100,7 @@ class MscEvalV0_Contrast(object):
     def __init__(self, configer, scales=(0.5, ), flip=False, ignore_label=255):
         self.configer = configer
         self.num_unify_classes = self.configer.get('num_unify_classes')
-        # self.class_Remaper = ClassRemap(configer=self.configer)
+        self.class_Remaper = ClassRemap(configer=self.configer)
         self.scales = scales
         self.flip = flip
         self.ignore_label = ignore_label
@@ -760,7 +759,7 @@ def parse_args():
     parse.add_argument('--local_rank', dest='local_rank', type=int, default=-1,)
     parse.add_argument('--port', dest='port', type=int, default=16745,)
     parse.add_argument('--finetune_from', type=str, default=None,)
-    parse.add_argument('--config', dest='config', type=str, default='configs/bisenetv2_city_cam_a2d2.json',)
+    parse.add_argument('--config', dest='config', type=str, default='configs/clip_city_cam_a2d2.json',)
     return parse.parse_args()
 
 

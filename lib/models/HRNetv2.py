@@ -441,7 +441,7 @@ class HRNet_W48_CLIP(nn.Module):
         self.proj_dim = self.configer.get('contrast', 'proj_dim')
         self.full_res_stem = self.configer.get('hrnet', 'full_res_stem')
         self.num_prototype = self.configer.get('contrast', 'num_prototype')
-        
+        self.with_unify_lb = self.configer.get('loss', 'with_unify_label')
         
         if self.full_res_stem:
             up_fac = 1
@@ -470,13 +470,16 @@ class HRNet_W48_CLIP(nn.Module):
         if self.aux_mode == 'train':
             return {'seg':emb}
         elif self.aux_mode == 'eval':
-            logits = torch.einsum('bchw, nc -> bnhw', emb, self.text_feature_vecs[dataset])
+            # logits = torch.einsum('bchw, nc -> bnhw', emb, self.text_feature_vecs[dataset])
+            logits = torch.einsum('bchw, nc -> bnhw', emb, self.text_feature_vecs[self.n_datasets])
             
             return logits
         elif self.aux_mode == 'pred':
-            # pred = out.argmax(dim=1)
-            # return pred
-            return
+            logits = torch.einsum('bchw, nc -> bnhw', emb, self.text_feature_vecs[self.n_datasets])
+            #logits = torch.einsum('bchw, nc -> bnhw', emb, self.text_feature_vecs[dataset])
+            logits = F.interpolate(logits, size=(x_.size(2), x_.size(3)), mode="bilinear", align_corners=True)
+            pred = logits.argmax(dim=1)
+            return pred
         else:
             raise NotImplementedError
 
@@ -509,9 +512,19 @@ class HRNet_W48_CLIP(nn.Module):
             clip_model, _ = clip.load("ViT-B/32", device="cuda")
             for i in range(0, self.n_datasets):
                 lb_name = self.configer.get("dataset"+str(i+1), "label_names")
+                lb_name = ["a photo of " + name + "." for name in lb_name]
                 text = clip.tokenize(lb_name).cuda()
                 text_features = clip_model.encode_text(text).type(torch.float32)
                 self.text_feature_vecs.append(text_features)
+                
+            if self.with_unify_lb:
+                lb_name = self.configer.get("unify_classes_name")
+                lb_name = ["a photo of " + name + "." for name in lb_name]
+                text = clip.tokenize(lb_name).cuda()
+                text_features = clip_model.encode_text(text).type(torch.float32)
+                self.text_feature_vecs.append(text_features)
+                
+            
         
     def load_pretrain(self):
         state = torch.load(backbone_url)

@@ -102,7 +102,7 @@ labels_info_eval = [
 class CamVid(Dataset):
     def __init__(self, dataroot, annpath, trans_func=None, mode='train'):
         super(CamVid, self).__init__()
-        assert mode in ('train', 'eval', 'test')
+        # assert mode in ('train', 'eval', 'test')
 
         self.mode = mode
         self.trans_func = trans_func
@@ -112,6 +112,9 @@ class CamVid(Dataset):
             self.n_cats = 12
             self.labels_info = labels_info_eval
         elif mode == 'eval':
+            self.n_cats = 12
+            self.labels_info = labels_info_eval
+        else:
             self.n_cats = 12
             self.labels_info = labels_info_eval
             
@@ -186,6 +189,10 @@ class CamVid(Dataset):
             im_lb = self.trans_func(im_lb)
         im_lb = self.to_tensor(im_lb)
         img, label = im_lb['im'], im_lb['lb']
+
+        if self.mode == 'ret_path':
+            return impth, label.unsqueeze(0).detach()
+        
         return img.detach(), label.unsqueeze(0).detach()
         # return img.detach()
     

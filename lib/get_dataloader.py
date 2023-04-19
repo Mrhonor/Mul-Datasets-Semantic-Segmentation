@@ -56,7 +56,7 @@ def get_data_loader(configer, aux_mode='eval', distributed=True):
         
         shuffle = True
         drop_last = True
-    elif mode == 'eval':
+    elif mode == 'eval' or mode == 'ret_path':
         trans_func = TransformationVal()
         batchsize = [configer.get('dataset'+str(i), 'eval_ims_per_gpu') for i in range(1, n_datasets+1)]
         annpath = [configer.get('dataset'+str(i), 'val_im_anns') for i in range(1, n_datasets+1)]
