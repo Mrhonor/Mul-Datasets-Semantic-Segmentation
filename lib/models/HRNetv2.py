@@ -553,3 +553,98 @@ class HRNet_W48_CLIP(nn.Module):
             else:
                 add_param_to_list(child, wd_params, nowd_params)
         return wd_params, nowd_params, lr_mul_wd_params, lr_mul_nowd_params
+
+class HRNet_W48_GNN(nn.Module):
+    """
+    deep high-resolution representation learning for human pose estimation, CVPR2019
+    """
+
+    def __init__(self, configer):
+        super(HRNet_W48_GNN, self).__init__()
+        self.configer = configer
+        self.aux_mode = self.configer.get('aux_mode')
+        self.n_bn = self.configer.get('n_bn')
+        self.num_unify_classes = self.configer.get('num_unify_classes')
+        self.n_datasets = self.configer.get('n_datasets')
+        self.backbone = HRNetBackbone_ori(configer)
+        self.proj_dim = self.configer.get('contrast', 'proj_dim')
+        self.full_res_stem = self.configer.get('hrnet', 'full_res_stem')
+        self.num_prototype = self.configer.get('contrast', 'num_prototype')
+        
+        if self.full_res_stem:
+            up_fac = 1
+        else:
+            up_fac = 4
+
+        # extra added layers
+        in_channels = 720  # 48 + 96 + 192 + 384
+
+        self.proj_head = ProjectionHeadOri(dim_in=in_channels, proj_dim=512, bn_type=self.configer.get('network', 'bn_type'))
+            
+        self.init_weights()    
+       
+
+    def forward(self, x_, dataset=0):
+        x = self.backbone(x_)
+        _, _, h, w = x[0].size()
+
+        feat1 = x[0]
+        feat2 = F.interpolate(x[1], size=(h, w), mode="bilinear", align_corners=True)
+        feat3 = F.interpolate(x[2], size=(h, w), mode="bilinear", align_corners=True)
+        feat4 = F.interpolate(x[3], size=(h, w), mode="bilinear", align_corners=True)
+
+        feats = torch.cat([feat1, feat2, feat3, feat4], 1)
+        emb = self.proj_head(feats)
+        return {'seg':emb}
+
+    def init_weights(self):
+        for name, module in self.named_modules():
+            if isinstance(module, (nn.Conv2d, nn.Linear)):
+                nn.init.kaiming_normal_(module.weight, mode='fan_out')
+                if not module.bias is None: nn.init.constant_(module.bias, 0)
+            # elif isinstance(module, nn.modules.batchnorm._BatchNorm):
+            #     if hasattr(module, 'last_bn') and module.last_bn:
+            #         nn.init.zeros_(module.weight)
+            #     else:
+            #         nn.init.ones_(module.weight)
+            #     nn.init.zeros_(module.bias)
+        for name, param in self.named_parameters():
+            if name.find('affine_weight') != -1:
+                if hasattr(param, 'last_bn') and param.last_bn:
+                    nn.init.zeros_(param)
+                else:
+                    nn.init.ones_(param)
+            elif name.find('affine_bias') != -1:
+                nn.init.zeros_(param)
+                        
+        self.get_encode_lb_vec()
+        self.load_pretrain()
+
+        
+    def load_pretrain(self):
+        state = torch.load(backbone_url)
+        self.backbone.load_state_dict(state, strict=False)
+
+    def get_params(self):
+        def add_param_to_list(mod, wd_params, nowd_params):
+            for param in mod.parameters():
+                if param.requires_grad == False:
+                    continue
+                
+                if param.dim() == 1:
+                    nowd_params.append(param)
+                elif param.dim() == 4:
+                    wd_params.append(param)
+                else:
+                    nowd_params.append(param)
+                    # print(param.dim())
+                    # print(param)
+                    print(name)
+
+        wd_params, nowd_params, lr_mul_wd_params, lr_mul_nowd_params = [], [], [], []
+        for name, child in self.named_children():
+            if 'head' in name or 'aux' in name:
+                add_param_to_list(child, lr_mul_wd_params, lr_mul_nowd_params)
+            else:
+                add_param_to_list(child, wd_params, nowd_params)
+        return wd_params, nowd_params, lr_mul_wd_params, lr_mul_nowd_params

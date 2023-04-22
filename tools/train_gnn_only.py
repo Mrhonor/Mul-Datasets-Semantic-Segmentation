@@ -2,16 +2,11 @@
 # -*- encoding: utf-8 -*-
 
 
-from cgi import print_directory
-from email.policy import strict
-from math import perm
 import sys
 sys.path.insert(0, '.')
 import os
 import os.path as osp
-import random
 import logging
-import time
 import argparse
 import numpy as np
 from tabulate import tabulate
@@ -20,11 +15,9 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.distributed as dist
-from torch.utils.data import DataLoader
 import torch.cuda.amp as amp
 
 from lib.models import model_factory
-from configs import set_cfg_from_file
 from lib.get_dataloader import get_data_loader, get_single_data_loader
 from lib.ohem_ce_loss import OhemCELoss
 from lib.lr_scheduler import WarmupPolyLrScheduler
@@ -37,7 +30,6 @@ from tools.configer import Configer
 from evaluate import eval_model_contrast, eval_model_aux, eval_model, eval_model_contrast_single
 
 from tensorboardX import SummaryWriter
-from time import time
 
 
 
@@ -83,15 +75,6 @@ A2D2_ID = 2
 
 def set_model(configer):
     logger = logging.getLogger()
-    # net = NULL
-    # if config_files is NULL:
-    #     net = model_factory[config_file.model_type](config_file.n_cats)
-    # 修改判定
-    # if len(config_files) == 0:
-    #     net = model_factory[config_file.model_type](config_file.n_cats)
-    # else:
-    #     n_classes = [cfg.n_cats for cfg in config_files]
-    #     net = model_factory[config_file.model_type](config_file.n_cats, 'train', 2, *n_classes)
 
     net = model_factory[configer.get('model_name')](configer)
 
@@ -106,6 +89,97 @@ def set_model(configer):
     net.train()
     return net
 
+def set_graph_model(configer):
+    logger = logging.getLogger()
+
+    net = model_factory[configer.get('graph_model_name')](configer)
+
+    if configer.get('train', 'graph_finetune'):
+        logger.info(f"load pretrained weights from {configer.get('train', 'graphfinetune_from')}")
+        net.load_state_dict(torch.load(configer.get('train', 'graph_finetune_from'), map_location='cpu'), strict=False)
+
+        
+    if configer.get('use_sync_bn'): 
+        net = nn.SyncBatchNorm.convert_sync_batchnorm(net)
+    net.cuda()
+    net.train()
+    return net
+
+def set_ema_model(configer):
+    logger = logging.getLogger()
+    # net = NULL
+    # if config_files is NULL:
+    #     net = model_factory[config_file.model_type](config_file.n_cats)
+    # 修改判定
+    # if len(config_files) == 0:
+    #     net = model_factory[config_file.model_type](config_file.n_cats)
+    # else:
+    #     n_classes = [cfg.n_cats for cfg in config_files]
+    #     net = model_factory[config_file.model_type](config_file.n_cats, 'train', 2, *n_classes)
+
+    net = model_factory[configer.get('model_name') + '_ema'](configer)
+
+    if configer.get('train', 'finetune'):
+        logger.info(f"ema load pretrained weights from {configer.get('train', 'finetune_from')}")
+        net.load_state_dict(torch.load(configer.get('train', 'finetune_from'), map_location='cpu'), strict=False)
+
+        
+    if configer.get('use_sync_bn'): 
+        net = nn.SyncBatchNorm.convert_sync_batchnorm(net)
+    net.cuda()
+    net.eval()
+    return net
+
+def set_optimizer(model, configer):
+    if hasattr(model, 'get_params'):
+        wd_params, nowd_params, lr_mul_wd_params, lr_mul_nowd_params = model.get_params()
+        #  wd_val = cfg.weight_decay
+        wd_val = 0
+        params_list = [
+            {'params': wd_params, },
+            {'params': nowd_params, 'weight_decay': wd_val},
+            {'params': lr_mul_wd_params, 'lr': configer.get('lr', 'lr_start')},
+            {'params': lr_mul_nowd_params, 'weight_decay': wd_val, 'lr': configer.get('lr', 'lr_start')},
+        ]
+    else:
+        wd_params, non_wd_params = [], []
+        for name, param in model.named_parameters():
+            if param.requires_grad == False:
+                continue
+            
+            if param.dim() == 1:
+                non_wd_params.append(param)
+            elif param.dim() == 2 or param.dim() == 4:
+                wd_params.append(param)
+        params_list = [
+            {'params': wd_params, },
+            {'params': non_wd_params, 'weight_decay': 0},
+        ]
+    
+    if configer.get('optim') == 'SGD':
+        optim = torch.optim.SGD(
+            params_list,
+            lr=configer.get('lr', 'lr_start'),
+            momentum=0.9,
+            weight_decay=configer.get('lr', 'weight_decay'),
+        )
+    elif configer.get('optim') == 'AdamW':
+        optim = torch.optim.AdamW(
+            params_list,
+            lr=configer.get('lr', 'lr_start'),
+        )
+        
+    return optim
+
+def set_model_dist(net):
+    local_rank = dist.get_rank()
+    net = nn.parallel.DistributedDataParallel(
+        net,
+        device_ids=[local_rank, ],
+        find_unused_parameters=False,
+        output_device=local_rank
+        )
+    return net
 def set_ema_model(configer):
     logger = logging.getLogger()
     # net = NULL
@@ -310,6 +384,8 @@ def train():
     
     ## model
     net = set_model(configer=configer)
+    graph_net = set_graph_model(configer=configer)
+    
     if use_ema:
         ema_net = set_ema_model(configer=configer)
         
@@ -424,6 +500,10 @@ def train():
         # im = im[perm_index]
         # lb = lb[perm_index]
 
+        SEG = 0
+        GNN = 1
+        train_seg_or_gnn = GNN
+
         optim.zero_grad()
         with amp.autocast(enabled=configer.get('use_fp16')):
             # if finetune and i >= fix_param_iters + aux_iter:
@@ -443,7 +523,15 @@ def train():
                 else:
                     net.set_train_dataset_aux(False)    
                             
-            out = net(im)
+            if train_seg_or_gnn == GNN:
+                graph_net.train()
+                net.eval()
+                with torch.no_grad():
+                    seg_out = net(im)
+                
+                gnn_out = graph_net(seg_out['seg'])
+                
+            
 
             if is_distributed():
                 out['prototypes'] = net.module.text_feature_vecs
