@@ -564,12 +564,13 @@ class HRNet_W48_GNN(nn.Module):
         self.configer = configer
         self.aux_mode = self.configer.get('aux_mode')
         self.n_bn = self.configer.get('n_bn')
-        self.num_unify_classes = self.configer.get('num_unify_classes')
+        # self.num_unify_classes = self.configer.get('num_unify_classes')
         self.n_datasets = self.configer.get('n_datasets')
         self.backbone = HRNetBackbone_ori(configer)
         self.proj_dim = self.configer.get('contrast', 'proj_dim')
         self.full_res_stem = self.configer.get('hrnet', 'full_res_stem')
         self.num_prototype = self.configer.get('contrast', 'num_prototype')
+        self.output_feat_dim = self.configer.get('GNN', 'output_feat_dim')
         
         if self.full_res_stem:
             up_fac = 1
@@ -579,7 +580,7 @@ class HRNet_W48_GNN(nn.Module):
         # extra added layers
         in_channels = 720  # 48 + 96 + 192 + 384
 
-        self.proj_head = ProjectionHeadOri(dim_in=in_channels, proj_dim=512, bn_type=self.configer.get('network', 'bn_type'))
+        self.proj_head = ProjectionHeadOri(dim_in=in_channels, proj_dim=self.output_feat_dim, bn_type=self.configer.get('network', 'bn_type'))
             
         self.init_weights()    
        
@@ -595,7 +596,14 @@ class HRNet_W48_GNN(nn.Module):
 
         feats = torch.cat([feat1, feat2, feat3, feat4], 1)
         emb = self.proj_head(feats)
-        return {'seg':emb}
+        if self.aux_mode == 'train':
+            return {'seg':emb}
+        elif self.aux_mode == 'eval':
+            
+            logits = torch.einsum('bchw, nc -> bnhw', logits, unify_prototype)
+            remap_logits = torch.einsum('bchw, nc -> bnhw', logits[dataset], bi_graphs[dataset])
+            remap_logits = F.interpolate(remap_logits, size=(target.size(1), target.size(2)), mode="bilinear", align_corners=True)
+            return remap_logits
 
     def init_weights(self):
         for name, module in self.named_modules():
@@ -648,3 +656,10 @@ class HRNet_W48_GNN(nn.Module):
             else:
                 add_param_to_list(child, wd_params, nowd_params)
         return wd_params, nowd_params, lr_mul_wd_params, lr_mul_nowd_params
+    
+    def set_bipartite_graphs(self, bi_graphs):
+        self.bipartite_graphs = bi_graphs
+        
+    def set_unify_prototype(self, unify_prototype):
+        self.unify_prototype = unify_prototype
+        

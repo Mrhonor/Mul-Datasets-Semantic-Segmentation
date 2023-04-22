@@ -23,13 +23,15 @@ from lib.ohem_ce_loss import OhemCELoss
 from lib.lr_scheduler import WarmupPolyLrScheduler
 from lib.meters import TimeMeter, AvgMeter
 from lib.logger import setup_logger, print_log_msg
-from lib.loss.loss_cross_datasets import CrossDatasetsLoss, CrossDatasetsCELoss, CrossDatasetsCELoss_KMeans, CrossDatasetsCELoss_CLIP
+from lib.loss.loss_cross_datasets import CrossDatasetsLoss, CrossDatasetsCELoss, CrossDatasetsCELoss_KMeans, CrossDatasetsCELoss_CLIP, CrossDatasetsCELoss_GNN
 from lib.class_remap import ClassRemap
 
 from tools.configer import Configer
 from evaluate import eval_model_contrast, eval_model_aux, eval_model, eval_model_contrast_single
 
 from tensorboardX import SummaryWriter
+
+from lib.module.gen_graph_node_feature import gen_graph_node_feature
 
 
 
@@ -257,8 +259,11 @@ def set_model_dist(net):
     return net
 
 def set_contrast_loss(configer):
+    loss_factory = {
+        'GNN': CrossDatasetsCELoss_GNN
+    }
     # return CrossDatasetsCELoss_KMeans(configer)
-    return CrossDatasetsCELoss_CLIP(configer)
+    return loss_factory[configer.get('loss', 'type')](configer)
     # return CrossDatasetsLoss(configer)
 
 def set_meters(configer):
@@ -397,6 +402,8 @@ def train():
     ## mixed precision training
     scaler = amp.GradScaler()
 
+    graph_node_features = gen_graph_node_feature(configer)
+
     ## meters
     time_meter, loss_meter, loss_pre_meter, loss_aux_meters, loss_contrast_meter, loss_domain_meter, kl_loss_meter = set_meters(configer)
     ## lr scheduler
@@ -522,24 +529,30 @@ def train():
                     net.module.set_train_dataset_aux(False)
                 else:
                     net.set_train_dataset_aux(False)    
-                            
+                
+            fix_graph = False            
             if train_seg_or_gnn == GNN:
+                fix_graph = False
                 graph_net.train()
                 net.eval()
                 with torch.no_grad():
                     seg_out = net(im)
                 
-                gnn_out = graph_net(seg_out['seg'])
-                
-            
-
-            if is_distributed():
-                out['prototypes'] = net.module.text_feature_vecs
-            
+                input_feats = torch.cat([graph_node_features, graph_net.unify_node_features], dim=0)
+                unify_prototype, bi_graphs = graph_net(input_feats)
             else:
-                out['prototypes'] = net.text_feature_vecs
+                graph_net.eval()
+                net.train()
+                seg_out = net(im)
                 
+                if fix_graph == False:
+                    with torch.no_grad():
+                        input_feats = torch.cat([graph_node_features, graph_net.unify_node_features], dim=0)
+                        unify_prototype, bi_graphs = graph_net(input_feats)
+                        fix_graph = True
                 
+            seg_out['unify_prototype'] = unify_prototype
+            seg_out['bi_graphs'] = bi_graphs
 
             if i < configer.get('lr', 'warmup_iters') or not use_contrast:
                 is_warmup = True
@@ -547,7 +560,7 @@ def train():
             else:
                 is_warmup = False
                 
-            backward_loss = contrast_losses(out, lb, dataset_lbs, is_warmup)
+            backward_loss = contrast_losses(seg_out, lb, dataset_lbs, is_warmup)
             kl_loss = None
             loss_seg = backward_loss
             loss_aux = None
@@ -610,6 +623,11 @@ def train():
             save_pth = osp.join(configer.get('res_save_pth'), 'model_{}.pth'.format(i+1))
             logger.info('\nsave models to {}'.format(save_pth))
 
+            if fix_graph == False:
+                with torch.no_grad():
+                    input_feats = torch.cat([graph_node_features, graph_net.unify_node_features], dim=0)
+                    unify_prototype, bi_graphs = graph_net(input_feats)
+
             if use_dataset_aux_head and i < aux_iter:
                 eval_model_func = eval_model_aux
             else:
@@ -617,8 +635,12 @@ def train():
                 eval_model_func = eval_model_contrast
 
             if is_distributed():
+                net.module.set_unify_prototype(unify_prototype)
+                net.module.set_bipartite_graph(bi_graphs)
                 heads, mious = eval_model_func(configer, net.module)
             else:
+                net.set_unify_prototype(unify_prototype)
+                net.set_bipartite_graph(bi_graphs)
                 heads, mious = eval_model_func(configer, net)
                 
             writer.add_scalars("mious",{"Cityscapes":mious[CITY_ID],"Camvid":mious[CAM_ID]},configer.get("iter")+1)

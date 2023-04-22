@@ -712,6 +712,47 @@ class CrossDatasetsCELoss_CLIP(nn.Module):
                 
         return loss
     
+class CrossDatasetsCELoss_GNN(nn.Module):
+    def __init__(self, configer=None):
+        super(CrossDatasetsCELoss_CLIP, self).__init__()
+        self.configer = configer
+        self.n_datasets = self.configer.get('n_datasets')
+        self.num_unify_classes = self.configer.get('num_unify_classes')
+        self.num_prototype = self.configer.get('contrast', 'num_prototype')
+        self.temperature = self.configer.get('contrast', 'temperature')
+        self.with_mulbn = self.configer.get('contrast', 'with_mulbn')
+        self.reweight = self.configer.get('loss', 'reweight')
+        self.ignore_index = self.configer.get('loss', 'ignore_index')
+        self.with_unify_label = self.configer.get('loss', 'with_unify_label')
+
+        self.n_cats = []
+        for i in range(1, self.n_datasets+1):
+            self.n_cats.append(self.configer.get('dataset'+str(i), 'n_cats'))
+
+        self.CELoss = torch.nn.CrossEntropyLoss(ignore_index=255)
+
+    def forward(self, preds, target, dataset_ids, is_warmup=False):
+        logits = preds['seg']
+        unify_prototype = preds['unify_prototype']
+        bi_graphs = preds['bi_graphs']
+        
+        loss = None
+        logits = torch.einsum('bchw, nc -> bnhw', logits, unify_prototype)
+        
+        for i in range(0, self.n_datasets):
+            if not (dataset_ids == i).any():
+                continue
+            
+            remap_logits = torch.einsum('bchw, nc -> bnhw', logits[dataset_ids==i], bi_graphs[i])
+            remap_logits = F.interpolate(remap_logits, size=(target.size(1), target.size(2)), mode="bilinear", align_corners=True)
+            
+            if loss is None:
+                loss = self.CELoss(remap_logits, target[dataset_ids==i])
+            else:
+                loss = loss + self.CELoss(remap_logits, target[dataset_ids==i])
+                
+        return loss
+    
     
 
 if __name__ == "__main__":
