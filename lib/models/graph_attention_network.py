@@ -25,25 +25,25 @@ class GAT(nn.Module):
         self.dropout_rate = self.configer.get('GNN', 'dropout_rate')
         self.threshold_value = self.configer.get('GNN', 'threshold_value')
 
-        self.attentions_layer1 = nn.ModuleList([GraphAttentionLayer(self.nfeat, self.nhid, dropout=self.dropout, alpha=self.alpha, concat=True) for _ in range(self.nheads)])
+        self.attentions_layer1 = nn.ModuleList([GraphAttentionLayer(self.nfeat, self.nhid, dropout=self.dropout_rate, alpha=self.alpha, concat=True) for _ in range(self.nheads)])
 
-        self.attentions_layer2 = nn.ModuleList([GraphAttentionLayer(self.nhid * self.nheads, self.nhid, dropout=self.dropout, alpha=self.alpha, concat=True) for _ in range(self.nheads)])
+        self.attentions_layer2 = nn.ModuleList([GraphAttentionLayer(self.nhid * self.nheads, self.nhid, dropout=self.dropout_rate, alpha=self.alpha, concat=True) for _ in range(self.nheads)])
 
-        self.out_att = GraphAttentionLayer(self.nhid * self.nheads, self.att_out_dim, dropout=self.dropout, alpha=self.alpha, concat=False)
+        self.out_att = GraphAttentionLayer(self.nhid * self.nheads, self.att_out_dim, dropout=self.dropout_rate, alpha=self.alpha, concat=False)
         
         self.linear1 = nn.Linear(self.att_out_dim, self.mlp_dim)
         self.relu = nn.ReLU()
         self.linear2 = nn.Linear(self.mlp_dim, self.output_feat_dim) 
         
         ## datasets Node features
-        self.n_datasets = self.configer.get('data', 'n_datasets')
+        self.n_datasets = self.configer.get('n_datasets')
         self.total_cats = 0
         self.dataset_cats = []
         for i in range(0, self.n_datasets):
             self.dataset_cats.append(self.configer.get('dataset'+str(i+1), 'n_cats'))
             self.total_cats += self.configer.get('dataset'+str(i+1), 'n_cats')
         
-        self.max_num_unify_class = self.configer.get('GNN', 'unify_ratio') * self.total_cats        
+        self.max_num_unify_class = int(self.configer.get('GNN', 'unify_ratio') * self.total_cats)
         # self.register_buffer("fix_node_features", torch.randn(self.total_cats, self.nfeat))
         self.unify_node_features = nn.Parameter(torch.randn(self.max_num_unify_class, self.nfeat), requires_grad=True)
         trunc_normal_(self.unify_node_features, std=0.02)
@@ -52,9 +52,11 @@ class GAT(nn.Module):
         self.init_adjacency_matrix()
         
     def forward(self, x):
-        x = F.dropout(x, self.dropout, training=self.training)
-        x = torch.cat([att(x, self.adj_matrix) for att in self.attentions], dim=1)
-        x = F.dropout(x, self.dropout, training=self.training)
+        x = F.dropout(x, self.dropout_rate, training=self.training)
+        x = torch.cat([att(x, self.adj_matrix) for att in self.attentions_layer1], dim=1)
+        x = F.dropout(x, self.dropout_rate, training=self.training)
+        x = torch.cat([att(x, self.adj_matrix) for att in self.attentions_layer2], dim=1)
+        x = F.dropout(x, self.dropout_rate, training=self.training)
         x = F.elu(self.out_att(x, self.adj_matrix))
         x = self.linear1(x)
         x = self.relu(x)
@@ -73,26 +75,32 @@ class GAT(nn.Module):
             similar_matrix = torch.einsum('nc, mc -> nm', this_feats, unify_feats)
             softmax_similar_matrix = F.softmax(similar_matrix, dim=1)
             # softmax_similar_matrix[softmax_similar_matrix < self.threshold_value] = 0
-            max_index, max_value = torch.max(softmax_similar_matrix)
-            bi_graph = torch.zero(self.dataset_cats[i], self.max_num_unify_class)
+            max_value, max_index = torch.max(softmax_similar_matrix, dim=0)
+            bi_graph = torch.zeros(self.dataset_cats[i], self.max_num_unify_class)
             bi_graph[max_index] = 1
             
             this_iter_thresh = 0.3 + (self.threshold_value - 0.3) * self.configer.get('iter') / self.configer.get('lr', 'max_iter')
-            bi_graph[max_value < this_iter_thresh] = 0
+            bi_graph[:, max_value < this_iter_thresh] = 0
+            
+            if x.is_cuda:
+                bi_graph = bi_graph.cuda()
             
             bipartite_graphs.append(bi_graph)
             
-        return bipartite_graphs.T()
+        return bipartite_graphs
             
             
     def init_adjacency_matrix(self):
         def normalize_adj(mx):
-            """Row-normalize sparse matrix"""
+        
             rowsum = np.array(mx.sum(1))
             r_inv_sqrt = np.power(rowsum, -0.5).flatten()
             r_inv_sqrt[np.isinf(r_inv_sqrt)] = 0.
-            r_mat_inv_sqrt = sp.diags(r_inv_sqrt)
-            return mx.dot(r_mat_inv_sqrt).transpose().dot(r_mat_inv_sqrt)
+            r_mat_inv_sqrt = torch.diag(torch.tensor(r_inv_sqrt))
+            
+            # r_mat_inv_sqrt = torch.diag(torch.tensor(r_inv_sqrt))
+            # print(r_mat_inv_sqrt)
+            return torch.mm(r_mat_inv_sqrt, torch.mm(mx, r_mat_inv_sqrt))
         
         # init adjacency matrix according to the number of categories of each dataset
         

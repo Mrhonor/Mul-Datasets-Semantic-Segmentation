@@ -57,7 +57,7 @@ def parse_args():
     parse.add_argument('--local_rank', dest='local_rank', type=int, default=-1,)
     parse.add_argument('--port', dest='port', type=int, default=16853,)
     parse.add_argument('--finetune_from', type=str, default=None,)
-    parse.add_argument('--config', dest='config', type=str, default='configs/clip_city_cam_a2d2.json',)
+    parse.add_argument('--config', dest='config', type=str, default='configs/gnn_city_cam_a2d2.json',)
     return parse.parse_args()
 
 # 使用绝对路径
@@ -94,7 +94,7 @@ def set_model(configer):
 def set_graph_model(configer):
     logger = logging.getLogger()
 
-    net = model_factory[configer.get('graph_model_name')](configer)
+    net = model_factory[configer.get('GNN','model_name')](configer)
 
     if configer.get('train', 'graph_finetune'):
         logger.info(f"load pretrained weights from {configer.get('train', 'graphfinetune_from')}")
@@ -479,6 +479,7 @@ def train():
                         unify_prototype, bi_graphs = graph_net(input_feats)
                         fix_graph = True
                 
+            seg_out['seg'] = seg_out['seg'].detach()
             seg_out['unify_prototype'] = unify_prototype
             seg_out['bi_graphs'] = bi_graphs
 
@@ -505,6 +506,7 @@ def train():
         # print('before backward')
         # set_trace()
         # with torch.autograd.detect_anomaly():
+        
         scaler.scale(backward_loss).backward()
         # print('after backward')
 
@@ -512,7 +514,16 @@ def train():
         # self.configer.plus_one('iters')
 
         # scaler.scale(loss).backward()
-        scaler.step(optim)
+        for param in graph_net.parameters():
+            if torch.isnan(param.grad).any() or torch.isinf(param.grad).any():
+                print("Graph NaN or Inf value found in gradients")
+
+        # for param in net.parameters():
+        #     if torch.isnan(param.grad).any() or torch.isinf(param.grad).any():
+        #         print("seg NaN or Inf value found in gradients")
+        
+        print(backward_loss.item())
+        scaler.step(gnn_optim)
         scaler.update()
         torch.cuda.synchronize()
         if use_ema:

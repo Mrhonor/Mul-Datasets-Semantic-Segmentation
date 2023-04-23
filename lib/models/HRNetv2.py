@@ -453,7 +453,7 @@ class HRNet_W48_CLIP(nn.Module):
 
         self.proj_head = ProjectionHeadOri(dim_in=in_channels, proj_dim=512, bn_type=self.configer.get('network', 'bn_type'))
             
-        self.init_weights()    
+        # self.init_weights()    
        
 
     def forward(self, x_, dataset=0):
@@ -625,8 +625,7 @@ class HRNet_W48_GNN(nn.Module):
             elif name.find('affine_bias') != -1:
                 nn.init.zeros_(param)
                         
-        self.get_encode_lb_vec()
-        self.load_pretrain()
+        # self.load_pretrain()
 
         
     def load_pretrain(self):

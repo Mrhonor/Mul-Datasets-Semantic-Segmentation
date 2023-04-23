@@ -1,5 +1,5 @@
 {
-    "model_name": "hrnet_w48_clip",
+    "model_name": "hrnet_w48_gnn",
     "aux_mode": "train",
     "n_datasets": 3,
     "hrnet": {
@@ -9,19 +9,22 @@
       "full_res_stem": false
     },
     "GNN": {
+      "model_name": "graph_attention_network",
       "nfeat": 1024,
       "nhid": 128,
-      "nhead": 8,
+      "nheads": 8,
       "att_out_dim": 1024,
       "mlp_dim": 512,
       "output_feat_dim": 512,
       "dropout_rate": 0.5,
-      "unify_ratio": 0.9
+      "unify_ratio": 0.8,
+      "threshold_value": 0.95,
+      "alpha": 0.2
     },
     "dataset1": {
       "n_cats": 19,
       "data_reader": "CityScapes",
-      "im_root": "/dev/dataset/",
+      "im_root": "D:/Study/code",
       "train_im_anns":"datasets/Cityscapes/train.txt",
       "val_im_anns":"datasets/Cityscapes/val.txt", 
       "ims_per_gpu": 2,
@@ -31,7 +34,7 @@
     "dataset2": {
       "n_cats": 12, 
       "data_reader": "CamVid",
-      "im_root": "/dev/dataset/CamVid",
+      "im_root": "D:/Study/code/CamVid",
       "train_im_anns":"datasets/CamVid/train.txt",
       "val_im_anns":"datasets/CamVid/test.txt", 
       "ims_per_gpu": 2,
@@ -41,7 +44,7 @@
     "dataset3": {
       "n_cats": 36, 
       "data_reader": "A2D2Data",
-      "im_root": "/dev/shm/dataset/a2d2",
+      "im_root": "D:/Study/code/a2d2",
       "train_im_anns":"datasets/A2D2/train.txt",
       "val_im_anns":"datasets/A2D2/val.txt", 
       "ims_per_gpu": 4,
@@ -74,7 +77,9 @@
       "scales": [0.5, 1.0, 2.0],
       "cropsize": [512, 1024],
       "finetune": true,
-      "finetune_from": "res/celoss/model_final.pth"
+      "finetune_from": "res/celoss/model_final.pth",
+      "graph_finetune": false,
+      "graph_finetune_from": "res/celoss/model_final.pth"
     },
     "val": {
       "scales": [0.5, 0.75, 1.0, 1.25, 1.5, 1.75],

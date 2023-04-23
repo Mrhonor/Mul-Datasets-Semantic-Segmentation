@@ -176,6 +176,8 @@ class CamVid(Dataset):
         # print(impth)
 
         img = cv2.imread(impth)[:, :, ::-1]
+        if img is None:
+            print(impth)
         
         # img = cv2.resize(img, (960, 768))
         label = np.array(Image.open(lbpth).convert('RGB'))
@@ -191,7 +193,7 @@ class CamVid(Dataset):
         img, label = im_lb['im'], im_lb['lb']
 
         if self.mode == 'ret_path':
-            return impth, label.unsqueeze(0).detach()
+            return impth, label
         
         return img.detach(), label.unsqueeze(0).detach()
         # return img.detach()

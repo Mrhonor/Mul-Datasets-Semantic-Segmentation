@@ -7,7 +7,7 @@ from .bisenetv2_contrast import BiSeNetV2_Contrast, BiSeNetV2_Contrast_Teacher
 from .bisenetv2_contrast_wn import BiSeNetV2_Contrast_WN
 from .bisenetv2_contrast_bn import BiSeNetV2_Contrast_BN
 from .HRNetv2 import HRNet_W48_CONTRAST, HRNet_W48, HRNet_W48_CLIP, HRNet_W48_GNN
-from .graph_attention_network import GraphAttentionNetwork
+from .graph_attention_network import GAT
 
 model_factory = {
     'bisenetv1': BiSeNetV1,
@@ -20,6 +20,6 @@ model_factory = {
     'hrnet_w48_contrast': HRNet_W48_CONTRAST,
     'hrnet_w48': HRNet_W48, 
     'hrnet_w48_clip': HRNet_W48_CLIP, 
-    'graph_attention_network': GraphAttentionNetwork,
+    'graph_attention_network': GAT,
     'hrnet_w48_gnn': HRNet_W48_GNN
 }

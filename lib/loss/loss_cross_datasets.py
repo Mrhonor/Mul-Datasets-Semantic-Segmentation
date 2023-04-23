@@ -714,10 +714,9 @@ class CrossDatasetsCELoss_CLIP(nn.Module):
     
 class CrossDatasetsCELoss_GNN(nn.Module):
     def __init__(self, configer=None):
-        super(CrossDatasetsCELoss_CLIP, self).__init__()
+        super(CrossDatasetsCELoss_GNN, self).__init__()
         self.configer = configer
         self.n_datasets = self.configer.get('n_datasets')
-        self.num_unify_classes = self.configer.get('num_unify_classes')
         self.num_prototype = self.configer.get('contrast', 'num_prototype')
         self.temperature = self.configer.get('contrast', 'temperature')
         self.with_mulbn = self.configer.get('contrast', 'with_mulbn')
