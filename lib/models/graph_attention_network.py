@@ -1,7 +1,10 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from timm.models.layers import trunc_normal_
 from lib.module.module_helper import GraphAttentionLayer, SpGraphAttentionLayer
+import numpy as np
+import scipy.sparse as sp
 
 
 class GAT(nn.Module):
@@ -17,16 +20,16 @@ class GAT(nn.Module):
         self.nheads = self.configer.get('GNN', 'nheads')
         self.mlp_dim = self.configer.get('GNN', 'mlp_dim')
         
-        self.max_num_unify_class = self.configer.get('GNN', 'max_num_unify_class')
+
         self.output_feat_dim = self.configer.get('GNN', 'output_feat_dim')
         self.dropout_rate = self.configer.get('GNN', 'dropout_rate')
         self.threshold_value = self.configer.get('GNN', 'threshold_value')
 
         self.attentions_layer1 = nn.ModuleList([GraphAttentionLayer(self.nfeat, self.nhid, dropout=self.dropout, alpha=self.alpha, concat=True) for _ in range(self.nheads)])
 
-        self.attentions_layer2 = nn.ModuleList([GraphAttentionLayer(self.nhid * self.nheads, self.nhid * self.nheads, dropout=self.dropout, alpha=self.alpha, concat=True) for _ in range(self.nheads)])
+        self.attentions_layer2 = nn.ModuleList([GraphAttentionLayer(self.nhid * self.nheads, self.nhid, dropout=self.dropout, alpha=self.alpha, concat=True) for _ in range(self.nheads)])
 
-        self.out_att = GraphAttentionLayer(self.nhid * self.nheads * self.nheads, self.att_out_dim, dropout=self.dropout, alpha=self.alpha, concat=False)
+        self.out_att = GraphAttentionLayer(self.nhid * self.nheads, self.att_out_dim, dropout=self.dropout, alpha=self.alpha, concat=False)
         
         self.linear1 = nn.Linear(self.att_out_dim, self.mlp_dim)
         self.relu = nn.ReLU()
@@ -40,6 +43,7 @@ class GAT(nn.Module):
             self.dataset_cats.append(self.configer.get('dataset'+str(i+1), 'n_cats'))
             self.total_cats += self.configer.get('dataset'+str(i+1), 'n_cats')
         
+        self.max_num_unify_class = self.configer.get('GNN', 'unify_ratio') * self.total_cats        
         # self.register_buffer("fix_node_features", torch.randn(self.total_cats, self.nfeat))
         self.unify_node_features = nn.Parameter(torch.randn(self.max_num_unify_class, self.nfeat), requires_grad=True)
         trunc_normal_(self.unify_node_features, std=0.02)
@@ -72,10 +76,13 @@ class GAT(nn.Module):
             max_index, max_value = torch.max(softmax_similar_matrix)
             bi_graph = torch.zero(self.dataset_cats[i], self.max_num_unify_class)
             bi_graph[max_index] = 1
-            bi_graph[max_value < self.threshold_value] = 0
+            
+            this_iter_thresh = 0.3 + (self.threshold_value - 0.3) * self.configer.get('iter') / self.configer.get('lr', 'max_iter')
+            bi_graph[max_value < this_iter_thresh] = 0
+            
             bipartite_graphs.append(bi_graph)
             
-        return bipartite_graphs
+        return bipartite_graphs.T()
             
             
     def init_adjacency_matrix(self):
@@ -98,9 +105,6 @@ class GAT(nn.Module):
         
         self.adj_matrix = normalize_adj(self.adj_matrix)
         
-        
-        
-
 
 class SpGAT(nn.Module):
     def __init__(self, nfeat, nhid, nclass, dropout, alpha, nheads):

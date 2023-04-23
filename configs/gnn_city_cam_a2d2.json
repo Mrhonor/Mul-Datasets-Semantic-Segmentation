@@ -8,6 +8,16 @@
       "drop_stage4": false,
       "full_res_stem": false
     },
+    "GNN": {
+      "nfeat": 1024,
+      "nhid": 128,
+      "nhead": 8,
+      "att_out_dim": 1024,
+      "mlp_dim": 512,
+      "output_feat_dim": 512,
+      "dropout_rate": 0.5,
+      "unify_ratio": 0.9
+    },
     "dataset1": {
       "n_cats": 19,
       "data_reader": "CityScapes",
@@ -63,7 +73,7 @@
     "train": {
       "scales": [0.5, 1.0, 2.0],
       "cropsize": [512, 1024],
-      "finetune": false,
+      "finetune": true,
       "finetune_from": "res/celoss/model_final.pth"
     },
     "val": {

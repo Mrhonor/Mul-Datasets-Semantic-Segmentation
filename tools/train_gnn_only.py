@@ -132,80 +132,7 @@ def set_ema_model(configer):
     net.eval()
     return net
 
-def set_optimizer(model, configer):
-    if hasattr(model, 'get_params'):
-        wd_params, nowd_params, lr_mul_wd_params, lr_mul_nowd_params = model.get_params()
-        #  wd_val = cfg.weight_decay
-        wd_val = 0
-        params_list = [
-            {'params': wd_params, },
-            {'params': nowd_params, 'weight_decay': wd_val},
-            {'params': lr_mul_wd_params, 'lr': configer.get('lr', 'lr_start')},
-            {'params': lr_mul_nowd_params, 'weight_decay': wd_val, 'lr': configer.get('lr', 'lr_start')},
-        ]
-    else:
-        wd_params, non_wd_params = [], []
-        for name, param in model.named_parameters():
-            if param.requires_grad == False:
-                continue
-            
-            if param.dim() == 1:
-                non_wd_params.append(param)
-            elif param.dim() == 2 or param.dim() == 4:
-                wd_params.append(param)
-        params_list = [
-            {'params': wd_params, },
-            {'params': non_wd_params, 'weight_decay': 0},
-        ]
-    
-    if configer.get('optim') == 'SGD':
-        optim = torch.optim.SGD(
-            params_list,
-            lr=configer.get('lr', 'lr_start'),
-            momentum=0.9,
-            weight_decay=configer.get('lr', 'weight_decay'),
-        )
-    elif configer.get('optim') == 'AdamW':
-        optim = torch.optim.AdamW(
-            params_list,
-            lr=configer.get('lr', 'lr_start'),
-        )
-        
-    return optim
 
-def set_model_dist(net):
-    local_rank = dist.get_rank()
-    net = nn.parallel.DistributedDataParallel(
-        net,
-        device_ids=[local_rank, ],
-        find_unused_parameters=False,
-        output_device=local_rank
-        )
-    return net
-def set_ema_model(configer):
-    logger = logging.getLogger()
-    # net = NULL
-    # if config_files is NULL:
-    #     net = model_factory[config_file.model_type](config_file.n_cats)
-    # 修改判定
-    # if len(config_files) == 0:
-    #     net = model_factory[config_file.model_type](config_file.n_cats)
-    # else:
-    #     n_classes = [cfg.n_cats for cfg in config_files]
-    #     net = model_factory[config_file.model_type](config_file.n_cats, 'train', 2, *n_classes)
-
-    net = model_factory[configer.get('model_name') + '_ema'](configer)
-
-    if configer.get('train', 'finetune'):
-        logger.info(f"ema load pretrained weights from {configer.get('train', 'finetune_from')}")
-        net.load_state_dict(torch.load(configer.get('train', 'finetune_from'), map_location='cpu'), strict=False)
-
-        
-    if configer.get('use_sync_bn'): 
-        net = nn.SyncBatchNorm.convert_sync_batchnorm(net)
-    net.cuda()
-    net.eval()
-    return net
 
 def set_optimizer(model, configer):
     if hasattr(model, 'get_params'):
@@ -398,6 +325,7 @@ def train():
 
     ## optimizer
     optim = set_optimizer(net, configer)
+    gnn_optim = set_optimizer(graph_net, configer)
 
     ## mixed precision training
     scaler = amp.GradScaler()
@@ -682,7 +610,7 @@ def train():
 
 
 def main():
-    if True:
+    if False:
         local_rank = int(os.environ["LOCAL_RANK"])
         # torch.cuda.set_device(args.local_rank)
         # dist.init_process_group(
