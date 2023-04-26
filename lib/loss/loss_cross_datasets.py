@@ -745,6 +745,7 @@ class CrossDatasetsCELoss_GNN(nn.Module):
             remap_logits = torch.einsum('bchw, nc -> bnhw', logits[dataset_ids==i], bi_graphs[i])
             remap_logits = F.interpolate(remap_logits, size=(target.size(1), target.size(2)), mode="bilinear", align_corners=True)
             
+            # print(torch.sum(bi_graphs[i]))
             if loss is None:
                 loss = self.CELoss(remap_logits, target[dataset_ids==i])
             else:

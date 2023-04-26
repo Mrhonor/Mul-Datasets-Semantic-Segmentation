@@ -99,8 +99,8 @@ class MscEvalV0_Contrast(object):
 
     def __init__(self, configer, scales=(0.5, ), flip=False, ignore_label=255):
         self.configer = configer
-        self.num_unify_classes = self.configer.get('num_unify_classes')
-        self.class_Remaper = ClassRemap(configer=self.configer)
+        # self.num_unify_classes = self.configer.get('num_unify_classes')
+        # self.class_Remaper = ClassRemap(configer=self.configer)
         self.scales = scales
         self.flip = flip
         self.ignore_label = ignore_label

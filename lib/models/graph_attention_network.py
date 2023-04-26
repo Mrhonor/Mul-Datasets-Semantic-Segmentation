@@ -77,13 +77,15 @@ class GAT(nn.Module):
             # softmax_similar_matrix[softmax_similar_matrix < self.threshold_value] = 0
             max_value, max_index = torch.max(softmax_similar_matrix, dim=0)
             bi_graph = torch.zeros(self.dataset_cats[i], self.max_num_unify_class)
-            bi_graph[max_index] = 1
-            
-            this_iter_thresh = 0.3 + (self.threshold_value - 0.3) * self.configer.get('iter') / self.configer.get('lr', 'max_iter')
-            bi_graph[:, max_value < this_iter_thresh] = 0
-            
             if x.is_cuda:
                 bi_graph = bi_graph.cuda()
+
+            bi_graph[max_index] = 1
+            
+            # this_iter_thresh = 0.3 + (self.threshold_value - 0.3) * self.configer.get('iter') / self.configer.get('lr', 'max_iter')
+            # this_iter_thresh = self.threshold_value * self.configer.get('iter') / self.configer.get('lr', 'max_iter')
+            # bi_graph[:, max_value < this_iter_thresh] = 0
+            
             
             bipartite_graphs.append(bi_graph)
             

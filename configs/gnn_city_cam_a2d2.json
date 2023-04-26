@@ -28,7 +28,7 @@
       "train_im_anns":"datasets/Cityscapes/train.txt",
       "val_im_anns":"datasets/Cityscapes/val.txt", 
       "ims_per_gpu": 2,
-      "eval_ims_per_gpu": 8,
+      "eval_ims_per_gpu": 1,
       "label_names": ["road", "sidewalk", "building", "wall", "fence", "pole", "traffic light", "traffic sign", "vegetation", "terrain", "sky", "person", "rider", "car", "truck", "bus", "train", "motorcycle", "bicycle"]
     },
     "dataset2": {
@@ -38,7 +38,7 @@
       "train_im_anns":"datasets/CamVid/train.txt",
       "val_im_anns":"datasets/CamVid/test.txt", 
       "ims_per_gpu": 2,
-      "eval_ims_per_gpu": 8,
+      "eval_ims_per_gpu": 1,
       "label_names": ["Sky", "Building", "Column_Pole", "Road", "Sidewalk", "Tree", "SignSymbol", "Fence", "Car", "Pedestrian", "Bicyclist", "Wall"]
     },
     "dataset3": {
@@ -48,7 +48,7 @@
       "train_im_anns":"datasets/A2D2/train.txt",
       "val_im_anns":"datasets/A2D2/val.txt", 
       "ims_per_gpu": 4,
-      "eval_ims_per_gpu": 8,
+      "eval_ims_per_gpu": 1,
       "label_names": ["Car", "Bicycle", "Pedestrian", "Truck", "Small vehicles", "Traffic signal", "traffic sign", "Utility vehicle", "Sidebars", "Speed bumper", "Curbstone", "Solid line", "Irrelevant signs", "Road blocks", "Tractor", "Non-drivable street", "Zebra crossing", "Obstacles / trash", "Poles", "RD restricted area", "Animals", "Grid structure", "Signal corpus", "Drivable cobblestone", "Electronic traffic", "Slow drive area", "Nature object", "Parking area", "Sidewalk", "Ego car", "Painted driv. instr.", "Traffic guide obj.", "Dash line", "RD normal street", "Sky", "Buildings"]
     },
     "n_bn": 1,
@@ -69,7 +69,7 @@
     "lr": {
       "lr_start": 5e-3,
       "weight_decay": 5e-5,
-      "warmup_iters": 0,
+      "warmup_iters": 5000,
       "fix_param_iters": 0,
       "max_iter": 150000
     },
@@ -79,7 +79,7 @@
       "finetune": true,
       "finetune_from": "res/celoss/model_final.pth",
       "graph_finetune": false,
-      "graph_finetune_from": "res/celoss/model_final.pth"
+      "graph_finetune_from": "res/celoss/model_2000.pth"
     },
     "val": {
       "scales": [0.5, 0.75, 1.0, 1.25, 1.5, 1.75],

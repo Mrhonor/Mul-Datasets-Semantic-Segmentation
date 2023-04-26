@@ -559,7 +559,7 @@ def train():
             
 
         if (i + 1) % 5000 == 0:
-            save_pth = osp.join(configer.get('res_save_pth'), 'model_{}.pth'.format(i+1))
+            save_pth = osp.join(configer.get('res_save_pth'), 'graph_model_{}.pth'.format(i+1))
             logger.info('\nsave models to {}'.format(save_pth))
 
             if fix_graph == False:
@@ -573,13 +573,14 @@ def train():
                 # eval_model = eval_model_contrast
                 eval_model_func = eval_model_contrast
 
+            optim.zero_grad()
             if is_distributed():
                 net.module.set_unify_prototype(unify_prototype)
-                net.module.set_bipartite_graph(bi_graphs)
+                net.module.set_bipartite_graphs(bi_graphs)
                 heads, mious = eval_model_func(configer, net.module)
             else:
                 net.set_unify_prototype(unify_prototype)
-                net.set_bipartite_graph(bi_graphs)
+                net.set_bipartite_graphs(bi_graphs)
                 heads, mious = eval_model_func(configer, net)
                 
             writer.add_scalars("mious",{"Cityscapes":mious[CITY_ID],"Camvid":mious[CAM_ID]},configer.get("iter")+1)
@@ -588,10 +589,10 @@ def train():
             net.train()
             
             if is_distributed():
-                state = net.module.state_dict()
+                state = graph_net.module.state_dict()
                 if dist.get_rank() == 0: torch.save(state, save_pth)
             else:
-                state = net.state_dict()
+                state = graph_net.state_dict()
                 torch.save(state, save_pth)
 
         lr_schdr.step()
@@ -602,10 +603,10 @@ def train():
     
     writer.close()
     if is_distributed():
-        state = net.module.state_dict()
+        state = graph_net.module.state_dict()
         if dist.get_rank() == 0: torch.save(state, save_pth)
     else:
-        state = net.state_dict()
+        state = graph_net.state_dict()
         torch.save(state, save_pth)
 
 

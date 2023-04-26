@@ -599,10 +599,9 @@ class HRNet_W48_GNN(nn.Module):
         if self.aux_mode == 'train':
             return {'seg':emb}
         elif self.aux_mode == 'eval':
-            
-            logits = torch.einsum('bchw, nc -> bnhw', logits, unify_prototype)
-            remap_logits = torch.einsum('bchw, nc -> bnhw', logits[dataset], bi_graphs[dataset])
-            remap_logits = F.interpolate(remap_logits, size=(target.size(1), target.size(2)), mode="bilinear", align_corners=True)
+            logits = torch.einsum('bchw, nc -> bnhw', emb, self.unify_prototype)
+            remap_logits = torch.einsum('bchw, nc -> bnhw', logits, self.bipartite_graphs[dataset])
+            # remap_logits = F.interpolate(remap_logits, size=(target.size(1), target.size(2)), mode="bilinear", align_corners=True)
             return remap_logits
 
     def init_weights(self):
