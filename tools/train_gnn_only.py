@@ -317,6 +317,8 @@ def train():
     ## model
     net = set_model(configer=configer)
     graph_net = set_graph_model(configer=configer)
+    print("net: ", next(net.parameters()).device)
+    print("graph_net: ", next(graph_net.parameters()).device)
     
     if use_ema:
         ema_net = set_ema_model(configer=configer)

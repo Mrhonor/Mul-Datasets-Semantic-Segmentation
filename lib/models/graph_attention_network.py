@@ -73,21 +73,21 @@ class GAT(nn.Module):
             this_feats = x[cur_cat:cur_cat+self.dataset_cats[i]]
             cur_cat += self.dataset_cats[i]
             similar_matrix = torch.einsum('nc, mc -> nm', this_feats, unify_feats)
-            softmax_similar_matrix = F.softmax(similar_matrix, dim=1)
+            softmax_similar_matrix = F.softmax(similar_matrix / 0.07, dim=1)
             # softmax_similar_matrix[softmax_similar_matrix < self.threshold_value] = 0
-            max_value, max_index = torch.max(softmax_similar_matrix, dim=0)
-            bi_graph = torch.zeros(self.dataset_cats[i], self.max_num_unify_class)
-            if x.is_cuda:
-                bi_graph = bi_graph.cuda()
+            # max_value, max_index = torch.max(softmax_similar_matrix, dim=0)
+            # bi_graph = torch.zeros(self.dataset_cats[i], self.max_num_unify_class)
+            # if x.is_cuda:
+            #     bi_graph = bi_graph.cuda()
 
-            bi_graph[max_index] = 1
+            # bi_graph[max_index] = 1
             
             # this_iter_thresh = 0.3 + (self.threshold_value - 0.3) * self.configer.get('iter') / self.configer.get('lr', 'max_iter')
             # this_iter_thresh = self.threshold_value * self.configer.get('iter') / self.configer.get('lr', 'max_iter')
             # bi_graph[:, max_value < this_iter_thresh] = 0
             
             
-            bipartite_graphs.append(bi_graph)
+            bipartite_graphs.append(softmax_similar_matrix)
             
         return bipartite_graphs
             
