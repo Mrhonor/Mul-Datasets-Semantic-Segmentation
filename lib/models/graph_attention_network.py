@@ -14,6 +14,7 @@ class GAT(nn.Module):
         
         self.configer = configer
         self.nfeat = self.configer.get('GNN', 'nfeat')
+        self.nfeat_out = self.configer.get('GNN', 'nfeat_out')
         self.nhid = self.configer.get('GNN', 'nhid')
         self.att_out_dim = self.configer.get('GNN', 'att_out_dim')
         self.alpha = self.configer.get('GNN', 'alpha')
@@ -24,16 +25,22 @@ class GAT(nn.Module):
         self.output_feat_dim = self.configer.get('GNN', 'output_feat_dim')
         self.dropout_rate = self.configer.get('GNN', 'dropout_rate')
         self.threshold_value = self.configer.get('GNN', 'threshold_value')
+        self.fix_arch = False
+        self.fix_architecture_alter_iter = self.configer.get('GNN', 'fix_architecture_alter_iter')
 
-        self.attentions_layer1 = nn.ModuleList([GraphAttentionLayer(self.nfeat, self.nhid, dropout=self.dropout_rate, alpha=self.alpha, concat=True) for _ in range(self.nheads)])
+        self.linear_before = nn.Linear(self.feat, self.nfeat_out)
+        self.relu = nn.ReLU()
+
+        self.attentions_layer1 = nn.ModuleList([GraphAttentionLayer(self.nfeat_out, self.nhid, dropout=self.dropout_rate, alpha=self.alpha, concat=True) for _ in range(self.nheads)])
 
         self.attentions_layer2 = nn.ModuleList([GraphAttentionLayer(self.nhid * self.nheads, self.nhid, dropout=self.dropout_rate, alpha=self.alpha, concat=True) for _ in range(self.nheads)])
 
         self.out_att = GraphAttentionLayer(self.nhid * self.nheads, self.att_out_dim, dropout=self.dropout_rate, alpha=self.alpha, concat=False)
         
         self.linear1 = nn.Linear(self.att_out_dim, self.mlp_dim)
-        self.relu = nn.ReLU()
+        
         self.linear2 = nn.Linear(self.mlp_dim, self.output_feat_dim) 
+
         
         ## datasets Node features
         self.n_datasets = self.configer.get('n_datasets')
@@ -52,23 +59,35 @@ class GAT(nn.Module):
         self.init_adjacency_matrix()
         
     def forward(self, x):
+        x = self.linear_before(x)
+        x = self.relu(x)
         x = F.dropout(x, self.dropout_rate, training=self.training)
         x = torch.cat([att(x, self.adj_matrix) for att in self.attentions_layer1], dim=1)
-        x = F.dropout(x, self.dropout_rate, training=self.training)
+        # x = F.dropout(x, self.dropout_rate, training=self.training)
         x = torch.cat([att(x, self.adj_matrix) for att in self.attentions_layer2], dim=1)
         x = F.dropout(x, self.dropout_rate, training=self.training)
         x = F.elu(self.out_att(x, self.adj_matrix))
         x = self.linear1(x)
-        x = self.relu(x)
-        x = self.linear2(x)
+        arch_x = self.relu(x)
+        arch_x = self.linear2(arch_x)
         
-        return x[self.total_cats:], self.calc_bipartite_graph(x)
+        return x[self.total_cats:], self.calc_bipartite_graph(arch_x)
 
     def calc_bipartite_graph(self, x):
+        this_fix_arch = self.fix_arch
+        cur_iter = self.configer.get('iter')
+        if cur_iter / self.fix_architecture_alter_iter % 2 == 0:
+            self.fix_arch == False
+        else:
+            self.fix_arch == True    
+        
+        if this_fix_arch:    
+            return self.bipartite_graphs
+        
         unify_feats = x[self.total_cats:]
         
         cur_cat = 0
-        bipartite_graphs = []
+        self.bipartite_graphs = []
         for i in range(0, self.n_datasets):
             this_feats = x[cur_cat:cur_cat+self.dataset_cats[i]]
             cur_cat += self.dataset_cats[i]
@@ -87,9 +106,9 @@ class GAT(nn.Module):
             # bi_graph[:, max_value < this_iter_thresh] = 0
             
             
-            bipartite_graphs.append(softmax_similar_matrix)
+            self.bipartite_graphs.append(softmax_similar_matrix)
             
-        return bipartite_graphs
+        return self.bipartite_graphsS
             
             
     def init_adjacency_matrix(self):
