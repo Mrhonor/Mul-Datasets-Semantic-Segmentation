@@ -311,7 +311,7 @@ def train():
     ## dataset
 
     # dl = get_single_data_loader(configer, aux_mode='train', distributed=is_dist)
-    dl_city, dl_cam, dl_a2d2 = get_data_loader(configer, aux_mode='train', distributed=is_dist)
+    dls = get_data_loader(configer, aux_mode='train', distributed=is_dist)
     # dl_city, dl_cam = get_data_loader(configer, aux_mode='train', distributed=is_dist)
     
     ## model
@@ -343,14 +343,12 @@ def train():
     # 两个数据集分别处理
     # 使用迭代器读取数据
     
-    # dl_iter = iter(dl)
-    city_iter = iter(dl_city)
-    cam_iter = iter(dl_cam)
-    a2d2_iter = iter(dl_a2d2)
+    dl_iters = [iter(dl) for dl in dls]
     
     ## train loop
     # for it, (im, lb) in enumerate(dl):
     starti = 0
+
     use_dataset_aux_head = configer.get('dataset_aux_head', 'use_dataset_aux_head')
     train_aux = use_dataset_aux_head
     aux_iter = 0
@@ -390,56 +388,44 @@ def train():
         #     im, lb = im_lb
         # epoch = i * (configer.get('dataset1', 'ims_per_gpu') + configer.get('dataset2', 'ims_per_gpu')) / 2976
 
-        try:
-            im_cam, lb_cam = next(cam_iter)
-            if not im_cam.size()[0] == configer.get('dataset2', 'ims_per_gpu'):
-                raise StopIteration
-        except StopIteration:
-            cam_iter = iter(dl_cam)
-            im_cam, lb_cam = next(cam_iter)
-        cam_epoch = i * configer.get('dataset2', 'ims_per_gpu') / 469
-        try:
-            im_city, lb_city = next(city_iter)
-            if not im_city.size()[0] == configer.get('dataset1', 'ims_per_gpu'):
-                raise StopIteration
-        except StopIteration:
-            city_iter = iter(dl_city)
-            im_city, lb_city = next(city_iter)
-        city_epoch = i * configer.get('dataset1', 'ims_per_gpu') / 2976
-        try:
-            im_a2d2, lb_a2d2 = next(a2d2_iter)
-            if not im_a2d2.size()[0] == configer.get('dataset3', 'ims_per_gpu'):
-                raise StopIteration
-        except StopIteration:
-            a2d2_iter = iter(dl_a2d2)
-            im_a2d2, lb_a2d2 = next(a2d2_iter)
-        a2d2_epoch = i * configer.get('dataset3', 'ims_per_gpu') / 30000
 
-        # im = torch.cat((im_city, im_cam), dim=0)
-        # lb = torch.cat((lb_city, lb_cam), dim=0)
+        ims = []
+        lbs = []        
+        for i in range(0,len(dl_iters)):
+            try:
+                im, lb = next(dl_iters[i])
+                if not im.size()[0] == configer.get('dataset'+str(i+1), 'ims_per_gpu'):
+                    raise StopIteration
+            except StopIteration:
+                dl_iters[i] = iter(dls[i])
+                
+            ims.append(im)
+            lbs.append(lb)
+                
 
-        im = torch.cat((im_city, im_cam, im_a2d2), dim=0)
-        lb = torch.cat((lb_city, lb_cam, lb_a2d2), dim=0)
+        im = torch.cat(ims, dim=0)
+        lb = torch.cat(lbs, dim=0)
 
         im = im.cuda()
         lb = lb.cuda()
-        # dataset_lbs = torch.tensor(dataset_lbs).cuda()
-        dataset_lbs = torch.cat((torch.zeros(lb_city.shape[0], dtype=torch.int), torch.ones(lb_cam.shape[0], dtype=torch.int), 2*torch.ones(lb_a2d2.shape[0], dtype=torch.int)), dim=0)
-        # dataset_lbs = torch.cat((torch.zeros(lb_city.shape[0], dtype=torch.int), torch.ones(lb_cam.shape[0], dtype=torch.int)), dim=0)
+
+        dataset_lbs = torch.cat([torch.zeros(this_lb.shape[0], dtype=torch.int) for this_lb in lbs], dim=0)
         dataset_lbs = dataset_lbs.cuda()
         # print(dataset_lbs)
 
 
         lb = torch.squeeze(lb, 1)
-        # print(lb_city.shape)
-        # print(lb_cam.shape)
-        # perm_index = torch.randperm(im.shape[0])
-        # im = im[perm_index]
-        # lb = lb[perm_index]
+
 
         SEG = 0
         GNN = 1
-        train_seg_or_gnn = GNN
+        if configer.get('iter') // configer.get('train', 'seg_gnn_alter_iters') % 2 == 0:
+            train_seg_or_gnn = SEG
+        else:
+            train_seg_or_gnn = GNN
+        # net.eval()
+        # with torch.no_grad():
+        #     seg_out = net(im)
 
         optim.zero_grad()
         with amp.autocast(enabled=configer.get('use_fp16')):
@@ -479,6 +465,8 @@ def train():
                     with torch.no_grad():
                         input_feats = torch.cat([graph_node_features, graph_net.unify_node_features], dim=0)
                         unify_prototype, bi_graphs = graph_net(input_feats)
+                        unify_prototype = unify_prototype.detach()
+                        bi_graphs = [bigh.detach() for bigh in bi_graphs]
                         fix_graph = True
                 
             seg_out['seg'] = seg_out['seg'].detach()
@@ -510,21 +498,21 @@ def train():
         # with torch.autograd.detect_anomaly():
         
         scaler.scale(backward_loss).backward()
+        print(backward_loss.item())
+            
         # print('after backward')
 
         # configer.plus_one('iters')
         # self.configer.plus_one('iters')
 
-        # scaler.scale(loss).backward()
-        for param in graph_net.parameters():
-            if torch.isnan(param.grad).any() or torch.isinf(param.grad).any():
-                print("Graph NaN or Inf value found in gradients")
+        # for name, param in graph_net.named_parameters():
+        #     if torch.isnan(param.grad).any() or torch.isinf(param.grad).any():
+        #         print("Graph NaN or Inf value found in gradients")
 
         # for param in net.parameters():
         #     if torch.isnan(param.grad).any() or torch.isinf(param.grad).any():
         #         print("seg NaN or Inf value found in gradients")
         
-        print(backward_loss.item())
         scaler.step(gnn_optim)
         scaler.update()
         torch.cuda.synchronize()
@@ -544,9 +532,9 @@ def train():
                 loss_domain_meter.update(loss_domain)
             if with_aux:
                 _ = [mter.update(lss.item()) for mter, lss in zip(loss_aux_meters, loss_aux)]
-                
-            # if i >= configer.get('lr', 'warmup_iters') and use_contrast:
-            #     loss_contrast_meter.update(loss_contrast.item())
+            
+        # if i >= configer.get('lr', 'warmup_iters') and use_contrast:
+        #     loss_contrast_meter.update(loss_contrast.item())
 
         
 

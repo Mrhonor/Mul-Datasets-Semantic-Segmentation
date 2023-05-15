@@ -570,7 +570,8 @@ class HRNet_W48_GNN(nn.Module):
         self.proj_dim = self.configer.get('contrast', 'proj_dim')
         self.full_res_stem = self.configer.get('hrnet', 'full_res_stem')
         self.num_prototype = self.configer.get('contrast', 'num_prototype')
-        self.output_feat_dim = self.configer.get('GNN', 'output_feat_dim')
+        # self.output_feat_dim = self.configer.get('GNN', 'output_feat_dim')
+        self.output_feat_dim = self.configer.get('GNN', 'mlp_dim')
         
         if self.full_res_stem:
             up_fac = 1
@@ -639,11 +640,11 @@ class HRNet_W48_GNN(nn.Module):
                 
                 if param.dim() == 1:
                     nowd_params.append(param)
-                elif param.dim() == 4:
+                elif param.dim() == 4 or param.dim() == 2:
                     wd_params.append(param)
                 else:
                     nowd_params.append(param)
-                    # print(param.dim())
+                    print(param.dim())
                     # print(param)
                     print(name)
 
