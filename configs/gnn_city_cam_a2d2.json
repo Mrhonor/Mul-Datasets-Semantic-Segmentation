@@ -11,7 +11,8 @@
     "GNN": {
       "model_name": "graph_attention_network",
       "nfeat": 1024,
-      "nfeat_out": 256,
+      "nfeat_out": 512,
+      "nfeat_adj": 256,
       "nhid": 64,
       "nheads": 8,
       "att_out_dim": 512,
@@ -21,7 +22,8 @@
       "unify_ratio": 1,
       "threshold_value": 0.95,
       "alpha": 0.2,
-      "fix_architecture_alter_iter": 2000
+      "fix_architecture_alter_iter": 2000,
+      "calc_bipartite": false
     },
     "dataset1": {
       "n_cats": 19,
