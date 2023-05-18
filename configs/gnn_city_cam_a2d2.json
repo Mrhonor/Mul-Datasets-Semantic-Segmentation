@@ -9,7 +9,7 @@
       "full_res_stem": false
     },
     "GNN": {
-      "model_name": "graph_attention_network",
+      "model_name": "learnable_topology_GAT",
       "nfeat": 1024,
       "nfeat_out": 512,
       "nfeat_adj": 256,
@@ -69,7 +69,7 @@
       "m": 0,
       "gamma": 12,
       "with_spa": true,
-      "spa_weight": 1,
+      "spa_loss_weight": 1,
       "with_max_enc": true,
       "max_enc_weight": 1
     },

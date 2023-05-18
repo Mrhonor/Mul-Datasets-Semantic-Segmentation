@@ -423,6 +423,14 @@ class Heter_GAT(nn.Module):
                     # print(param)
                     # print(name)
 
+        wd_params, nowd_params, lr_mul_wd_params, lr_mul_nowd_params = [], [], [], []
+        for name, child in self.named_children():
+            if 'head' in name or 'aux' in name:
+                add_param_to_list(child, lr_mul_wd_params, lr_mul_nowd_params)
+            else:
+                add_param_to_list(child, wd_params, nowd_params)
+        return wd_params, nowd_params, lr_mul_wd_params, lr_mul_nowd_params
+
 class Learnable_Topology_GAT(nn.Module):
     def __init__(self, configer):
         """Dense version of GAT."""
@@ -479,8 +487,8 @@ class Learnable_Topology_GAT(nn.Module):
         trunc_normal_(self.unify_node_features, std=0.02)
         
         ## Graph adjacency matrix
-        self.adj_matrix = nn.parameter(torch.zeros(self.total_cats+self.max_num_unify_class, self.total_cats+self.max_num_unify_class), requires_grad=True)
-        self.init_adjacency_matrix()
+        self.adj_matrix = nn.Parameter(torch.zeros(self.total_cats+self.max_num_unify_class, self.total_cats+self.max_num_unify_class), requires_grad=True)
+        # self.init_adjacency_matrix()
         
     def forward(self, x):
         x = self.linear_before(x)
@@ -510,7 +518,7 @@ class Learnable_Topology_GAT(nn.Module):
             this_bipartite_graph = F.softmax(this_bipartite_graph/0.05, dim=0)
             self.bipartite_graphs.append(this_bipartite_graph)
             cur_cat += self.dataset_cats[i]
-        return 
+        return self.bipartite_graphs
 
     def calc_bipartite_graph(self, x):
         this_fix_arch = self.fix_arch
@@ -577,14 +585,17 @@ class Learnable_Topology_GAT(nn.Module):
         similar_matrix = torch.einsum('nc, mc -> nm', norm_adj_feat, norm_adj_feat)
         
         def normalize_adj(mx):
-            rowsum = np.array(mx.sum(1))
-            r_inv_sqrt = np.power(rowsum, -0.5).flatten()
-            r_inv_sqrt[np.isinf(r_inv_sqrt)] = 0.
-            r_mat_inv_sqrt = torch.diag(torch.tensor(r_inv_sqrt))
+        
+            rowsum = mx.sum(1)
+            r_inv_sqrt = torch.diag(1 / rowsum)
+            r_inv_sqrt[r_inv_sqrt==torch.inf] = 0.
+            
+            if mx.is_cuda:
+                r_inv_sqrt = r_inv_sqrt.cuda()
             
             # r_mat_inv_sqrt = torch.diag(torch.tensor(r_inv_sqrt))
             # print(r_mat_inv_sqrt)
-            return torch.mm(r_mat_inv_sqrt, torch.mm(mx, r_mat_inv_sqrt))
+            return torch.mm(r_inv_sqrt, mx)
         
         similar_matrix = normalize_adj(similar_matrix)
         return similar_matrix
@@ -604,3 +615,11 @@ class Learnable_Topology_GAT(nn.Module):
                     # print(param.dim())
                     # print(param)
                     # print(name)
+
+        wd_params, nowd_params, lr_mul_wd_params, lr_mul_nowd_params = [], [], [], []
+        for name, child in self.named_children():
+            if 'head' in name or 'aux' in name:
+                add_param_to_list(child, lr_mul_wd_params, lr_mul_nowd_params)
+            else:
+                add_param_to_list(child, wd_params, nowd_params)
+        return wd_params, nowd_params, lr_mul_wd_params, lr_mul_nowd_params
