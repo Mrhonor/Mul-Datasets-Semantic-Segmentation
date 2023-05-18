@@ -506,7 +506,9 @@ class Learnable_Topology_GAT(nn.Module):
         self.bipartite_graphs = []
         cur_cat = 0
         for i in range(0, self.n_datasets):
-            self.bipartite_graphs.append(adj[cur_cat:cur_cat+self.dataset_cats[i], self.total_cats:])
+            this_bipartite_graph = adj[cur_cat:cur_cat+self.dataset_cats[i], self.total_cats:]
+            this_bipartite_graph = F.softmax(this_bipartite_graph/0.05, dim=0)
+            self.bipartite_graphs.append(this_bipartite_graph)
             cur_cat += self.dataset_cats[i]
         return 
 

@@ -67,7 +67,11 @@
       "ignore_index": 255,
       "domain_loss_weight": 1,
       "m": 0,
-      "gamma": 12
+      "gamma": 12,
+      "with_spa": true,
+      "spa_weight": 1,
+      "with_max_enc": true,
+      "max_enc_weight": 1
     },
     "use_ema": false,
     "lr": {

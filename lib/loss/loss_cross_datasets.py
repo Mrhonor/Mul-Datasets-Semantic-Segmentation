@@ -723,12 +723,19 @@ class CrossDatasetsCELoss_GNN(nn.Module):
         self.reweight = self.configer.get('loss', 'reweight')
         self.ignore_index = self.configer.get('loss', 'ignore_index')
         self.with_unify_label = self.configer.get('loss', 'with_unify_label')
+        self.with_spa = self.configer.get('loss', 'with_spa')
+        self.spa_loss_weight = self.configer.get('loss', 'spa_loss_weight')
+        self.with_max_enc = self.configer.get('loss', 'with_max_enc')
+        self.max_enc_weight = self.configer.get('loss', 'max_enc_weight')
 
         self.n_cats = []
         for i in range(1, self.n_datasets+1):
             self.n_cats.append(self.configer.get('dataset'+str(i), 'n_cats'))
 
         self.CELoss = torch.nn.CrossEntropyLoss(ignore_index=255)
+        
+        if self.with_max_enc:
+            self.MSE_loss = torch.nn.MSELoss()
 
     def forward(self, preds, target, dataset_ids, is_warmup=False):
         logits = preds['seg']
@@ -752,11 +759,18 @@ class CrossDatasetsCELoss_GNN(nn.Module):
                 loss = self.CELoss(remap_logits, target[dataset_ids==i])
             else:
                 loss = loss + self.CELoss(remap_logits, target[dataset_ids==i])
+
+            if self.with_spa:
+                spa_loss = self.spa_loss_weight * torch.norm(bi_graphs[i], p='fro')^2
+                loss = loss + spa_loss
+            
+            if self.with_max_enc:
+                max_enc_loss = self.max_enc_weight * self.MSE_loss(torch.max(bi_graphs[i], dim=0)[0], torch.ones(bi_graphs[i].size(1)).cuda())
+                loss = loss + max_enc_loss
                    
         return loss
     
     
-
 if __name__ == "__main__":
     test_CrossDatasetsCELoss()
     # test_LabelToOneHot()

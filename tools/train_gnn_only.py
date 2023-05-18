@@ -528,8 +528,8 @@ def train():
         
         if not use_dataset_aux_head or i > aux_iter:
             loss_pre_meter.update(loss_seg.item()) 
-            if with_domain_adversarial:
-                loss_domain_meter.update(loss_domain)
+            # if with_domain_adversarial:
+            #     loss_domain_meter.update(loss_domain)
             if with_aux:
                 _ = [mter.update(lss.item()) for mter, lss in zip(loss_aux_meters, loss_aux)]
             
@@ -544,7 +544,7 @@ def train():
             lr = lr_schdr.get_lr()
             lr = sum(lr) / len(lr)
             print_log_msg(
-                i, 0, city_epoch, configer.get('lr', 'max_iter')+starti, lr, time_meter, loss_meter,
+                i, 0, 0, configer.get('lr', 'max_iter')+starti, lr, time_meter, loss_meter,
                 loss_pre_meter, loss_aux_meters, loss_contrast_meter, loss_domain_meter, kl_loss_meter)
             
 
