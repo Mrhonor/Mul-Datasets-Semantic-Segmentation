@@ -23,7 +23,7 @@ from lib.ohem_ce_loss import OhemCELoss
 from lib.lr_scheduler import WarmupPolyLrScheduler
 from lib.meters import TimeMeter, AvgMeter
 from lib.logger import setup_logger, print_log_msg
-from lib.loss.loss_cross_datasets import CrossDatasetsLoss, CrossDatasetsCELoss, CrossDatasetsCELoss_KMeans, CrossDatasetsCELoss_CLIP, CrossDatasetsCELoss_GNN
+from lib.loss.loss_cross_datasets import CrossDatasetsLoss, CrossDatasetsCELoss, CrossDatasetsCELoss_KMeans, CrossDatasetsCELoss_CLIP, CrossDatasetsCELoss_GNN, CrossDatasetsCELoss_AdvGNN
 from lib.class_remap import ClassRemap
 
 from tools.configer import Configer
@@ -162,8 +162,39 @@ def set_optimizer(model, configer):
         optim = torch.optim.AdamW(
             params_list,
             lr=configer.get('lr', 'lr_start'),
+            weight_decay=configer.get('lr', 'weight_decay'),
         )
-        
+    
+    return optim
+
+def set_optimizerD(model, configer):
+    if hasattr(model, 'get_discri_params'):
+        wd_params, nowd_params, lr_mul_wd_params, lr_mul_nowd_params = model.get_params()
+        #  wd_val = cfg.weight_decay
+        wd_val = 0
+        params_list = [
+            {'params': wd_params, },
+            {'params': nowd_params, 'weight_decay': wd_val},
+            {'params': lr_mul_wd_params, 'lr': configer.get('lr', 'lr_start')},
+            {'params': lr_mul_nowd_params, 'weight_decay': wd_val, 'lr': configer.get('lr', 'lr_start')},
+        ]
+    else:
+        return None
+    
+    if configer.get('optim') == 'SGD':
+        optim = torch.optim.SGD(
+            params_list,
+            lr=configer.get('lr', 'lr_start'),
+            momentum=0.9,
+            weight_decay=configer.get('lr', 'weight_decay'),
+        )
+    elif configer.get('optim') == 'AdamW':
+        optim = torch.optim.AdamW(
+            params_list,
+            lr=configer.get('lr', 'lr_start'),
+            weight_decay=configer.get('lr', 'weight_decay'),
+        )
+    
     return optim
 
 def set_model_dist(net):
@@ -178,7 +209,8 @@ def set_model_dist(net):
 
 def set_contrast_loss(configer):
     loss_factory = {
-        'GNN': CrossDatasetsCELoss_GNN
+        'GNN': CrossDatasetsCELoss_GNN,
+        'Adv_GNN': CrossDatasetsCELoss_AdvGNN
     }
     # return CrossDatasetsCELoss_KMeans(configer)
     return loss_factory[configer.get('loss', 'type')](configer)
@@ -319,7 +351,8 @@ def train():
     ## optimizer
     optim = set_optimizer(net, configer)
     gnn_optim = set_optimizer(graph_net, configer)
-
+    gnn_optimD = set_optimizerD(graph_net, configer)
+    
     ## mixed precision training
     scaler = amp.GradScaler()
 
@@ -390,8 +423,8 @@ def train():
             except StopIteration:
                 dl_iters[i] = iter(dls[i])
                 
-            ims.append(im)
-            lbs.append(lb)
+            ims.append(im.cuda())
+            lbs.append(lb.cuda())
                 
 
         im = torch.cat(ims, dim=0)
@@ -446,7 +479,7 @@ def train():
                     seg_out = net(im)
                 
                 input_feats = torch.cat([graph_node_features, graph_net.unify_node_features], dim=0)
-                unify_prototype, bi_graphs = graph_net(input_feats)
+                unify_prototype, bi_graphs, adv_out = graph_net(input_feats)
             else:
                 graph_net.eval()
                 net.train()
@@ -455,7 +488,7 @@ def train():
                 if fix_graph == False:
                     with torch.no_grad():
                         input_feats = torch.cat([graph_node_features, graph_net.unify_node_features], dim=0)
-                        unify_prototype, bi_graphs = graph_net(input_feats)
+                        unify_prototype, bi_graphs, adv_out = graph_net(input_feats)
                         unify_prototype = unify_prototype.detach()
                         bi_graphs = [bigh.detach() for bigh in bi_graphs]
                         fix_graph = True
@@ -463,6 +496,7 @@ def train():
             seg_out['seg'] = seg_out['seg'].detach()
             seg_out['unify_prototype'] = unify_prototype
             seg_out['bi_graphs'] = bi_graphs
+            seg_out['adv_out'] = adv_out
 
             if i < configer.get('lr', 'warmup_iters') or not use_contrast:
                 is_warmup = True
@@ -470,11 +504,12 @@ def train():
             else:
                 is_warmup = False
                 
-            backward_loss = contrast_losses(seg_out, lb, dataset_lbs, is_warmup)
+            backward_loss, adv_loss = contrast_losses(seg_out, lb, dataset_lbs, is_warmup)
             kl_loss = None
             loss_seg = backward_loss
             loss_aux = None
             loss_contrast = None
+            loss_domain = adv_loss
 
             
         # if with_memory and 'key' in out:
@@ -489,6 +524,7 @@ def train():
         # with torch.autograd.detect_anomaly():
         
         scaler.scale(backward_loss).backward()
+        scaler.scale(adv_loss).backward()
         print(backward_loss.item())
             
         # print('after backward')
@@ -505,6 +541,7 @@ def train():
         #         print("seg NaN or Inf value found in gradients")
         
         scaler.step(gnn_optim)
+        scaler.step(gnn_optimD)
         scaler.update()
         torch.cuda.synchronize()
         if use_ema:
@@ -512,6 +549,7 @@ def train():
         # print('synchronize')
         time_meter.update()
         loss_meter.update(backward_loss.item())
+        loss_domain_meter.update(loss_domain.item())
         if kl_loss:
             kl_loss_meter.update(kl_loss.item())
         

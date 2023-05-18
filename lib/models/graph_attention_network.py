@@ -690,9 +690,9 @@ class Learnable_Topology_BGNN(nn.Module):
         ## Graph adjacency matrix
         self.adj_matrix = nn.Parameter(torch.zeros(self.total_cats+self.max_num_unify_class, self.total_cats+self.max_num_unify_class), requires_grad=True)
         # self.init_adjacency_matrix()
-        self.netD1 = Discriminator(self.nfeat_out, 128, 1)
+        self.netD1 = Discriminator(self.nfeat_out, 128, 1, self.dropout_rate)
         self.netD1.weights_init()
-        self.netD2 = Discriminator(self.nfeat_out, 128, 1)
+        self.netD2 = Discriminator(self.nfeat_out, 128, 1, self.dropout_rate)
         self.netD2.weights_init()
         
         
@@ -703,22 +703,24 @@ class Learnable_Topology_BGNN(nn.Module):
         
         before_gcn1_x = F.dropout(feat1_relu, self.dropout_rate, training=self.training)
         feat_gcn1 = self.GCN_layer1(before_gcn1_x, adj_mI)
-        out_real_1 = self.netD1(before_gcn1_x)
-        out_fake_1 = self.netD1(feat_gcn1)
+        out_real_1 = self.netD1(before_gcn1_x.detach())
+        out_fake_1 = self.netD1(feat_gcn1.detach())
+        g_out_fake_1 = self.netD1(feat_gcn1)
         
         feat2 = feat_gcn1 + before_gcn1_x
         before_gcn2_x = F.dropout(feat2, self.dropout_rate, training=self.training)
         feat_gcn2 = self.GCN_layer2(before_gcn2_x, adj_mI)
-        out_real_2 = self.netD2(before_gcn2_x)
-        out_fake_2 = self.netD2(feat_gcn2)
+        out_real_2 = self.netD2(before_gcn2_x.detach())
+        out_fake_2 = self.netD2(feat_gcn2.detach())
+        g_out_fake_2 = self.netD2(feat_gcn2)
         
         feat3 = F.elu(feat_gcn2 + before_gcn2_x)
         feat3_drop = F.dropout(feat3, self.dropout_rate, training=self.training)
         feat_out = self.linear1(feat3_drop)
 
         adv_out = {}
-        adv_out['ADV1'] = [out_real_1, out_fake_1]
-        adv_out['ADV2'] = [out_real_2, out_fake_2]
+        adv_out['ADV1'] = [out_real_1, out_fake_1, g_out_fake_1]
+        adv_out['ADV2'] = [out_real_2, out_fake_2, g_out_fake_2]
         if self.calc_bipartite:
             arch_x = self.relu(feat3_drop + feat_out)
             arch_x = self.linear2(arch_x)
@@ -837,8 +839,32 @@ class Learnable_Topology_BGNN(nn.Module):
 
         wd_params, nowd_params, lr_mul_wd_params, lr_mul_nowd_params = [], [], [], []
         for name, child in self.named_children():
-            if 'head' in name or 'aux' in name:
+            if 'netD' in name:
+                continue
+            elif 'head' in name or 'aux' in name:
                 add_param_to_list(child, lr_mul_wd_params, lr_mul_nowd_params)
             else:
+                add_param_to_list(child, wd_params, nowd_params)
+        return wd_params, nowd_params, lr_mul_wd_params, lr_mul_nowd_params
+
+    def get_discri_params(self):
+        def add_param_to_list(mod, wd_params, nowd_params):
+            for param in mod.parameters():
+                if param.requires_grad == False:
+                    continue
+                
+                if param.dim() == 1:
+                    nowd_params.append(param)
+                elif param.dim() == 4 or param.dim() == 2:
+                    wd_params.append(param)
+                else:
+                    nowd_params.append(param)
+                    # print(param.dim())
+                    # print(param)
+                    # print(name)
+
+        wd_params, nowd_params, lr_mul_wd_params, lr_mul_nowd_params = [], [], [], []
+        for name, child in self.named_children():
+            if 'netD' in name:
                 add_param_to_list(child, wd_params, nowd_params)
         return wd_params, nowd_params, lr_mul_wd_params, lr_mul_nowd_params

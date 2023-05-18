@@ -752,7 +752,7 @@ class CrossDatasetsCELoss_GNN(nn.Module):
             
             remap_logits = torch.einsum('bchw, nc -> bnhw', logits[dataset_ids==i], bi_graphs[i])
             remap_logits = F.interpolate(remap_logits, size=(target.size(1), target.size(2)), mode="bilinear", align_corners=True)
-            # print("remap_logits_max : {}, remap_logits_min : {}".format(torch.max(remap_logits), torch.min(remap_logits)))
+            print("remap_logits_max : {}, remap_logits_min : {}".format(torch.max(remap_logits), torch.min(remap_logits)))
             
             # print(torch.sum(bi_graphs[i]))
             if loss is None:
@@ -770,6 +770,80 @@ class CrossDatasetsCELoss_GNN(nn.Module):
                    
         return loss
     
+class CrossDatasetsCELoss_AdvGNN(nn.Module):
+    def __init__(self, configer=None):
+        super(CrossDatasetsCELoss_AdvGNN, self).__init__()
+        self.configer = configer
+        self.n_datasets = self.configer.get('n_datasets')
+        self.num_prototype = self.configer.get('contrast', 'num_prototype')
+        self.temperature = self.configer.get('contrast', 'temperature')
+        self.with_mulbn = self.configer.get('contrast', 'with_mulbn')
+        self.reweight = self.configer.get('loss', 'reweight')
+        self.ignore_index = self.configer.get('loss', 'ignore_index')
+        self.with_unify_label = self.configer.get('loss', 'with_unify_label')
+        self.with_spa = self.configer.get('loss', 'with_spa')
+        self.spa_loss_weight = self.configer.get('loss', 'spa_loss_weight')
+        self.with_max_enc = self.configer.get('loss', 'with_max_enc')
+        self.max_enc_weight = self.configer.get('loss', 'max_enc_weight')
+        
+        self.n_cats = []
+        for i in range(1, self.n_datasets+1):
+            self.n_cats.append(self.configer.get('dataset'+str(i), 'n_cats'))
+
+        self.CELoss = torch.nn.CrossEntropyLoss(ignore_index=255)
+        self.advloss = nn.BCELoss()
+        self.adv_loss_weight = self.configer.get('loss', 'adv_loss_weight')
+        
+        if self.with_max_enc:
+            self.MSE_loss = torch.nn.MSELoss()
+
+    def forward(self, preds, target, dataset_ids, is_warmup=False):
+        logits = preds['seg']
+        unify_prototype = preds['unify_prototype']
+        bi_graphs = preds['bi_graphs']
+        adv_out = preds['adv_out']
+        
+        label_real = torch.zeros(adv_out['ADV1'][0].shape[0], 1)
+        label_fake = torch.ones(adv_out['ADV1'][0].shape[0], 1)
+        
+        if adv_out['ADV1'][0].is_cuda:
+            label_real = label_real.cuda()
+            label_fake = label_fake.cuda()
+        
+        loss = None
+        logits = torch.einsum('bchw, nc -> bnhw', logits, unify_prototype)
+        # print("logits_max : {}, logits_min : {}".format(torch.max(logits), torch.min(logits)))
+        
+        for i in range(0, self.n_datasets):
+            if not (dataset_ids == i).any():
+                continue
+            
+            remap_logits = torch.einsum('bchw, nc -> bnhw', logits[dataset_ids==i], bi_graphs[i])
+            remap_logits = F.interpolate(remap_logits, size=(target.size(1), target.size(2)), mode="bilinear", align_corners=True)
+            print("remap_logits_max : {}, remap_logits_min : {}".format(torch.max(remap_logits), torch.min(remap_logits)))
+            
+            # print(torch.sum(bi_graphs[i]))
+            if loss is None:
+                loss = self.CELoss(remap_logits, target[dataset_ids==i])
+            else:
+                loss = loss + self.CELoss(remap_logits, target[dataset_ids==i])
+
+            if self.with_spa:
+                spa_loss = self.spa_loss_weight * torch.pow(torch.norm(bi_graphs[i], p='fro'), 2)
+                loss = loss + spa_loss
+            
+            if self.with_max_enc:
+                max_enc_loss = self.max_enc_weight * self.MSE_loss(torch.max(bi_graphs[i], dim=0)[0], torch.ones(bi_graphs[i].size(1)).cuda())
+                loss = loss + max_enc_loss
+                
+        real_out = self.advloss(adv_out['ADV1'][0], label_real) + self.advloss(adv_out['ADV2'][0], label_real)
+        fake_out = self.advloss(adv_out['ADV1'][1], label_fake) + self.advloss(adv_out['ADV2'][1], label_fake)
+        
+        adv_loss = real_out + fake_out
+        G_fake_out = self.advloss(adv_out['ADV1'][2], label_real) + self.advloss(adv_out['ADV2'][2], label_real)
+        loss = loss + self.adv_loss_weight * G_fake_out
+                   
+        return loss, adv_loss
     
 if __name__ == "__main__":
     test_CrossDatasetsCELoss()

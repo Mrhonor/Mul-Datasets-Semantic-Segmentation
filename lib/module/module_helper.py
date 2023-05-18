@@ -726,7 +726,7 @@ class Discriminator(nn.Module):
     def weights_init(self):
         def _weights_init(m):
             if isinstance(m, nn.Linear):
-                init.xavier_uniform_(m.weight)
-                init.constant_(m.bias, 0)
+                nn.init.xavier_uniform_(m.weight)
+                nn.init.constant_(m.bias, 0)
 
         self.apply(_weights_init)
