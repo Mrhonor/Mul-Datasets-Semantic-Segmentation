@@ -5,6 +5,7 @@ from __future__ import print_function
 import functools
 import os
 import pdb
+import math
 
 try:
     from urllib import urlretrieve
@@ -674,3 +675,58 @@ class SpGraphAttentionLayer(nn.Module):
     def __repr__(self):
         return self.__class__.__name__ + ' (' + str(self.in_features) + ' -> ' + str(self.out_features) + ')'
 
+
+class GraphConvolution(nn.Module):
+
+    def __init__(self, in_features, out_features, bias=True):
+        super(GraphConvolution, self).__init__()
+        self.in_features = in_features
+        self.out_features = out_features
+        self.weight = nn.Parameter(torch.FloatTensor(in_features, out_features))
+        if bias:
+            self.bias = nn.Parameter(torch.FloatTensor(out_features))
+        else:
+            self.register_parameter('bias', None)
+        self.reset_parameters()
+
+    def reset_parameters(self):
+        stdv = 1. / math.sqrt(self.weight.size(1))
+        self.weight.data.uniform_(-stdv, stdv)
+        if self.bias is not None:
+            self.bias.data.uniform_(-stdv, stdv)
+
+    def forward(self, input, adj):
+        support = torch.mm(input, self.weight)
+        output = torch.spmm(adj, support)
+        if self.bias is not None:
+            return output + self.bias
+        else:
+            return output
+
+    def __repr__(self):
+        return self.__class__.__name__ + ' (' \
+               + str(self.in_features) + ' -> ' \
+               + str(self.out_features) + ')'
+            
+class Discriminator(nn.Module):
+    def __init__(self, infeat, hidfeat, outfeat, dropout):
+        super(Discriminator, self).__init__()
+        self.main = nn.Sequential(
+            nn.Linear(infeat, hidfeat),
+            nn.LeakyReLU(),
+            nn.Dropout(p=dropout),
+            nn.Linear(hidfeat, outfeat),
+            nn.Sigmoid()
+        )
+
+    def forward(self, input):
+        output = self.main(input)
+        return output
+
+    def weights_init(self):
+        def _weights_init(m):
+            if isinstance(m, nn.Linear):
+                init.xavier_uniform_(m.weight)
+                init.constant_(m.bias, 0)
+
+        self.apply(_weights_init)
