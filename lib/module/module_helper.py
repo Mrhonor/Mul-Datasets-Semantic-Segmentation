@@ -6,6 +6,8 @@ import functools
 import os
 import pdb
 import math
+from copy import deepcopy
+from typing import List, Tuple
 
 try:
     from urllib import urlretrieve
@@ -532,6 +534,77 @@ class ModuleHelper(object):
                 module.weight, mode=mode, nonlinearity=nonlinearity)
         if hasattr(module, 'bias') and module.bias is not None:
             nn.init.constant_(module.bias, bias)
+
+
+def MLP(channels: List[int]) -> nn.Module:
+    """ Multi-layer perceptron """
+    n = len(channels)
+    layers = []
+    for i in range(1, n):
+        layers.append(
+            nn.Linear(channels[i - 1], channels[i], bias=True))
+
+    return nn.Sequential(*layers)
+
+def attention(query: torch.Tensor, key: torch.Tensor, value: torch.Tensor) -> Tuple[torch.Tensor,torch.Tensor]:
+    dim = query.shape[1]
+    scores = torch.einsum('bdhn,bdhm->bhnm', query, key) / dim**.5
+    prob = torch.nn.functional.softmax(scores, dim=-1)
+    return torch.einsum('bhnm,bdhm->bdhn', prob, value), prob
+
+def graph_attention(query: torch.Tensor, key: torch.Tensor, value: torch.Tensor, adj_matrix) -> Tuple[torch.Tensor,torch.Tensor]:
+    dim = query.shape[1]
+    scores = torch.mul(query.T, key) / dim**.5
+    adj_scores = torch.mul(scores, adj_matrix)
+    adj_scores[abs(adj_scores) < 1e-5] = -1e9
+    TODO
+    prob = torch.nn.functional.softmax(adj_scores, dim=-1)
+    return torch.einsum('bhnm,bdhm->bdhn', prob, value), prob
+
+class MultiHeadedAttention(nn.Module):
+    """ Multi-head attention to increase model expressivitiy """
+    def __init__(self, num_heads: int, d_model: int):
+        super().__init__()
+        assert d_model % num_heads == 0
+        self.dim = d_model // num_heads
+        self.num_heads = num_heads
+        self.merge = nn.Linear(d_model, d_model)
+        self.proj = nn.ModuleList([deepcopy(self.merge) for _ in range(3)])
+
+    def forward(self, query: torch.Tensor, key: torch.Tensor, value: torch.Tensor) -> torch.Tensor:
+        batch_dim = query.size(0)
+        query, key, value = [l(x).view(batch_dim, self.dim, self.num_heads, -1)
+                             for l, x in zip(self.proj, (query, key, value))]
+        x, _ = attention(query, key, value)
+        return self.merge(x.contiguous().view(batch_dim, self.dim*self.num_heads, -1))
+
+class GraphMultiHeadedAttention(nn.Module):
+    """ Multi-head attention to increase model expressivitiy """
+    def __init__(self, num_heads: int, d_model: int):
+        super().__init__()
+        assert d_model % num_heads == 0
+        self.dim = d_model // num_heads
+        self.num_heads = num_heads
+        self.merge = nn.Conv1d(d_model, d_model, kernel_size=1)
+        self.proj = nn.ModuleList([deepcopy(self.merge) for _ in range(3)])
+
+    def forward(self, query: torch.Tensor, key: torch.Tensor, value: torch.Tensor, adj_matrix) -> torch.Tensor:
+        batch_dim = query.size(0)
+        query, key, value = [l(x).view(batch_dim, self.dim, self.num_heads, -1)
+                             for l, x in zip(self.proj, (query, key, value))]
+        x, _ = graph_attention(query, key, value)
+        return self.merge(x.contiguous().view(batch_dim, self.dim*self.num_heads, -1))
+
+class AttentionalPropagation(nn.Module):
+    def __init__(self, feature_dim: int, num_heads: int):
+        super().__init__()
+        self.attn = GraphMultiHeadedAttention(num_heads, feature_dim)
+        self.mlp = MLP([feature_dim*2, feature_dim*2, feature_dim])
+        nn.init.constant_(self.mlp[-1].bias, 0.0)
+
+    def forward(self, x: torch.Tensor, source: torch.Tensor, adj_matrix) -> torch.Tensor:
+        message = self.attn(x, source, source, adj_matrix)
+        return self.mlp(torch.cat([x, message], dim=1))
 
 
 class GraphAttentionLayer(nn.Module):

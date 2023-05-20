@@ -478,8 +478,7 @@ def train():
                 with torch.no_grad():
                     seg_out = net(im)
                 
-                input_feats = torch.cat([graph_node_features, graph_net.unify_node_features], dim=0)
-                unify_prototype, bi_graphs, adv_out = graph_net(input_feats)
+                unify_prototype, bi_graphs, adv_out = graph_net(graph_node_features)
             else:
                 graph_net.eval()
                 net.train()
@@ -487,8 +486,7 @@ def train():
                 
                 if fix_graph == False:
                     with torch.no_grad():
-                        input_feats = torch.cat([graph_node_features, graph_net.unify_node_features], dim=0)
-                        unify_prototype, bi_graphs, adv_out = graph_net(input_feats)
+                        unify_prototype, bi_graphs, adv_out = graph_net(graph_node_features)
                         unify_prototype = unify_prototype.detach()
                         bi_graphs = [bigh.detach() for bigh in bi_graphs]
                         fix_graph = True
