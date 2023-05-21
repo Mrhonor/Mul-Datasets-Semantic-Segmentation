@@ -571,7 +571,7 @@ class HRNet_W48_GNN(nn.Module):
         self.full_res_stem = self.configer.get('hrnet', 'full_res_stem')
         self.num_prototype = self.configer.get('contrast', 'num_prototype')
         # self.output_feat_dim = self.configer.get('GNN', 'output_feat_dim')
-        self.output_feat_dim = self.configer.get('GNN', 'mlp_dim')
+        self.output_feat_dim = self.configer.get('GNN', 'output_feat_dim')
         
         if self.full_res_stem:
             up_fac = 1

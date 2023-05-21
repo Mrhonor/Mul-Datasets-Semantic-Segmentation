@@ -32,9 +32,9 @@ class GAT(nn.Module):
         self.att_out_dim = self.configer.get('GNN', 'att_out_dim')
         self.alpha = self.configer.get('GNN', 'alpha')
         self.nheads = self.configer.get('GNN', 'nheads')
-        self.mlp_dim = self.configer.get('GNN', 'mlp_dim')
-        
         self.output_feat_dim = self.configer.get('GNN', 'output_feat_dim')
+        
+        self.adj_feat_dim = self.configer.get('GNN', 'adj_feat_dim')
         self.dropout_rate = self.configer.get('GNN', 'dropout_rate')
         self.threshold_value = self.configer.get('GNN', 'threshold_value')
         self.fix_arch = False
@@ -49,9 +49,9 @@ class GAT(nn.Module):
 
         self.out_att = GraphAttentionLayer(self.nhid * self.nheads, self.att_out_dim, dropout=self.dropout_rate, alpha=self.alpha, concat=False)
         
-        self.linear1 = nn.Linear(self.att_out_dim, self.mlp_dim)
+        self.linear1 = nn.Linear(self.att_out_dim, self.output_feat_dim)
         
-        self.linear2 = nn.Linear(self.mlp_dim, self.output_feat_dim) 
+        self.linear2 = nn.Linear(self.att_out_dim, self.adj_feat_dim) 
         ## datasets Node features
         self.n_datasets = self.configer.get('n_datasets')
         self.total_cats = 0
@@ -59,6 +59,7 @@ class GAT(nn.Module):
         for i in range(0, self.n_datasets):
             self.dataset_cats.append(self.configer.get('dataset'+str(i+1), 'n_cats'))
             self.total_cats += self.configer.get('dataset'+str(i+1), 'n_cats')
+        print("self.total_cats:", self.total_cats)
         
         self.max_num_unify_class = int(self.configer.get('GNN', 'unify_ratio') * self.total_cats)
         
@@ -86,7 +87,7 @@ class GAT(nn.Module):
         # x = F.dropout(x, self.dropout_rate, training=self.training)
         x = F.elu(self.out_att(x, self.adj_matrix) + x)
         feat = self.linear1(x)
-        arch_x = self.relu(x + feat)
+        arch_x = self.relu(x)
         arch_x = self.linear2(arch_x)
         
         return feat[self.total_cats:], self.calc_bipartite_graph(arch_x)
@@ -116,6 +117,7 @@ class GAT(nn.Module):
             this_feats = x[cur_cat:cur_cat+self.dataset_cats[i]]
             cur_cat += self.dataset_cats[i]
             similar_matrix = torch.einsum('nc, mc -> nm', this_feats, unify_feats)
+            # print("similar_matrix.shape:", similar_matrix.shape)
             softmax_similar_matrix = F.softmax(similar_matrix / 0.05, dim=0)
             # softmax_similar_matrix[softmax_similar_matrix < self.threshold_value] = 0
             # max_value, max_index = torch.max(softmax_similar_matrix, dim=0)
@@ -288,8 +290,8 @@ class Self_Attention_GNN(nn.Module):
         # x = F.dropout(x, self.dropout_rate, training=self.training)
         x = F.elu(self.out_att(x, x, self.adj_matrix) + x)
         feat = self.linear1(x)
-        arch_x = self.relu(x + feat)
-        arch_x = self.linear2(arch_x)
+        arch_x = self.relu(x)
+        arch_x = self.arch_linear(arch_x)
         
         return feat[self.total_cats:], self.calc_bipartite_graph(arch_x)
 
@@ -297,14 +299,14 @@ class Self_Attention_GNN(nn.Module):
         this_fix_arch = self.fix_arch
         cur_iter = self.configer.get('iter')
         if cur_iter < self.fix_architecture_alter_iter:
-            self.linear2.requires_grad = False
+            self.arch_linear.requires_grad = False
             return self.pretrain_bipartite_graphs(is_cuda=x.is_cuda)
         
         if (cur_iter // self.fix_architecture_alter_iter) % 2 == 0:
-            self.linear2.requires_grad = False
+            self.arch_linear.requires_grad = False
             self.fix_arch = False
         else:
-            self.linear2.requires_grad = True
+            self.arch_linear.requires_grad = True
             self.fix_arch = True    
         
         if this_fix_arch:    
@@ -660,7 +662,7 @@ class Learnable_Topology_GAT(nn.Module):
         self.att_out_dim = self.configer.get('GNN', 'att_out_dim')
         self.alpha = self.configer.get('GNN', 'alpha')
         self.nheads = self.configer.get('GNN', 'nheads')
-        self.mlp_dim = self.configer.get('GNN', 'mlp_dim')
+        self.adj_feat_dim = self.configer.get('GNN', 'adj_feat_dim')
         
         self.output_feat_dim = self.configer.get('GNN', 'output_feat_dim')
         self.dropout_rate = self.configer.get('GNN', 'dropout_rate')
@@ -680,9 +682,9 @@ class Learnable_Topology_GAT(nn.Module):
 
         self.out_att = GraphAttentionLayer(self.nhid * self.nheads, self.att_out_dim, dropout=self.dropout_rate, alpha=self.alpha, concat=False)
         
-        self.linear1 = nn.Linear(self.att_out_dim, self.mlp_dim)
+        self.linear1 = nn.Linear(self.att_out_dim, self.output_feat_dim)
         
-        self.linear2 = nn.Linear(self.mlp_dim, self.output_feat_dim) 
+        self.linear2 = nn.Linear(self.output_feat_dim, self.adj_feat_dim) 
         ## datasets Node features
         self.n_datasets = self.configer.get('n_datasets')
         self.total_cats = 0
@@ -855,7 +857,7 @@ class Learnable_Topology_BGNN(nn.Module):
         self.att_out_dim = self.configer.get('GNN', 'att_out_dim')
         self.alpha = self.configer.get('GNN', 'alpha')
         self.nheads = self.configer.get('GNN', 'nheads')
-        self.mlp_dim = self.configer.get('GNN', 'mlp_dim')
+        self.adj_feat_dim = self.configer.get('GNN', 'adj_feat_dim')
         
         self.output_feat_dim = self.configer.get('GNN', 'output_feat_dim')
         self.dropout_rate = self.configer.get('GNN', 'dropout_rate')
@@ -874,9 +876,9 @@ class Learnable_Topology_BGNN(nn.Module):
 
         self.GCN_layer2 = GCN(self.nfeat_out, self.nfeat_out)
         
-        self.linear1 = nn.Linear(self.nfeat_out, self.mlp_dim)
+        self.linear1 = nn.Linear(self.nfeat_out, self.output_feat_dim)
         
-        self.linear2 = nn.Linear(self.mlp_dim, self.output_feat_dim) 
+        self.linear2 = nn.Linear(self.output_feat_dim, self.adj_feat_dim) 
         ## datasets Node features
         self.n_datasets = self.configer.get('n_datasets')
         self.total_cats = 0

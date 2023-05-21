@@ -35,6 +35,15 @@ from lib.module.gen_graph_node_feature import gen_graph_node_feature
 
 
 
+## fix all random seeds
+#  torch.manual_seed(123)
+#  torch.cuda.manual_seed(123)
+#  np.random.seed(123)
+#  random.seed(123)
+#  torch.backends.cudnn.deterministic = True
+#  torch.backends.cudnn.benchmark = True
+#  torch.multiprocessing.set_sharing_strategy('file_system')
+
 def get_world_size():
     if not torch.distributed.is_initialized():
         return 1
@@ -48,7 +57,7 @@ def parse_args():
     parse.add_argument('--local_rank', dest='local_rank', type=int, default=-1,)
     parse.add_argument('--port', dest='port', type=int, default=16853,)
     parse.add_argument('--finetune_from', type=str, default=None,)
-    parse.add_argument('--config', dest='config', type=str, default='configs/gnn_city_cam_a2d2.json',)
+    parse.add_argument('--config', dest='config', type=str, default='configs/ltbgnn_city_cam_a2d2.json',)
     return parse.parse_args()
 
 # 使用绝对路径
@@ -162,39 +171,8 @@ def set_optimizer(model, configer):
         optim = torch.optim.AdamW(
             params_list,
             lr=configer.get('lr', 'lr_start'),
-            weight_decay=configer.get('lr', 'weight_decay'),
         )
-    
-    return optim
-
-def set_optimizerD(model, configer):
-    if hasattr(model, 'get_discri_params'):
-        wd_params, nowd_params, lr_mul_wd_params, lr_mul_nowd_params = model.get_params()
-        #  wd_val = cfg.weight_decay
-        wd_val = 0
-        params_list = [
-            {'params': wd_params, },
-            {'params': nowd_params, 'weight_decay': wd_val},
-            {'params': lr_mul_wd_params, 'lr': configer.get('lr', 'lr_start')},
-            {'params': lr_mul_nowd_params, 'weight_decay': wd_val, 'lr': configer.get('lr', 'lr_start')},
-        ]
-    else:
-        return None
-    
-    if configer.get('optim') == 'SGD':
-        optim = torch.optim.SGD(
-            params_list,
-            lr=configer.get('lr', 'lr_start'),
-            momentum=0.9,
-            weight_decay=configer.get('lr', 'weight_decay'),
-        )
-    elif configer.get('optim') == 'AdamW':
-        optim = torch.optim.AdamW(
-            params_list,
-            lr=configer.get('lr', 'lr_start'),
-            weight_decay=configer.get('lr', 'weight_decay'),
-        )
-    
+        
     return optim
 
 def set_model_dist(net):
@@ -351,8 +329,7 @@ def train():
     ## optimizer
     optim = set_optimizer(net, configer)
     gnn_optim = set_optimizer(graph_net, configer)
-    gnn_optimD = set_optimizerD(graph_net, configer)
-    
+
     ## mixed precision training
     scaler = amp.GradScaler()
 
@@ -424,8 +401,8 @@ def train():
                 dl_iters[i] = iter(dls[i])
                 im, lb = next(dl_iters[i])
                 
-            ims.append(im.cuda())
-            lbs.append(lb.cuda())
+            ims.append(im)
+            lbs.append(lb)
                 
 
         im = torch.cat(ims, dim=0)
@@ -434,7 +411,7 @@ def train():
         im = im.cuda()
         lb = lb.cuda()
 
-        dataset_lbs = torch.cat([torch.zeros(this_lb.shape[0], dtype=torch.int) for this_lb in lbs], dim=0)
+        dataset_lbs = torch.cat([i*torch.ones(this_lb.shape[0], dtype=torch.int) for i,this_lb in enumerate(lbs)], dim=0)
         dataset_lbs = dataset_lbs.cuda()
         # print(dataset_lbs)
 
@@ -473,6 +450,7 @@ def train():
                 
             fix_graph = False            
             if train_seg_or_gnn == GNN:
+                is_adv = True
                 fix_graph = False
                 graph_net.train()
                 net.eval()
@@ -481,6 +459,7 @@ def train():
                 
                 unify_prototype, bi_graphs, adv_out = graph_net(graph_node_features)
             else:
+                is_adv = False
                 graph_net.eval()
                 net.train()
                 seg_out = net(im)
@@ -492,23 +471,18 @@ def train():
                         bi_graphs = [bigh.detach() for bigh in bi_graphs]
                         fix_graph = True
                 
-            seg_out['seg'] = seg_out['seg'].detach()
+            
+            seg_out['seg'] = seg_out['seg']
             seg_out['unify_prototype'] = unify_prototype
             seg_out['bi_graphs'] = bi_graphs
             seg_out['adv_out'] = adv_out
 
-            if i < configer.get('lr', 'warmup_iters') or not use_contrast:
-                is_warmup = True
-                        
-            else:
-                is_warmup = False
                 
-            backward_loss, adv_loss = contrast_losses(seg_out, lb, dataset_lbs, is_warmup)
+            backward_loss, adv_loss = contrast_losses(seg_out, lb, dataset_lbs, is_adv)
             kl_loss = None
             loss_seg = backward_loss
             loss_aux = None
             loss_contrast = None
-            loss_domain = adv_loss
 
             
         # if with_memory and 'key' in out:
@@ -523,8 +497,7 @@ def train():
         # with torch.autograd.detect_anomaly():
         
         scaler.scale(backward_loss).backward()
-        scaler.scale(adv_loss).backward()
-        print(backward_loss.item())
+        # print(backward_loss.item())
             
         # print('after backward')
 
@@ -538,9 +511,11 @@ def train():
         # for param in net.parameters():
         #     if torch.isnan(param.grad).any() or torch.isinf(param.grad).any():
         #         print("seg NaN or Inf value found in gradients")
-        
-        scaler.step(gnn_optim)
-        scaler.step(gnn_optimD)
+       
+        if train_seg_or_gnn == SEG: 
+            scaler.step(optim)
+        else:
+            scaler.step(gnn_optim)
         scaler.update()
         torch.cuda.synchronize()
         if use_ema:
@@ -548,7 +523,6 @@ def train():
         # print('synchronize')
         time_meter.update()
         loss_meter.update(backward_loss.item())
-        loss_domain_meter.update(loss_domain.item())
         if kl_loss:
             kl_loss_meter.update(kl_loss.item())
         
@@ -640,7 +614,7 @@ def train():
 
 
 def main():
-    if False:
+    if True:
         local_rank = int(os.environ["LOCAL_RANK"])
         # torch.cuda.set_device(args.local_rank)
         # dist.init_process_group(

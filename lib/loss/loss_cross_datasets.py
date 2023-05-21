@@ -750,11 +750,17 @@ class CrossDatasetsCELoss_GNN(nn.Module):
             if not (dataset_ids == i).any():
                 continue
             
+            
             remap_logits = torch.einsum('bchw, nc -> bnhw', logits[dataset_ids==i], bi_graphs[i])
             remap_logits = F.interpolate(remap_logits, size=(target.size(1), target.size(2)), mode="bilinear", align_corners=True)
-            print("remap_logits_max : {}, remap_logits_min : {}".format(torch.max(remap_logits), torch.min(remap_logits)))
+            # print("remap_logits_max : {}, remap_logits_min : {}".format(torch.max(remap_logits), torch.min(remap_logits)))
+            
+            # a = target[dataset_ids==i].clone()
+            # a[a == 255] = 0
+            # print("i : {}, a_max : {}, a_min : {}".format(i, torch.max(a), torch.min(a)))
             
             # print(torch.sum(bi_graphs[i]))
+            # print("remap_logits: ", remap_logits.shape)
             if loss is None:
                 loss = self.CELoss(remap_logits, target[dataset_ids==i])
             else:
@@ -797,7 +803,7 @@ class CrossDatasetsCELoss_AdvGNN(nn.Module):
         if self.with_max_enc:
             self.MSE_loss = torch.nn.MSELoss()
 
-    def forward(self, preds, target, dataset_ids, is_warmup=False):
+    def forward(self, preds, target, dataset_ids, is_adv=True):
         logits = preds['seg']
         unify_prototype = preds['unify_prototype']
         bi_graphs = preds['bi_graphs']
@@ -811,6 +817,7 @@ class CrossDatasetsCELoss_AdvGNN(nn.Module):
             label_fake = label_fake.cuda()
         
         loss = None
+        adv_loss = None
         logits = torch.einsum('bchw, nc -> bnhw', logits, unify_prototype)
         # print("logits_max : {}, logits_min : {}".format(torch.max(logits), torch.min(logits)))
         
@@ -820,7 +827,10 @@ class CrossDatasetsCELoss_AdvGNN(nn.Module):
             
             remap_logits = torch.einsum('bchw, nc -> bnhw', logits[dataset_ids==i], bi_graphs[i])
             remap_logits = F.interpolate(remap_logits, size=(target.size(1), target.size(2)), mode="bilinear", align_corners=True)
-            print("remap_logits_max : {}, remap_logits_min : {}".format(torch.max(remap_logits), torch.min(remap_logits)))
+            # print("remap_logits_max : {}, remap_logits_min : {}".format(torch.max(remap_logits), torch.min(remap_logits)))
+            # a = target[dataset_ids==i].clone()
+            # a[a == 255] = 0
+            # print("i : {}, a_max : {}, a_min : {}".format(i, torch.max(a), torch.min(a)))
             
             # print(torch.sum(bi_graphs[i]))
             if loss is None:
@@ -835,13 +845,14 @@ class CrossDatasetsCELoss_AdvGNN(nn.Module):
             if self.with_max_enc:
                 max_enc_loss = self.max_enc_weight * self.MSE_loss(torch.max(bi_graphs[i], dim=0)[0], torch.ones(bi_graphs[i].size(1)).cuda())
                 loss = loss + max_enc_loss
-                
-        real_out = self.advloss(adv_out['ADV1'][0], label_real) + self.advloss(adv_out['ADV2'][0], label_real)
-        fake_out = self.advloss(adv_out['ADV1'][1], label_fake) + self.advloss(adv_out['ADV2'][1], label_fake)
-        
-        adv_loss = real_out + fake_out
-        G_fake_out = self.advloss(adv_out['ADV1'][2], label_real) + self.advloss(adv_out['ADV2'][2], label_real)
-        loss = loss + self.adv_loss_weight * G_fake_out
+              
+        if is_adv:  
+            real_out = self.advloss(adv_out['ADV1'][0], label_real) + self.advloss(adv_out['ADV2'][0], label_real)
+            fake_out = self.advloss(adv_out['ADV1'][1], label_fake) + self.advloss(adv_out['ADV2'][1], label_fake)
+            
+            adv_loss = real_out + fake_out
+            G_fake_out = self.advloss(adv_out['ADV1'][2], label_real) + self.advloss(adv_out['ADV2'][2], label_real)
+            loss = loss + self.adv_loss_weight * G_fake_out
                    
         return loss, adv_loss
     

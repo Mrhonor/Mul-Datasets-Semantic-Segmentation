@@ -9,7 +9,7 @@
       "full_res_stem": false
     },
     "GNN": {
-      "model_name": "graph_attention_network",
+      "model_name": "self_attention_GNN",
       "nfeat": 1024,
       "nfeat_out": 512,
       "nfeat_adj": 256,

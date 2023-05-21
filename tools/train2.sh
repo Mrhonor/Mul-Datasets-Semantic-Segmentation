@@ -1,3 +1,3 @@
-export CUDA_VISIBLE_DEVICES=4,5,6
+export CUDA_VISIBLE_DEVICES=2,4
 python -m torch.distributed.run \
---nproc_per_node=3 --master_port 16854 tools/train_celoss_3datasets.py \
+--nproc_per_node=2 --master_port 16854 tools/train_ltgnn_only.py \

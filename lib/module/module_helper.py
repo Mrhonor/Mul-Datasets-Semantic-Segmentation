@@ -553,15 +553,15 @@ def attention(query: torch.Tensor, key: torch.Tensor, value: torch.Tensor) -> Tu
     return torch.einsum('bhnm,bdhm->bdhn', prob, value), prob
 
 def graph_attention(query: torch.Tensor, key: torch.Tensor, value: torch.Tensor, adj_matrix) -> Tuple[torch.Tensor,torch.Tensor]:
-    dim = query.shape[1]
-    scores = torch.mul(query.T, key) / dim**.5
+    dim = query.shape[0]
+    # print(query.shape, key.shape, value.shape)
+    scores = torch.einsum("ab, cb -> ac", query, key) / dim**.5
     adj_scores = torch.mul(scores, adj_matrix)
     adj_scores[abs(adj_scores) < 1e-5] = -1e9
-    TODO
     prob = torch.nn.functional.softmax(adj_scores, dim=-1)
-    return torch.einsum('bhnm,bdhm->bdhn', prob, value), prob
+    return torch.einsum("ab, bc -> ac", prob, value), prob
 
-class MultiHeadedAttention(nn.Module):
+class GraphMultiHeadedAttention(nn.Module):
     """ Multi-head attention to increase model expressivitiy """
     def __init__(self, num_heads: int, d_model: int):
         super().__init__()
@@ -571,14 +571,14 @@ class MultiHeadedAttention(nn.Module):
         self.merge = nn.Linear(d_model, d_model)
         self.proj = nn.ModuleList([deepcopy(self.merge) for _ in range(3)])
 
-    def forward(self, query: torch.Tensor, key: torch.Tensor, value: torch.Tensor) -> torch.Tensor:
-        batch_dim = query.size(0)
-        query, key, value = [l(x).view(batch_dim, self.dim, self.num_heads, -1)
+    def forward(self, query: torch.Tensor, key: torch.Tensor, value: torch.Tensor, adj_matrix) -> torch.Tensor:
+        # batch_dim = query.size(0)
+        query, key, value = [l(x)
                              for l, x in zip(self.proj, (query, key, value))]
-        x, _ = attention(query, key, value)
-        return self.merge(x.contiguous().view(batch_dim, self.dim*self.num_heads, -1))
+        x, _ = graph_attention(query, key, value, adj_matrix)
+        return self.merge(x)
 
-class GraphMultiHeadedAttention(nn.Module):
+class MultiHeadedAttention(nn.Module):
     """ Multi-head attention to increase model expressivitiy """
     def __init__(self, num_heads: int, d_model: int):
         super().__init__()
@@ -588,11 +588,11 @@ class GraphMultiHeadedAttention(nn.Module):
         self.merge = nn.Conv1d(d_model, d_model, kernel_size=1)
         self.proj = nn.ModuleList([deepcopy(self.merge) for _ in range(3)])
 
-    def forward(self, query: torch.Tensor, key: torch.Tensor, value: torch.Tensor, adj_matrix) -> torch.Tensor:
+    def forward(self, query: torch.Tensor, key: torch.Tensor, value: torch.Tensor) -> torch.Tensor:
         batch_dim = query.size(0)
         query, key, value = [l(x).view(batch_dim, self.dim, self.num_heads, -1)
                              for l, x in zip(self.proj, (query, key, value))]
-        x, _ = graph_attention(query, key, value)
+        x, _ = attention(query, key, value)
         return self.merge(x.contiguous().view(batch_dim, self.dim*self.num_heads, -1))
 
 class AttentionalPropagation(nn.Module):

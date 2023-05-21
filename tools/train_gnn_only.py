@@ -55,7 +55,7 @@ def is_distributed():
 def parse_args():
     parse = argparse.ArgumentParser()
     parse.add_argument('--local_rank', dest='local_rank', type=int, default=-1,)
-    parse.add_argument('--port', dest='port', type=int, default=16853,)
+    parse.add_argument('--port', dest='port', type=int, default=16855,)
     parse.add_argument('--finetune_from', type=str, default=None,)
     parse.add_argument('--config', dest='config', type=str, default='configs/gnn_city_cam_a2d2.json',)
     return parse.parse_args()
@@ -333,6 +333,7 @@ def train():
     scaler = amp.GradScaler()
 
     graph_node_features = gen_graph_node_feature(configer)
+    graph_node_features = graph_node_features.cuda()
 
     ## meters
     time_meter, loss_meter, loss_pre_meter, loss_aux_meters, loss_contrast_meter, loss_domain_meter, kl_loss_meter = set_meters(configer)
@@ -398,6 +399,7 @@ def train():
                     raise StopIteration
             except StopIteration:
                 dl_iters[i] = iter(dls[i])
+                im, lb = next(dl_iters[i])
                 
             ims.append(im)
             lbs.append(lb)
@@ -409,7 +411,7 @@ def train():
         im = im.cuda()
         lb = lb.cuda()
 
-        dataset_lbs = torch.cat([torch.zeros(this_lb.shape[0], dtype=torch.int) for this_lb in lbs], dim=0)
+        dataset_lbs = torch.cat([i*torch.ones(this_lb.shape[0], dtype=torch.int) for i,this_lb in enumerate(lbs)], dim=0)
         dataset_lbs = dataset_lbs.cuda()
         # print(dataset_lbs)
 
@@ -419,10 +421,10 @@ def train():
 
         SEG = 0
         GNN = 1
-        # if configer.get('iter') // configer.get('train', 'seg_gnn_alter_iters') % 2 == 0:
-        #     train_seg_or_gnn = SEG
-        # else:
-        train_seg_or_gnn = GNN
+        if configer.get('iter') // configer.get('train', 'seg_gnn_alter_iters') % 2 == 0:
+            train_seg_or_gnn = SEG
+        else:
+            train_seg_or_gnn = GNN
         # net.eval()
         # with torch.no_grad():
         #     seg_out = net(im)
@@ -467,7 +469,8 @@ def train():
                         bi_graphs = [bigh.detach() for bigh in bi_graphs]
                         fix_graph = True
                 
-            seg_out['seg'] = seg_out['seg'].detach()
+            
+            seg_out['seg'] = seg_out['seg']
             seg_out['unify_prototype'] = unify_prototype
             seg_out['bi_graphs'] = bi_graphs
 
@@ -496,7 +499,7 @@ def train():
         # with torch.autograd.detect_anomaly():
         
         scaler.scale(backward_loss).backward()
-        print(backward_loss.item())
+        # print(backward_loss.item())
             
         # print('after backward')
 
@@ -510,8 +513,11 @@ def train():
         # for param in net.parameters():
         #     if torch.isnan(param.grad).any() or torch.isinf(param.grad).any():
         #         print("seg NaN or Inf value found in gradients")
-        
-        scaler.step(gnn_optim)
+       
+        if train_seg_or_gnn == SEG: 
+            scaler.step(optim)
+        else:
+            scaler.step(gnn_optim)
         scaler.update()
         torch.cuda.synchronize()
         if use_ema:
@@ -610,7 +616,7 @@ def train():
 
 
 def main():
-    if False:
+    if True:
         local_rank = int(os.environ["LOCAL_RANK"])
         # torch.cuda.set_device(args.local_rank)
         # dist.init_process_group(
