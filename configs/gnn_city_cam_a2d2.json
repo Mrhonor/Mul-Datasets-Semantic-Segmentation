@@ -48,7 +48,7 @@
     "dataset3": {
       "n_cats": 36, 
       "data_reader": "A2D2Data",
-      "im_root": "/home1/marong/datasets/a2d2",
+      "im_root": "/mnt/disk1/datasets/A2D2/camera_lidar_semantic",
       "train_im_anns":"datasets/A2D2/train.txt",
       "val_im_anns":"datasets/A2D2/val.txt", 
       "ims_per_gpu": 4,
@@ -96,7 +96,7 @@
       "cropsize": [512, 1024]
     },
     "use_fp16": false,
-    "use_sync_bn": false,
+    "use_sync_bn": true,
     "contrast": {
       "use_contrast": true,
       "proj_dim": 512,

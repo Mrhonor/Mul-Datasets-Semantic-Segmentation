@@ -236,7 +236,7 @@ def get_city_loader(configer, aux_mode='eval', distributed=True):
         dl = [DataLoader(
             dataset,
             batch_sampler=batchsamp,
-            num_workers=4,
+            num_workers=8,
             pin_memory=False,
         ) for dataset, batchsamp in zip(ds, batchsampler)]
     else:
@@ -256,7 +256,7 @@ def get_city_loader(configer, aux_mode='eval', distributed=True):
             batch_size=bs,
             shuffle=shuffle,
             drop_last=drop_last,
-            num_workers=4,
+            num_workers=8,
             pin_memory=False,
         ) for dataset, bs in zip(ds, batchsize)]
     return dl[0]

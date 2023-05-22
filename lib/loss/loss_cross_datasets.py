@@ -849,8 +849,8 @@ class CrossDatasetsCELoss_AdvGNN(nn.Module):
         if is_adv:  
             real_out = self.advloss(adv_out['ADV1'][0], label_real) + self.advloss(adv_out['ADV2'][0], label_real)
             fake_out = self.advloss(adv_out['ADV1'][1], label_fake) + self.advloss(adv_out['ADV2'][1], label_fake)
-            
             adv_loss = real_out + fake_out
+
             G_fake_out = self.advloss(adv_out['ADV1'][2], label_real) + self.advloss(adv_out['ADV2'][2], label_real)
             loss = loss + self.adv_loss_weight * G_fake_out
                    

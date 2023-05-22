@@ -175,12 +175,12 @@ def set_optimizer(model, configer):
         
     return optim
 
-def set_model_dist(net):
+def set_model_dist(net, find_unused=False):
     local_rank = dist.get_rank()
     net = nn.parallel.DistributedDataParallel(
         net,
         device_ids=[local_rank, ],
-        find_unused_parameters=False,
+        find_unused_parameters=find_unused,
         output_device=local_rank
         )
     return net
@@ -341,6 +341,9 @@ def train():
     lr_schdr = WarmupPolyLrScheduler(optim, power=0.9,
         max_iter=configer.get('lr','max_iter'), warmup_iter=configer.get('lr','warmup_iters'),
         warmup_ratio=0.1, warmup='exp', last_epoch=-1,)
+    gnn_lr_schdr = WarmupPolyLrScheduler(gnn_optim, power=0.9,
+        max_iter=configer.get('lr','max_iter'), warmup_iter=configer.get('lr','warmup_iters'),
+        warmup_ratio=0.1, warmup='exp', last_epoch=-1,)
     # 两个数据集分别处理
     # 使用迭代器读取数据
     
@@ -369,6 +372,7 @@ def train():
     ## ddp training
     if is_distributed():
         net = set_model_dist(net)
+        graph_net = set_model_dist(graph_net, True)
 
     contrast_warmup_iters = configer.get("lr", "warmup_iters")
     with_aux = configer.get('loss', 'with_aux')
@@ -392,14 +396,14 @@ def train():
 
         ims = []
         lbs = []        
-        for i in range(0,len(dl_iters)):
+        for j in range(0,len(dl_iters)):
             try:
-                im, lb = next(dl_iters[i])
-                if not im.size()[0] == configer.get('dataset'+str(i+1), 'ims_per_gpu'):
+                im, lb = next(dl_iters[j])
+                if not im.size()[0] == configer.get('dataset'+str(j+1), 'ims_per_gpu'):
                     raise StopIteration
             except StopIteration:
-                dl_iters[i] = iter(dls[i])
-                im, lb = next(dl_iters[i])
+                dl_iters[j] = iter(dls[j])
+                im, lb = next(dl_iters[j])
                 
             ims.append(im)
             lbs.append(lb)
@@ -589,8 +593,11 @@ def train():
                 state = graph_net.state_dict()
                 torch.save(state, save_pth)
 
-        lr_schdr.step()
-
+        if train_seg_or_gnn == SEG:
+            lr_schdr.step()
+        else:
+            gnn_lr_schdr.step()
+        
     ## dump the final model and evaluate the result
     save_pth = osp.join(configer.get('res_save_pth'), 'model_final.pth')
     logger.info('\nsave models to {}'.format(save_pth))

@@ -426,10 +426,10 @@ def train():
 
         SEG = 0
         GNN = 1
-        if configer.get('iter') // configer.get('train', 'seg_gnn_alter_iters') % 2 == 0:
-            train_seg_or_gnn = SEG
-        else:
-            train_seg_or_gnn = GNN
+        # if configer.get('iter') // configer.get('train', 'seg_gnn_alter_iters') % 2 == 0:
+        #     train_seg_or_gnn = SEG
+        # else:
+        train_seg_or_gnn = GNN
         # net.eval()
         # with torch.no_grad():
         #     seg_out = net(im)
@@ -511,7 +511,7 @@ def train():
         # with torch.autograd.detect_anomaly():
         
         scaler.scale(backward_loss).backward()
-        # print(backward_loss.item())
+        print(backward_loss.item())
             
         # print('after backward')
 

@@ -174,6 +174,36 @@ def set_optimizer(model, configer):
         )
         
     return optim
+    
+def set_optimizerD(model, configer):
+    if hasattr(model, 'get_discri_params'):
+        wd_params, nowd_params, lr_mul_wd_params, lr_mul_nowd_params = model.get_params()
+        #  wd_val = cfg.weight_decay
+        wd_val = 0
+        params_list = [
+            {'params': wd_params, },
+            {'params': nowd_params, 'weight_decay': wd_val},
+            {'params': lr_mul_wd_params, 'lr': configer.get('lr', 'lr_start')},
+            {'params': lr_mul_nowd_params, 'weight_decay': wd_val, 'lr': configer.get('lr', 'lr_start')},
+        ]
+    else:
+        return None
+    
+    if configer.get('optim') == 'SGD':
+        optim = torch.optim.SGD(
+            params_list,
+            lr=configer.get('lr', 'lr_start'),
+            momentum=0.9,
+            weight_decay=configer.get('lr', 'weight_decay'),
+        )
+    elif configer.get('optim') == 'AdamW':
+        optim = torch.optim.AdamW(
+            params_list,
+            lr=configer.get('lr', 'lr_start'),
+            weight_decay=configer.get('lr', 'weight_decay'),
+        )
+    
+    return optim
 
 def set_model_dist(net):
     local_rank = dist.get_rank()
@@ -318,8 +348,6 @@ def train():
     ## model
     net = set_model(configer=configer)
     graph_net = set_graph_model(configer=configer)
-    print("net: ", next(net.parameters()).device)
-    print("graph_net: ", next(graph_net.parameters()).device)
     
     if use_ema:
         ema_net = set_ema_model(configer=configer)
@@ -329,6 +357,7 @@ def train():
     ## optimizer
     optim = set_optimizer(net, configer)
     gnn_optim = set_optimizer(graph_net, configer)
+    gnn_optimD = set_optimizerD(graph_net, configer)
 
     ## mixed precision training
     scaler = amp.GradScaler()
@@ -339,6 +368,14 @@ def train():
     time_meter, loss_meter, loss_pre_meter, loss_aux_meters, loss_contrast_meter, loss_domain_meter, kl_loss_meter = set_meters(configer)
     ## lr scheduler
     lr_schdr = WarmupPolyLrScheduler(optim, power=0.9,
+        max_iter=configer.get('lr','max_iter'), warmup_iter=configer.get('lr','warmup_iters'),
+        warmup_ratio=0.1, warmup='exp', last_epoch=-1,)
+
+    gnn_lr_schdr = WarmupPolyLrScheduler(gnn_optim, power=0.9,
+        max_iter=configer.get('lr','max_iter'), warmup_iter=configer.get('lr','warmup_iters'),
+        warmup_ratio=0.1, warmup='exp', last_epoch=-1,)
+
+    gnn_lr_schdrD = WarmupPolyLrScheduler(gnn_optimD, power=0.9,
         max_iter=configer.get('lr','max_iter'), warmup_iter=configer.get('lr','warmup_iters'),
         warmup_ratio=0.1, warmup='exp', last_epoch=-1,)
     # 两个数据集分别处理
@@ -369,13 +406,13 @@ def train():
     ## ddp training
     if is_distributed():
         net = set_model_dist(net)
+        graph_net = set_model_dist(graph_net)
 
     contrast_warmup_iters = configer.get("lr", "warmup_iters")
     with_aux = configer.get('loss', 'with_aux')
     with_domain_adversarial = configer.get('network', 'with_domain_adversarial')
 
     for i in range(starti, configer.get('lr','max_iter') + starti):
-
         configer.plus_one('iter')
 
         # try:
@@ -392,14 +429,14 @@ def train():
 
         ims = []
         lbs = []        
-        for i in range(0,len(dl_iters)):
+        for j in range(0,len(dl_iters)):
             try:
-                im, lb = next(dl_iters[i])
-                if not im.size()[0] == configer.get('dataset'+str(i+1), 'ims_per_gpu'):
+                im, lb = next(dl_iters[j])
+                if not im.size()[0] == configer.get('dataset'+str(j+1), 'ims_per_gpu'):
                     raise StopIteration
             except StopIteration:
-                dl_iters[i] = iter(dls[i])
-                im, lb = next(dl_iters[i])
+                dl_iters[j] = iter(dls[j])
+                im, lb = next(dl_iters[j])
                 
             ims.append(im)
             lbs.append(lb)
@@ -497,6 +534,7 @@ def train():
         # with torch.autograd.detect_anomaly():
         
         scaler.scale(backward_loss).backward()
+        scaler.scale(adv_loss).backward()
         # print(backward_loss.item())
             
         # print('after backward')
@@ -511,11 +549,13 @@ def train():
         # for param in net.parameters():
         #     if torch.isnan(param.grad).any() or torch.isinf(param.grad).any():
         #         print("seg NaN or Inf value found in gradients")
-       
+        
         if train_seg_or_gnn == SEG: 
             scaler.step(optim)
         else:
             scaler.step(gnn_optim)
+            scaler.step(gnn_optimD)
+            
         scaler.update()
         torch.cuda.synchronize()
         if use_ema:
@@ -526,6 +566,7 @@ def train():
         if kl_loss:
             kl_loss_meter.update(kl_loss.item())
         
+        loss_domain_meter.update(adv_loss.item())
         # loss_pre_meter.update(loss_pre.item())
         
         if not use_dataset_aux_head or i > aux_iter:
@@ -586,8 +627,13 @@ def train():
             else:
                 state = graph_net.state_dict()
                 torch.save(state, save_pth)
-
-        lr_schdr.step()
+                
+        if train_seg_or_gnn == SEG:
+            lr_schdr.step()
+        else:
+            gnn_lr_schdr.step()
+            gnn_lr_schdrD.step()
+        
 
     ## dump the final model and evaluate the result
     save_pth = osp.join(configer.get('res_save_pth'), 'model_final.pth')
@@ -614,7 +660,7 @@ def train():
 
 
 def main():
-    if True:
+    if False:
         local_rank = int(os.environ["LOCAL_RANK"])
         # torch.cuda.set_device(args.local_rank)
         # dist.init_process_group(

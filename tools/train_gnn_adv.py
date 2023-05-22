@@ -364,6 +364,14 @@ def train():
     lr_schdr = WarmupPolyLrScheduler(optim, power=0.9,
         max_iter=configer.get('lr','max_iter'), warmup_iter=configer.get('lr','warmup_iters'),
         warmup_ratio=0.1, warmup='exp', last_epoch=-1,)
+
+    gnn_lr_schdr = WarmupPolyLrScheduler(gnn_optim, power=0.9,
+        max_iter=configer.get('lr','max_iter'), warmup_iter=configer.get('lr','warmup_iters'),
+        warmup_ratio=0.1, warmup='exp', last_epoch=-1,)
+
+    gnn_lr_schdrD = WarmupPolyLrScheduler(gnn_optimD, power=0.9,
+        max_iter=configer.get('lr','max_iter'), warmup_iter=configer.get('lr','warmup_iters'),
+        warmup_ratio=0.1, warmup='exp', last_epoch=-1,)
     # 两个数据集分别处理
     # 使用迭代器读取数据
     
@@ -613,7 +621,12 @@ def train():
                 state = graph_net.state_dict()
                 torch.save(state, save_pth)
 
-        lr_schdr.step()
+        if train_seg_or_gnn == SEG:
+            lr_schdr.step()
+        else:
+            gnn_lr_schdr.step()
+            gnn_lr_schdrD.step()
+        
 
     ## dump the final model and evaluate the result
     save_pth = osp.join(configer.get('res_save_pth'), 'model_final.pth')

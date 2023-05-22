@@ -1,3 +1,4 @@
+
 #!/usr/bin/python
 # -*- encoding: utf-8 -*-
 
@@ -13,7 +14,6 @@ from PIL import Image
 import numpy as np
 import time
 
-import lib.transform_cv2 as T
 
 labels_info = [
     {"name": "Car 1", "id": 0, "color": [255, 0, 0], "trainId": 0},
@@ -161,10 +161,6 @@ class A2D2Data(Dataset):
         assert len(self.img_paths) == len(self.lb_paths)
         self.len = len(self.img_paths)
 
-        self.to_tensor = T.ToTensor(
-            mean=(0.3038, 0.3383, 0.3034), # city, rgb
-            std=(0.2071, 0.2088, 0.2090),
-        )
         
         self.colors = []
 
@@ -175,11 +171,11 @@ class A2D2Data(Dataset):
         self.color2id = dict(zip(self.colors, range(len(self.colors))))
 
     def __getitem__(self, idx):
-        impth = self.img_paths[idx]
+        # impth = self.img_paths[idx]
         lbpth = self.lb_paths[idx]
         
         # start = time.time()
-        img = cv2.imread(impth)[:, :, ::-1]
+        # img = cv2.imread(impth)[:, :, ::-1]
 
         # img = cv2.resize(img, (1920, 1280))
         label = np.array(Image.open(lbpth).convert('RGB'))
@@ -188,25 +184,26 @@ class A2D2Data(Dataset):
         # label = np.array(Image.open(lbpth).convert('RGB').resize((1920, 1280),Image.ANTIALIAS))
         
         # start = time.time()
-        label = self.convert_labels(label, impth)
-        label = Image.fromarray(label)
+        label = self.convert_labels(label, None)
+        # label = Image.fromarray(label)
+        new_lbpth = lbpth.replace(".png", "_L.png")
+        cv2.imwrite(new_lbpth, label)
+        im = np.array(cv2.imread(new_lbpth, cv2.IMREAD_GRAYSCALE))
+        # print(im.shape)
+        # print(label.shape)
+        if (im == label).any() == False:
+            print("wrong!")
+            
+            
+        
+        
+        
+        return idx
         # end = time.time()
         # print("idx: {}, convert_labels time: {}".format(idx, end - start))
 
-        if not self.lb_map is None:
-            label = self.lb_map[label]
-        im_lb = dict(im=img, lb=label)
-        if not self.trans_func is None:
-            # start = time.time()
-            im_lb = self.trans_func(im_lb)
-            # end = time.time()  
-            # print("idx: {}, trans time: {}".format(idx, end - start))
-        im_lb = self.to_tensor(im_lb)
-        img, label = im_lb['im'], im_lb['lb']
-        if self.mode == 'ret_path':
-            return impth, label.unsqueeze(0).detach()
         
-        return img.detach(), label.unsqueeze(0).detach()
+        # return img.detach(), label.unsqueeze(0).detach()
         # return img.detach()
 
     def __len__(self):
@@ -226,4 +223,9 @@ class A2D2Data(Dataset):
         return mask
 
 if __name__ == "__main__":
-    pass
+    dataroot = "/home1/marong/datasets/a2d2"
+    annpath = "/home1/marong/Mul-Datasets-Semantic-Segmentation/datasets/A2D2/train.txt"
+    a2d2 = A2D2Data(dataroot, annpath)
+    for i in a2d2:
+        if i % 1000 == 0:
+            print(i)
