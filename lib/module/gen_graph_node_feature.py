@@ -198,4 +198,13 @@ def gen_graph_node_feature(configer):
 
 if __name__ == "__main__":
     configer = Configer(configs="configs/gnn_city_cam_a2d2.json")
-    gen_graph_node_feature(configer) 
+    graph_node_features = gen_graph_node_feature(configer) 
+    print(graph_node_features.shape)
+    norm_adj_feat = F.normalize(graph_node_features, p=2, dim=1)
+    similar_matrix = torch.einsum('nc, mc -> nm', norm_adj_feat, norm_adj_feat)
+    print("similar_matrix_max:", torch.max(similar_matrix))
+    print("similar_matrix_min:", torch.min(similar_matrix))
+    torch.set_printoptions(profile="full")
+    print(similar_matrix)
+    
+    

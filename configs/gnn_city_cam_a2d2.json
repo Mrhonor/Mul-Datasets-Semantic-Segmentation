@@ -48,10 +48,10 @@
     "dataset3": {
       "n_cats": 36, 
       "data_reader": "A2D2Data",
-      "im_root": "/mnt/disk1/datasets/A2D2/camera_lidar_semantic",
+      "im_root": "/home1/marong/datasets/a2d2",
       "train_im_anns":"datasets/A2D2/train.txt",
       "val_im_anns":"datasets/A2D2/val.txt", 
-      "ims_per_gpu": 4,
+      "ims_per_gpu": 2,
       "eval_ims_per_gpu": 1,
       "label_names": ["Car", "Bicycle", "Pedestrian", "Truck", "Small vehicles", "Traffic signal", "traffic sign", "Utility vehicle", "Sidebars", "Speed bumper", "Curbstone", "Solid line", "Irrelevant signs", "Road blocks", "Tractor", "Non-drivable street", "Zebra crossing", "Obstacles / trash", "Poles", "RD restricted area", "Animals", "Grid structure", "Signal corpus", "Drivable cobblestone", "Electronic traffic", "Slow drive area", "Nature object", "Parking area", "Sidewalk", "Ego car", "Painted driv. instr.", "Traffic guide obj.", "Dash line", "RD normal street", "Sky", "Buildings"]
     },
@@ -99,7 +99,7 @@
     "use_sync_bn": true,
     "contrast": {
       "use_contrast": true,
-      "proj_dim": 512,
+      "proj_dim": 256,
       "temperature": 0.07,
       "base_temperature": 0.07,
       "max_samples": 4096,

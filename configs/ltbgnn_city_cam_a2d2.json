@@ -23,7 +23,9 @@
       "threshold_value": 0.95,
       "alpha": 0.2,
       "fix_architecture_alter_iter": 2000,
-      "calc_bipartite": false
+      "calc_bipartite": false,
+      "output_max_adj": true,
+      "output_softmax_and_max_adj": true
     },
     "dataset1": {
       "n_cats": 19,
@@ -69,7 +71,7 @@
       "m": 0,
       "gamma": 12,
       "with_spa": true,
-      "spa_loss_weight": 1,
+      "spa_loss_weight": 0.1,
       "with_max_enc": true,
       "max_enc_weight": 1,
       "adv_loss_weight": 1
@@ -78,9 +80,9 @@
     "lr": {
       "lr_start": 5e-3,
       "weight_decay": 5e-5,
-      "warmup_iters": 5000,
+      "warmup_iters": 1000,
       "fix_param_iters": 0,
-      "max_iter": 150000
+      "max_iter": 50000
     },
     "train": {
       "scales": [0.5, 1.0, 2.0],
@@ -88,7 +90,7 @@
       "finetune": true,
       "finetune_from": "res/celoss/seg_pretrain_model.pth",
       "graph_finetune": false,
-      "graph_finetune_from": "res/celoss/model_2000.pth",
+      "graph_finetune_from": "res/celoss/graph_model_5000.pth",
       "seg_gnn_alter_iters": 2000
     },
     "val": {

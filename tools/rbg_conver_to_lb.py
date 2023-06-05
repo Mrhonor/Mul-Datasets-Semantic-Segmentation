@@ -188,15 +188,11 @@ class A2D2Data(Dataset):
         # label = Image.fromarray(label)
         new_lbpth = lbpth.replace(".png", "_L.png")
         cv2.imwrite(new_lbpth, label)
-        im = np.array(cv2.imread(new_lbpth, cv2.IMREAD_GRAYSCALE))
+        # im = np.array(cv2.imread(new_lbpth, cv2.IMREAD_GRAYSCALE))
         # print(im.shape)
         # print(label.shape)
-        if (im == label).any() == False:
-            print("wrong!")
-            
-            
-        
-        
+        # if (im == label).any() == False:
+        #     print("wrong!")
         
         return idx
         # end = time.time()
@@ -224,7 +220,7 @@ class A2D2Data(Dataset):
 
 if __name__ == "__main__":
     dataroot = "/home1/marong/datasets/a2d2"
-    annpath = "/home1/marong/Mul-Datasets-Semantic-Segmentation/datasets/A2D2/train.txt"
+    annpath = "/home1/marong/Mul-Datasets-Semantic-Segmentation/datasets/A2D2/val.txt"
     a2d2 = A2D2Data(dataroot, annpath)
     for i in a2d2:
         if i % 1000 == 0:

@@ -8,6 +8,7 @@ import lib.transform_cv2 as T
 from lib.sampler import RepeatedDistSampler
 from lib.cityscapes_cv2 import CityScapes, CityScapesIm
 from lib.a2d2_lb_cv2 import A2D2Data
+from lib.a2d2_cv2 import A2D2Data_L
 from lib.coco import CocoStuff
 from lib.a2d2_city_dataset import A2D2CityScapes
 from lib.CamVid_lb import CamVid

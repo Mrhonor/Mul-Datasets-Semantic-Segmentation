@@ -106,8 +106,8 @@ class GAT(nn.Module):
             self.linear2.requires_grad = True
             self.fix_arch = True    
         
-        if this_fix_arch:    
-            return self.bipartite_graphs.detach()
+        if this_fix_arch:                
+            return [bigh.detach() for bigh in self.bipartite_graphs]
         
         unify_feats = x[self.total_cats:]
         
@@ -711,7 +711,7 @@ class Learnable_Topology_GAT(nn.Module):
     def forward(self, x):
         x = torch.cat([x, self.unify_node_features], dim=0)
         x = self.linear_before(x)
-        adj = self.calc_adjacency_matrix(x)
+        adj, non_norm_adj = self.calc_adjacency_matrix(x)
         x = self.relu(x)
         # x = F.dropout(x, self.dropout_rate, training=self.training)
         feat = torch.cat([att(x, adj) for att in self.attentions_layer1], dim=1)
@@ -727,14 +727,14 @@ class Learnable_Topology_GAT(nn.Module):
             
             return feat[self.total_cats:], self.calc_bipartite_graph(arch_x)
         else:
-            return feat[self.total_cats:], self.sep_bipartite_graphs(adj)
+            return feat[self.total_cats:], self.sep_bipartite_graphs(non_norm_adj)
 
     def sep_bipartite_graphs(self, adj):
         self.bipartite_graphs = []
         cur_cat = 0
         for i in range(0, self.n_datasets):
             this_bipartite_graph = adj[cur_cat:cur_cat+self.dataset_cats[i], self.total_cats:]
-            this_bipartite_graph = F.softmax(this_bipartite_graph/0.05, dim=0)
+            this_bipartite_graph = F.softmax(this_bipartite_graph/0.07, dim=0)
             self.bipartite_graphs.append(this_bipartite_graph)
             cur_cat += self.dataset_cats[i]
         return self.bipartite_graphs
@@ -816,8 +816,9 @@ class Learnable_Topology_GAT(nn.Module):
             # print(r_mat_inv_sqrt)
             return torch.mm(r_inv_sqrt, mx)
         
-        similar_matrix = normalize_adj(similar_matrix)
-        return similar_matrix
+        norm_matrix = normalize_adj(similar_matrix)
+
+        return norm_matrix, similar_matrix
 
     def get_params(self):
         def add_param_to_list(mod, wd_params, nowd_params):
@@ -865,6 +866,8 @@ class Learnable_Topology_BGNN(nn.Module):
         self.fix_arch = False
         self.fix_architecture_alter_iter = self.configer.get('GNN', 'fix_architecture_alter_iter')
         self.calc_bipartite = self.configer.get('GNN', 'calc_bipartite')
+        self.output_max_adj = self.configer.get('GNN', 'output_max_adj')
+        self.output_softmax_and_max_adj = self.configer.get('GNN', 'output_softmax_and_max_adj')
 
         self.linear_before = nn.Linear(self.nfeat, self.nfeat_out)
         self.linear_adj = nn.Linear(self.nfeat_out, self.nfeat_adj)
@@ -906,7 +909,7 @@ class Learnable_Topology_BGNN(nn.Module):
         x = torch.cat([x, self.unify_node_features], dim=0)
         
         feat1 = self.linear_before(x)
-        adj, adj_mI = self.calc_adjacency_matrix(feat1)
+        adj_mI, non_norm_adj_mI = self.calc_adjacency_matrix(feat1)
         feat1_relu = self.relu(feat1)
         
         before_gcn1_x = F.dropout(feat1_relu, self.dropout_rate, training=self.training)
@@ -935,16 +938,29 @@ class Learnable_Topology_BGNN(nn.Module):
             
             return feat_out[self.total_cats:], self.calc_bipartite_graph(arch_x), adv_out
         else:
-            return feat_out[self.total_cats:], self.sep_bipartite_graphs(adj), adv_out
+            return feat_out[self.total_cats:], self.sep_bipartite_graphs(non_norm_adj_mI), adv_out
 
     def sep_bipartite_graphs(self, adj):
         self.bipartite_graphs = []
         cur_cat = 0
         for i in range(0, self.n_datasets):
             this_bipartite_graph = adj[cur_cat:cur_cat+self.dataset_cats[i], self.total_cats:]
-            this_bipartite_graph = F.softmax(this_bipartite_graph/0.05, dim=0)
-            self.bipartite_graphs.append(this_bipartite_graph)
+            if self.output_max_adj:
+                # 找到每列的最大值
+                max_values, _ = torch.max(this_bipartite_graph, dim=0)
+
+                # 创建掩码矩阵，将每列的最大值位置置为1，其余位置置为0
+                mask = torch.zeros_like(this_bipartite_graph)
+                mask[this_bipartite_graph == max_values] = 1
+                max_bipartite_graph = this_bipartite_graph * mask
+                self.bipartite_graphs.append(max_bipartite_graph)
+                
+            if self.output_softmax_and_max_adj or not self.output_max_adj:
+                softmax_bipartite_graph = F.softmax(this_bipartite_graph/0.07, dim=0)
+                self.bipartite_graphs.append(softmax_bipartite_graph)
+            
             cur_cat += self.dataset_cats[i]
+        
         return self.bipartite_graphs
 
     def calc_bipartite_graph(self, x):
@@ -1025,9 +1041,9 @@ class Learnable_Topology_BGNN(nn.Module):
             # print(r_mat_inv_sqrt)
             return torch.mm(r_inv_sqrt, mx)
         
-        similar_matrix = normalize_adj(similar_matrix)
-        adj_mI = normalize_adj(adj_mI)
-        return similar_matrix, adj_mI
+        # similar_matrix = normalize_adj(similar_matrix)
+        norm_adj_mI = normalize_adj(adj_mI)
+        return norm_adj_mI, adj_mI
 
     def get_params(self):
         def add_param_to_list(mod, wd_params, nowd_params):

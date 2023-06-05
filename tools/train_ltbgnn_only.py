@@ -97,7 +97,7 @@ def set_graph_model(configer):
     net = model_factory[configer.get('GNN','model_name')](configer)
 
     if configer.get('train', 'graph_finetune'):
-        logger.info(f"load pretrained weights from {configer.get('train', 'graphfinetune_from')}")
+        logger.info(f"load pretrained weights from {configer.get('train', 'graph_finetune_from')}")
         net.load_state_dict(torch.load(configer.get('train', 'graph_finetune_from'), map_location='cpu'), strict=False)
 
         
@@ -584,7 +584,7 @@ def train():
         ## print training log message
         if (i + 1) % 100 == 0:
             writer.add_scalars("loss",{"seg":loss_pre_meter.getWoErase(),"contrast":loss_contrast_meter.getWoErase(), "domain":loss_domain_meter.getWoErase()},configer.get("iter")+1)
-            lr = lr_schdr.get_lr()
+            lr = gnn_lr_schdr.get_lr()
             lr = sum(lr) / len(lr)
             print_log_msg(
                 i, 0, 0, configer.get('lr', 'max_iter')+starti, lr, time_meter, loss_meter,
@@ -592,13 +592,16 @@ def train():
             
 
         if (i + 1) % 5000 == 0:
-            save_pth = osp.join(configer.get('res_save_pth'), 'graph_model_{}.pth'.format(i+1))
-            logger.info('\nsave models to {}'.format(save_pth))
+            seg_save_pth = osp.join(configer.get('res_save_pth'), 'seg_model_{}.pth'.format(i+1))
+            gnn_save_pth = osp.join(configer.get('res_save_pth'), 'graph_model_{}.pth'.format(i+1))
+            logger.info('\nsave seg_models to {}, gnn_models to {}'.format(seg_save_pth, gnn_save_pth))
 
-            if fix_graph == False:
-                with torch.no_grad():
-                    input_feats = torch.cat([graph_node_features, graph_net.unify_node_features], dim=0)
-                    unify_prototype, bi_graphs = graph_net(input_feats)
+            # if fix_graph == False:
+            with torch.no_grad():
+                # input_feats = torch.cat([graph_node_features, graph_net.unify_node_features], dim=0)
+                unify_prototype, bi_graphs, _ = graph_net(graph_node_features)
+                if configer.get('GNN', 'output_max_adj') and configer.get('GNN', 'output_softmax_and_max_adj'):
+                    bi_graphs = [bi_graph for i, bi_graph in filter(lambda x : x[0] % 2 == 0, enumerate(bi_graphs))]
 
             if use_dataset_aux_head and i < aux_iter:
                 eval_model_func = eval_model_aux
@@ -622,11 +625,16 @@ def train():
             net.train()
             
             if is_distributed():
-                state = graph_net.module.state_dict()
-                if dist.get_rank() == 0: torch.save(state, save_pth)
+                gnn_state = graph_net.module.state_dict()
+                seg_state = net.module.state_dict()
+                if dist.get_rank() == 0: 
+                    torch.save(gnn_state, gnn_save_pth)
+                    torch.save(seg_state, seg_save_pth)
             else:
-                state = graph_net.state_dict()
-                torch.save(state, save_pth)
+                gnn_state = graph_net.state_dict()
+                seg_state = net.state_dict()
+                torch.save(gnn_state, gnn_save_pth)
+                torch.save(seg_state, seg_save_pth)
                 
         if train_seg_or_gnn == SEG:
             lr_schdr.step()
@@ -636,17 +644,22 @@ def train():
         
 
     ## dump the final model and evaluate the result
-    save_pth = osp.join(configer.get('res_save_pth'), 'model_final.pth')
-    logger.info('\nsave models to {}'.format(save_pth))
+    seg_save_pth = osp.join(configer.get('res_save_pth'), 'seg_model_final.pth')
+    gnn_save_pth = osp.join(configer.get('res_save_pth'), 'gnn_model_final.pth')
+    logger.info('\nsave seg_models to {}, gnn_models to {}'.format(seg_save_pth, gnn_save_pth))
     
     writer.close()
     if is_distributed():
-        state = graph_net.module.state_dict()
-        if dist.get_rank() == 0: torch.save(state, save_pth)
+        gnn_state = graph_net.module.state_dict()
+        seg_state = net.module.state_dict()
+        if dist.get_rank() == 0: 
+            torch.save(gnn_state, gnn_save_pth)
+            torch.save(seg_state, seg_save_pth)
     else:
-        state = graph_net.state_dict()
-        torch.save(state, save_pth)
-
+        gnn_state = graph_net.state_dict()
+        seg_state = net.state_dict()
+        torch.save(gnn_state, gnn_save_pth)
+        torch.save(seg_state, seg_save_pth)
 
     # logger.info('\nevaluating the final model')
     torch.cuda.empty_cache()

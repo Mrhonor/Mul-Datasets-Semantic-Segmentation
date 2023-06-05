@@ -558,13 +558,14 @@ def train():
             
 
         if (i + 1) % 5000 == 0:
-            save_pth = osp.join(configer.get('res_save_pth'), 'graph_model_{}.pth'.format(i+1))
-            logger.info('\nsave models to {}'.format(save_pth))
+            seg_save_pth = osp.join(configer.get('res_save_pth'), 'seg_model_{}.pth'.format(i+1))
+            gnn_save_pth = osp.join(configer.get('res_save_pth'), 'graph_model_{}.pth'.format(i+1))
+            logger.info('\nsave seg_models to {}, gnn_models to {}'.format(seg_save_pth, gnn_save_pth))
 
             if fix_graph == False:
                 with torch.no_grad():
-                    input_feats = torch.cat([graph_node_features, graph_net.unify_node_features], dim=0)
-                    unify_prototype, bi_graphs = graph_net(input_feats)
+                    # input_feats = torch.cat([graph_node_features, graph_net.unify_node_features], dim=0)
+                    unify_prototype, bi_graphs = graph_net(graph_node_features)
 
             if use_dataset_aux_head and i < aux_iter:
                 eval_model_func = eval_model_aux
@@ -588,11 +589,16 @@ def train():
             net.train()
             
             if is_distributed():
-                state = graph_net.module.state_dict()
-                if dist.get_rank() == 0: torch.save(state, save_pth)
+                gnn_state = graph_net.module.state_dict()
+                seg_state = net.module.state_dict()
+                if dist.get_rank() == 0: 
+                    torch.save(gnn_state, gnn_save_pth)
+                    torch.save(seg_state, seg_save_pth)
             else:
-                state = graph_net.state_dict()
-                torch.save(state, save_pth)
+                gnn_state = graph_net.state_dict()
+                seg_state = net.state_dict()
+                torch.save(gnn_state, gnn_save_pth)
+                torch.save(seg_state, seg_save_pth)
 
         if train_seg_or_gnn == SEG:
             lr_schdr.step()
@@ -600,16 +606,22 @@ def train():
             gnn_lr_schdr.step()
 
     ## dump the final model and evaluate the result
-    save_pth = osp.join(configer.get('res_save_pth'), 'model_final.pth')
-    logger.info('\nsave models to {}'.format(save_pth))
+    seg_save_pth = osp.join(configer.get('res_save_pth'), 'seg_model_final.pth')
+    gnn_save_pth = osp.join(configer.get('res_save_pth'), 'gnn_model_final.pth')
+    logger.info('\nsave seg_models to {}, gnn_models to {}'.format(seg_save_pth, gnn_save_pth))
     
     writer.close()
     if is_distributed():
-        state = graph_net.module.state_dict()
-        if dist.get_rank() == 0: torch.save(state, save_pth)
+        gnn_state = graph_net.module.state_dict()
+        seg_state = net.module.state_dict()
+        if dist.get_rank() == 0: 
+            torch.save(gnn_state, gnn_save_pth)
+            torch.save(seg_state, seg_save_pth)
     else:
-        state = graph_net.state_dict()
-        torch.save(state, save_pth)
+        gnn_state = graph_net.state_dict()
+        seg_state = net.state_dict()
+        torch.save(gnn_state, gnn_save_pth)
+        torch.save(seg_state, seg_save_pth)
 
 
     # logger.info('\nevaluating the final model')

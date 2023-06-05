@@ -771,7 +771,7 @@ class CrossDatasetsCELoss_GNN(nn.Module):
                 loss = loss + spa_loss
             
             if self.with_max_enc:
-                max_enc_loss = self.max_enc_weight * self.MSE_loss(torch.max(bi_graphs[i], dim=0)[0], torch.ones(bi_graphs[i].size(1)).cuda())
+                max_enc_loss = self.max_enc_weight * self.MSE_loss(torch.max(bi_graphs[i], dim=1)[0], torch.ones(bi_graphs[i].size(0)).cuda())
                 loss = loss + max_enc_loss
                    
         return loss
@@ -791,6 +791,8 @@ class CrossDatasetsCELoss_AdvGNN(nn.Module):
         self.spa_loss_weight = self.configer.get('loss', 'spa_loss_weight')
         self.with_max_enc = self.configer.get('loss', 'with_max_enc')
         self.max_enc_weight = self.configer.get('loss', 'max_enc_weight')
+        self.with_softmax_and_max = self.configer.get('GNN', 'output_softmax_and_max_adj')
+        self.max_iter = self.configer.get('lr', 'max_iter')
         
         self.n_cats = []
         for i in range(1, self.n_datasets+1):
@@ -825,25 +827,41 @@ class CrossDatasetsCELoss_AdvGNN(nn.Module):
             if not (dataset_ids == i).any():
                 continue
             
-            remap_logits = torch.einsum('bchw, nc -> bnhw', logits[dataset_ids==i], bi_graphs[i])
-            remap_logits = F.interpolate(remap_logits, size=(target.size(1), target.size(2)), mode="bilinear", align_corners=True)
+            if self.with_softmax_and_max:
+                max_remap_logits = torch.einsum('bchw, nc -> bnhw', logits[dataset_ids==i], bi_graphs[2*i])
+                max_remap_logits = F.interpolate(max_remap_logits, size=(target.size(1), target.size(2)), mode="bilinear", align_corners=True) 
+
+                softmax_remap_logits = torch.einsum('bchw, nc -> bnhw', logits[dataset_ids==i], bi_graphs[2*i + 1])
+                softmax_remap_logits = F.interpolate(softmax_remap_logits, size=(target.size(1), target.size(2)), mode="bilinear", align_corners=True) 
+            else:
+                remap_logits = torch.einsum('bchw, nc -> bnhw', logits[dataset_ids==i], bi_graphs[i])
+                remap_logits = F.interpolate(remap_logits, size=(target.size(1), target.size(2)), mode="bilinear", align_corners=True)
             # print("remap_logits_max : {}, remap_logits_min : {}".format(torch.max(remap_logits), torch.min(remap_logits)))
             # a = target[dataset_ids==i].clone()
             # a[a == 255] = 0
             # print("i : {}, a_max : {}, a_min : {}".format(i, torch.max(a), torch.min(a)))
             
             # print(torch.sum(bi_graphs[i]))
-            if loss is None:
-                loss = self.CELoss(remap_logits, target[dataset_ids==i])
+            if self.with_softmax_and_max:
+                cur_iter = self.configer.get('iter')
+                max_rate = cur_iter / self.max_iter
+                if loss is None:
+                    loss = max_rate * self.CELoss(max_remap_logits, target[dataset_ids==i]) + (1 - max_rate) * self.CELoss(softmax_remap_logits, target[dataset_ids==i]) 
+                else:
+                    loss = loss + max_rate * self.CELoss(max_remap_logits, target[dataset_ids==i]) + (1 - max_rate) * self.CELoss(softmax_remap_logits, target[dataset_ids==i]) 
+                
             else:
-                loss = loss + self.CELoss(remap_logits, target[dataset_ids==i])
+                if loss is None:
+                    loss = self.CELoss(remap_logits, target[dataset_ids==i])
+                else:
+                    loss = loss + self.CELoss(remap_logits, target[dataset_ids==i])
 
             if self.with_spa:
                 spa_loss = self.spa_loss_weight * torch.pow(torch.norm(bi_graphs[i], p='fro'), 2)
                 loss = loss + spa_loss
             
             if self.with_max_enc:
-                max_enc_loss = self.max_enc_weight * self.MSE_loss(torch.max(bi_graphs[i], dim=0)[0], torch.ones(bi_graphs[i].size(1)).cuda())
+                max_enc_loss = self.max_enc_weight * self.MSE_loss(torch.max(bi_graphs[i], dim=1)[0], torch.ones(bi_graphs[i].size(0)).cuda())
                 loss = loss + max_enc_loss
               
         if is_adv:  
