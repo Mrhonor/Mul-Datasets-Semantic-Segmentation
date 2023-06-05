@@ -13,6 +13,7 @@ from PIL import Image
 import numpy as np
 
 import lib.transform_cv2 as T
+import time
 
 
 
@@ -171,11 +172,15 @@ class CamVid(Dataset):
         
 
     def __getitem__(self, idx):
+        start = time.time()
         impth = self.img_paths[idx]
         lbpth = self.lb_paths[idx]
         # print(impth)
 
         img = cv2.imread(impth)[:, :, ::-1]
+
+        if img is None:
+            print(impth)
         
         # img = cv2.resize(img, (960, 768))
         label = np.array(Image.open(lbpth).convert('RGB'))
@@ -185,13 +190,17 @@ class CamVid(Dataset):
         if not self.lb_map is None:
             label = self.lb_map[label]
         im_lb = dict(im=img, lb=label)
+
         if not self.trans_func is None:
             im_lb = self.trans_func(im_lb)
+
+        # print("trans time: ",ed - sta)    
+        
         im_lb = self.to_tensor(im_lb)
         img, label = im_lb['im'], im_lb['lb']
 
         if self.mode == 'ret_path':
-            return impth, label.unsqueeze(0).detach()
+            return impth, label
         
         return img.detach(), label.unsqueeze(0).detach()
         # return img.detach()

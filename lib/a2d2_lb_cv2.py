@@ -11,6 +11,7 @@ import torch.distributed as dist
 import cv2
 from PIL import Image
 import numpy as np
+import time
 
 import lib.transform_cv2 as T
 
@@ -177,19 +178,29 @@ class A2D2Data(Dataset):
         impth = self.img_paths[idx]
         lbpth = self.lb_paths[idx]
         
-        
+        # start = time.time()
         img = cv2.imread(impth)[:, :, ::-1]
+
         # img = cv2.resize(img, (1920, 1280))
         label = np.array(Image.open(lbpth).convert('RGB'))
+        # end = time.time()
+        # print("idx: {}, cv2.imread time: {}".format(idx, end - start))
         # label = np.array(Image.open(lbpth).convert('RGB').resize((1920, 1280),Image.ANTIALIAS))
+        
+        # start = time.time()
         label = self.convert_labels(label, impth)
         label = Image.fromarray(label)
+        # end = time.time()
+        # print("idx: {}, convert_labels time: {}".format(idx, end - start))
 
         if not self.lb_map is None:
             label = self.lb_map[label]
         im_lb = dict(im=img, lb=label)
         if not self.trans_func is None:
+            # start = time.time()
             im_lb = self.trans_func(im_lb)
+            # end = time.time()  
+            # print("idx: {}, trans time: {}".format(idx, end - start))
         im_lb = self.to_tensor(im_lb)
         img, label = im_lb['im'], im_lb['lb']
         if self.mode == 'ret_path':

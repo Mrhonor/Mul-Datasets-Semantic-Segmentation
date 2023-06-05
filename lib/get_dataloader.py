@@ -8,6 +8,7 @@ import lib.transform_cv2 as T
 from lib.sampler import RepeatedDistSampler
 from lib.cityscapes_cv2 import CityScapes, CityScapesIm
 from lib.a2d2_lb_cv2 import A2D2Data
+from lib.a2d2_cv2 import A2D2Data_L
 from lib.coco import CocoStuff
 from lib.a2d2_city_dataset import A2D2CityScapes
 from lib.CamVid_lb import CamVid
@@ -56,9 +57,18 @@ def get_data_loader(configer, aux_mode='eval', distributed=True):
         
         shuffle = True
         drop_last = True
-    elif mode == 'eval' or mode == 'ret_path':
+    elif mode == 'eval':
         trans_func = TransformationVal()
         batchsize = [configer.get('dataset'+str(i), 'eval_ims_per_gpu') for i in range(1, n_datasets+1)]
+        annpath = [configer.get('dataset'+str(i), 'val_im_anns') for i in range(1, n_datasets+1)]
+        imroot = [configer.get('dataset'+str(i), 'im_root') for i in range(1, n_datasets+1)]
+        data_reader = [configer.get('dataset'+str(i), 'data_reader') for i in range(1, n_datasets+1)]
+        
+        shuffle = False
+        drop_last = False
+    elif mode == 'ret_path':
+        trans_func = TransformationVal()
+        batchsize = [1 for i in range(1, n_datasets+1)]
         annpath = [configer.get('dataset'+str(i), 'val_im_anns') for i in range(1, n_datasets+1)]
         imroot = [configer.get('dataset'+str(i), 'im_root') for i in range(1, n_datasets+1)]
         data_reader = [configer.get('dataset'+str(i), 'data_reader') for i in range(1, n_datasets+1)]
@@ -88,7 +98,7 @@ def get_data_loader(configer, aux_mode='eval', distributed=True):
             dataset,
             batch_sampler=batchsamp,
             num_workers=4,
-            pin_memory=False,
+            pin_memory=True,
         ) for dataset, batchsamp in zip(ds, batchsampler)]
     else:
         # n_train_imgs = cfg.ims_per_gpu * cfg.max_iter
@@ -108,7 +118,7 @@ def get_data_loader(configer, aux_mode='eval', distributed=True):
             shuffle=shuffle,
             drop_last=drop_last,
             num_workers=4,
-            pin_memory=False,
+            pin_memory=True,
         ) for dataset, bs in zip(ds, batchsize)]
     return dl
 
@@ -227,7 +237,7 @@ def get_city_loader(configer, aux_mode='eval', distributed=True):
         dl = [DataLoader(
             dataset,
             batch_sampler=batchsamp,
-            num_workers=4,
+            num_workers=8,
             pin_memory=False,
         ) for dataset, batchsamp in zip(ds, batchsampler)]
     else:
@@ -247,7 +257,7 @@ def get_city_loader(configer, aux_mode='eval', distributed=True):
             batch_size=bs,
             shuffle=shuffle,
             drop_last=drop_last,
-            num_workers=4,
+            num_workers=8,
             pin_memory=False,
         ) for dataset, bs in zip(ds, batchsize)]
     return dl[0]

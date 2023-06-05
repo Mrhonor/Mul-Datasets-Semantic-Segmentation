@@ -1,7 +1,6 @@
 #!/usr/bin/python
 # -*- encoding: utf-8 -*-
 
-# from asyncio.windows_events import NULL # 有bug，去掉改为别的判定
 
 from cgi import print_directory
 from email.policy import strict

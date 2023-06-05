@@ -3,7 +3,6 @@ from __future__ import division
 from __future__ import print_function
 
 from abc import ABC
-import this
 
 import torch
 import torch.nn as nn

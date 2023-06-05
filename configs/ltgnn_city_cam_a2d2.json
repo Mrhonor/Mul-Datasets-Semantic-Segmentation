@@ -1,0 +1,138 @@
+{
+    "model_name": "hrnet_w48_gnn",
+    "aux_mode": "train",
+    "n_datasets": 3,
+    "hrnet": {
+      "cfg": "hrnet48",
+      "keep_imagenet_head": false,
+      "drop_stage4": false,
+      "full_res_stem": false
+    },
+    "GNN": {
+      "model_name": "learnable_topology_GAT",
+      "nfeat": 1024,
+      "nfeat_out": 512,
+      "nfeat_adj": 256,
+      "nhid": 64,
+      "nheads": 8,
+      "att_out_dim": 512,
+      "output_feat_dim": 512,
+      "adj_feat_dim": 128,
+      "dropout_rate": 0.5,
+      "unify_ratio": 1,
+      "threshold_value": 0.95,
+      "alpha": 0.2,
+      "fix_architecture_alter_iter": 2000,
+      "calc_bipartite": false,
+      "output_max_adj": false,
+      "output_softmax_and_max_adj": false
+    },
+    "dataset1": {
+      "n_cats": 19,
+      "data_reader": "CityScapes",
+      "im_root": "/home1/marong/datasets",
+      "train_im_anns":"datasets/Cityscapes/train.txt",
+      "val_im_anns":"datasets/Cityscapes/val.txt", 
+      "ims_per_gpu": 2,
+      "eval_ims_per_gpu": 1,
+      "label_names": ["road", "sidewalk", "building", "wall", "fence", "pole", "traffic light", "traffic sign", "vegetation", "terrain", "sky", "person", "rider", "car", "truck", "bus", "train", "motorcycle", "bicycle"]
+    },
+    "dataset2": {
+      "n_cats": 12, 
+      "data_reader": "CamVid",
+      "im_root": "/home1/marong/datasets/CamVid",
+      "train_im_anns":"datasets/CamVid/train.txt",
+      "val_im_anns":"datasets/CamVid/test.txt", 
+      "ims_per_gpu": 2,
+      "eval_ims_per_gpu": 1,
+      "label_names": ["Sky", "Building", "Column_Pole", "Road", "Sidewalk", "Tree", "SignSymbol", "Fence", "Car", "Pedestrian", "Bicyclist", "Wall"]
+    },
+    "dataset3": {
+      "n_cats": 36, 
+      "data_reader": "A2D2Data_L",
+      "im_root": "/home1/marong/datasets/a2d2",
+      "train_im_anns":"datasets/A2D2_L/train.txt",
+      "val_im_anns":"datasets/A2D2_L/val.txt", 
+      "ims_per_gpu": 4,
+      "eval_ims_per_gpu": 1,
+      "label_names": ["Car", "Bicycle", "Pedestrian", "Truck", "Small vehicles", "Traffic signal", "traffic sign", "Utility vehicle", "Sidebars", "Speed bumper", "Curbstone", "Solid line", "Irrelevant signs", "Road blocks", "Tractor", "Non-drivable street", "Zebra crossing", "Obstacles / trash", "Poles", "RD restricted area", "Animals", "Grid structure", "Signal corpus", "Drivable cobblestone", "Electronic traffic", "Slow drive area", "Nature object", "Parking area", "Sidewalk", "Ego car", "Painted driv. instr.", "Traffic guide obj.", "Dash line", "RD normal street", "Sky", "Buildings"]
+    },
+    "n_bn": 1,
+    "class_remaper": "ClassRemapOneHotLabel",
+    "loss":{
+      "type": "GNN",
+      "reweight": false,
+      "with_aux": false,
+      "with_unify_label": true,
+      "aux_weight": 1,
+      "aux_num": 4,
+      "ignore_index": 255,
+      "domain_loss_weight": 1,
+      "m": 0,
+      "gamma": 12,
+      "with_spa": true,
+      "spa_loss_weight": 0.1,
+      "with_max_enc": true,
+      "max_enc_weight": 1,
+      "adv_loss_weight": 1
+    },
+    "use_ema": false,
+    "lr": {
+      "lr_start": 5e-3,
+      "weight_decay": 5e-5,
+      "warmup_iters": 5000,
+      "fix_param_iters": 0,
+      "max_iter": 150000
+    },
+    "train": {
+      "scales": [0.5, 1.0, 2.0],
+      "cropsize": [512, 1024],
+      "finetune": true,
+      "finetune_from": "res/celoss/seg_pretrain_model.pth",
+      "graph_finetune": false,
+      "graph_finetune_from": "res/celoss/model_2000.pth",
+      "seg_gnn_alter_iters": 2000
+    },
+    "val": {
+      "scales": [0.5, 0.75, 1.0, 1.25, 1.5, 1.75],
+      "cropsize": [512, 1024]
+    },
+    "use_fp16": false,
+    "use_sync_bn": false,
+    "contrast": {
+      "use_contrast": true,
+      "proj_dim": 512,
+      "temperature": 0.07,
+      "base_temperature": 0.07,
+      "max_samples": 4096,
+      "max_views": 24,
+      "loss_weight": 1,
+      "num_prototype": 1,
+      "coefficient": 0.999,
+      "upsample": false,
+      "downsample": false,
+      "update_confidence_thresh": 0.1,
+      "update_sim_thresh": 0.4,
+      "with_ppd": false,
+      "ppd_loss_weight": 1,
+      "with_hard_lb_contrast": false,
+      "hard_lb_contrast_loss_weight": 1,
+      "with_consistence": false,
+      "consistent_loss_weight": 10,
+      "with_mulbn": false,
+      "memory_bank": false,
+      "memory_bank_size": 5000
+    },
+    "res_save_pth": "res/celoss/",
+    "network": {
+      "stride": 4,
+      "with_domain_adversarial": false,
+      "bn_type": "torchbn"
+    },
+    "dataset_aux_head": {
+      "use_dataset_aux_head": false,
+      "aux_iter": 15000
+    },
+    "optim": "AdamW",
+    "iter": 0
+}
