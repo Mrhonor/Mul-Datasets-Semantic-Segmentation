@@ -130,3 +130,4 @@ tvm/
 ## Caffe
 *.bin
 *.caffemodel
+*.log

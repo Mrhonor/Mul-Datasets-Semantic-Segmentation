@@ -57,7 +57,7 @@ def parse_args():
     parse.add_argument('--local_rank', dest='local_rank', type=int, default=-1,)
     parse.add_argument('--port', dest='port', type=int, default=16853,)
     parse.add_argument('--finetune_from', type=str, default=None,)
-    parse.add_argument('--config', dest='config', type=str, default='configs/ltbgnn_city_cam_a2d2.json',)
+    parse.add_argument('--config', dest='config', type=str, default='configs/ltbgnn_city_cam_lr_down.json',)
     return parse.parse_args()
 
 # 使用绝对路径
@@ -368,17 +368,18 @@ def train():
     ## meters
     time_meter, loss_meter, loss_pre_meter, loss_aux_meters, loss_contrast_meter, loss_domain_meter, kl_loss_meter = set_meters(configer)
     ## lr scheduler
-    lr_schdr = WarmupPolyLrScheduler(optim, power=0.9,
-        max_iter=configer.get('lr','max_iter'), warmup_iter=configer.get('lr','warmup_iters'),
-        warmup_ratio=0.1, warmup='exp', last_epoch=-1,)
-
     gnn_lr_schdr = WarmupPolyLrScheduler(gnn_optim, power=0.9,
-        max_iter=configer.get('lr','max_iter'), warmup_iter=configer.get('lr','warmup_iters'),
+        max_iter=configer.get('train','gnn_iters'), warmup_iter=configer.get('lr','warmup_iters'),
         warmup_ratio=0.1, warmup='exp', last_epoch=-1,)
 
     gnn_lr_schdrD = WarmupPolyLrScheduler(gnn_optimD, power=0.9,
-        max_iter=configer.get('lr','max_iter'), warmup_iter=configer.get('lr','warmup_iters'),
+        max_iter=configer.get('train','gnn_iters'), warmup_iter=configer.get('lr','warmup_iters'),
         warmup_ratio=0.1, warmup='exp', last_epoch=-1,)
+
+    lr_schdr = WarmupPolyLrScheduler(optim, power=0.9,
+        max_iter=configer.get('train','seg_iters'), warmup_iter=configer.get('lr','warmup_iters'),
+        warmup_ratio=0.1, warmup='exp', last_epoch=-1,)
+
     # 两个数据集分别处理
     # 使用迭代器读取数据
     
@@ -412,9 +413,14 @@ def train():
     contrast_warmup_iters = configer.get("lr", "warmup_iters")
     with_aux = configer.get('loss', 'with_aux')
     with_domain_adversarial = configer.get('network', 'with_domain_adversarial')
+    alter_iter = 0
+    SEG = 0
+    GNN = 1
+    train_seg_or_gnn = SEG
 
     for i in range(starti, configer.get('lr','max_iter') + starti):
         configer.plus_one('iter')
+        alter_iter += 1
 
         # try:
         #     im_lb, dataset_lbs = next(dl_iter)
@@ -457,12 +463,23 @@ def train():
         lb = torch.squeeze(lb, 1)
 
 
-        SEG = 0
-        GNN = 1
-        if joint_train and configer.get('iter') // configer.get('train', 'seg_gnn_alter_iters') % 2 == 0:
-            train_seg_or_gnn = SEG
-        else:
+
+        if train_seg_or_gnn == SEG and alter_iter > configer.get('train', 'seg_iters'):
             train_seg_or_gnn = GNN
+            gnn_lr_schdr = WarmupPolyLrScheduler(gnn_optim, power=0.9,
+                max_iter=configer.get('train','gnn_iters'), warmup_iter=configer.get('lr','warmup_iters'),
+                warmup_ratio=0.1, warmup='exp', last_epoch=-1,)
+
+            gnn_lr_schdrD = WarmupPolyLrScheduler(gnn_optimD, power=0.9,
+                max_iter=configer.get('train','gnn_iters'), warmup_iter=configer.get('lr','warmup_iters'),
+                warmup_ratio=0.1, warmup='exp', last_epoch=-1,)
+
+        elif train_seg_or_gnn == GNN and alter_iter >  configer.get('train', 'gnn_iters'):
+            train_seg_or_gnn = SEG
+            lr_schdr = WarmupPolyLrScheduler(optim, power=0.9,
+                max_iter=configer.get('train','seg_iters'), warmup_iter=configer.get('lr','warmup_iters'),
+                warmup_ratio=0.1, warmup='exp', last_epoch=-1,)
+
         # net.eval()
         # with torch.no_grad():
         #     seg_out = net(im)

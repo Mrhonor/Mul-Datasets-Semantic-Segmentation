@@ -1,7 +1,7 @@
 {
     "model_name": "hrnet_w48_gnn",
     "aux_mode": "train",
-    "n_datasets": 3,
+    "n_datasets": 2,
     "hrnet": {
       "cfg": "hrnet48",
       "keep_imagenet_head": false,
@@ -24,8 +24,8 @@
       "alpha": 0.2,
       "fix_architecture_alter_iter": 2000,
       "calc_bipartite": false,
-      "output_max_adj": true,
-      "output_softmax_and_max_adj": true
+      "output_max_adj": false,
+      "output_softmax_and_max_adj": false
     },
     "dataset1": {
       "n_cats": 19,
@@ -33,8 +33,8 @@
       "im_root": "/home1/marong/datasets",
       "train_im_anns":"datasets/Cityscapes/train.txt",
       "val_im_anns":"datasets/Cityscapes/val.txt", 
-      "ims_per_gpu": 2,
-      "eval_ims_per_gpu": 1,
+      "ims_per_gpu": 4,
+      "eval_ims_per_gpu": 6,
       "label_names": ["road", "sidewalk", "building", "wall", "fence", "pole", "traffic light", "traffic sign", "vegetation", "terrain", "sky", "person", "rider", "car", "truck", "bus", "train", "motorcycle", "bicycle"]
     },
     "dataset2": {
@@ -43,19 +43,9 @@
       "im_root": "/home1/marong/datasets/CamVid",
       "train_im_anns":"datasets/CamVid/train.txt",
       "val_im_anns":"datasets/CamVid/test.txt", 
-      "ims_per_gpu": 2,
-      "eval_ims_per_gpu": 1,
-      "label_names": ["Sky", "Building", "Column_Pole", "Road", "Sidewalk", "Tree", "SignSymbol", "Fence", "Car", "Pedestrian", "Bicyclist", "Wall"]
-    },
-    "dataset3": {
-      "n_cats": 36, 
-      "data_reader": "A2D2Data",
-      "im_root": "/home1/marong/datasets/a2d2",
-      "train_im_anns":"datasets/A2D2/train.txt",
-      "val_im_anns":"datasets/A2D2/val.txt", 
       "ims_per_gpu": 4,
-      "eval_ims_per_gpu": 1,
-      "label_names": ["Car", "Bicycle", "Pedestrian", "Truck", "Small vehicles", "Traffic signal", "traffic sign", "Utility vehicle", "Sidebars", "Speed bumper", "Curbstone", "Solid line", "Irrelevant signs", "Road blocks", "Tractor", "Non-drivable street", "Zebra crossing", "Obstacles / trash", "Poles", "RD restricted area", "Animals", "Grid structure", "Signal corpus", "Drivable cobblestone", "Electronic traffic", "Slow drive area", "Nature object", "Parking area", "Sidewalk", "Ego car", "Painted driv. instr.", "Traffic guide obj.", "Dash line", "RD normal street", "Sky", "Buildings"]
+      "eval_ims_per_gpu": 6,
+      "label_names": ["Sky", "Building", "Column_Pole", "Road", "Sidewalk", "Tree", "SignSymbol", "Fence", "Car", "Pedestrian", "Bicyclist", "Wall"]
     },
     "n_bn": 1,
     "class_remaper": "ClassRemapOneHotLabel",
@@ -80,7 +70,7 @@
     "lr": {
       "lr_start": 5e-3,
       "weight_decay": 5e-5,
-      "warmup_iters": 1000,
+      "warmup_iters": 100,
       "fix_param_iters": 0,
       "max_iter": 200000
     },
@@ -88,10 +78,11 @@
       "scales": [0.5, 1.0, 2.0],
       "cropsize": [512, 1024],
       "finetune": true,
-      "finetune_from": "res/celoss/seg_model_185000.pth",
-      "graph_finetune": true,
-      "graph_finetune_from": "res/celoss/graph_model_185000.pth",
-      "seg_gnn_alter_iters": 10000,
+      "finetune_from": "res/celoss/pretrain_seg_model.pth",
+      "graph_finetune": false,
+      "graph_finetune_from": "res/celoss/pretrain_graph_model.pth",
+      "seg_iters": 20000,
+      "gnn_iters": 5000,
       "joint_train": true
     },
     "val": {

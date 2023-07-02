@@ -104,6 +104,8 @@ def train():
 
     graph_net.eval()
     unify_prototype, bi_graphs,_ = graph_net(graph_node_features) 
+    if configer.get('GNN', 'output_max_adj') and configer.get('GNN', 'output_softmax_and_max_adj'):
+        bi_graphs = [bi_graph for i, bi_graph in filter(lambda x : x[0] % 2 == 0, enumerate(bi_graphs))]
     # print(bi_graphs)
     for i in range(0, n_datasets):
         

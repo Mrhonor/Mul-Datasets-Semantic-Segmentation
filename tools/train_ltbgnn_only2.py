@@ -57,7 +57,7 @@ def parse_args():
     parse.add_argument('--local_rank', dest='local_rank', type=int, default=-1,)
     parse.add_argument('--port', dest='port', type=int, default=16853,)
     parse.add_argument('--finetune_from', type=str, default=None,)
-    parse.add_argument('--config', dest='config', type=str, default='configs/ltbgnn_city_cam_a2d2.json',)
+    parse.add_argument('--config', dest='config', type=str, default='configs/ltbgnn_city_cam_a2d2_2.json',)
     return parse.parse_args()
 
 # 使用绝对路径
@@ -599,7 +599,7 @@ def train():
                 loss_pre_meter, loss_aux_meters, loss_contrast_meter, loss_domain_meter, kl_loss_meter)
             
 
-        if (i + 1) % 10000 == 0:
+        if (i + 1) % 5000 == 0:
             seg_save_pth = osp.join(configer.get('res_save_pth'), 'seg_model_{}.pth'.format(i+1))
             gnn_save_pth = osp.join(configer.get('res_save_pth'), 'graph_model_{}.pth'.format(i+1))
             logger.info('\nsave seg_models to {}, gnn_models to {}'.format(seg_save_pth, gnn_save_pth))
