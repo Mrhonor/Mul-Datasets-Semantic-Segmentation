@@ -9,7 +9,13 @@ from lib.sampler import RepeatedDistSampler
 from lib.cityscapes_cv2 import CityScapes, CityScapesIm
 from lib.a2d2_lb_cv2 import A2D2Data
 from lib.a2d2_cv2 import A2D2Data_L
-from lib.coco import CocoStuff
+from lib.ADE20K import ade20k
+from lib.ade2016_data import ade2016
+from lib.bdd100k_data import Bdd100k
+from lib.idd_cv2 import Idd
+from lib.Mapi import Mapi
+from lib.sunrgbd import Sunrgbd
+from lib.coco_data import Coco_data
 from lib.a2d2_city_dataset import A2D2CityScapes
 from lib.CamVid_lb import CamVid
 from lib.MultiSetReader import MultiSetReader
