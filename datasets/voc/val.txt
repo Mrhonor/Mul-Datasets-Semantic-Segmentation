@@ -1,0 +1,3 @@
+./VOC/JPEGImages/2008_004975.jpg,./VOC/SegmentationClassAug/2008_004975.png
+./VOC/JPEGImages/2009_003430.jpg,./VOC/SegmentationClassAug/2009_003430.png
+./VOC/JPEGImages/2010_003999.jpg,./VOC/SegmentationClassAug/2010_003999.png

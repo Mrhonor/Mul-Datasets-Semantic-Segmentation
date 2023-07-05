@@ -1,0 +1,1 @@
+./sunrgb/image/train/img-002367.jpg,./sunrgb/label38/train/00002367.png
