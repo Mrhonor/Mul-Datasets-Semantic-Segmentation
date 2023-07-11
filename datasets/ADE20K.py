@@ -47,8 +47,8 @@ labels_info = [
     {"id": 28, "trainId": 28, "name": "sink"},
     {"id": 29, "trainId": 29, "name": "fireplace"},
     {"id": 30, "trainId": 30, "name": "refrigerator"},
-    {"id": 31, "trainId": 31, "name": "stairs"},
-    {"id": 32, "trainId": 32, "name": "case"},
+    {"id": 31, "trainId": 31 "name": "stairs"},
+    {"id": 32, "trainId": 32 "name": "case"},
     {"id": 33, "trainId": 33, "name": "pool table"},
     {"id": 34, "trainId": 34, "name": "pillow"},
     {"id": 35, "trainId": 35, "name": "screen door"},
@@ -159,11 +159,7 @@ class ade20k(BaseDataset):
         R = label[:,:,0]
         G = label[:,:,1]
         B = label[:,:,2]
-        # ObjectClassMasks = (R/10).astype(np.int32)*256+(G.astype(np.int32))
-        print("R: ", R)
-        print("G: ", G)
-        # print(Obn)
-        ObjectClassMasks = (np.int32(R)/10)*256+np.int32(G)
+        ObjectClassMasks = (R/10).astype(np.int32)*256+(G.astype(np.int32))
         
         # end = time.time()
         # print("idx: {}, cv2.imread time: {}".format(idx, end - start))

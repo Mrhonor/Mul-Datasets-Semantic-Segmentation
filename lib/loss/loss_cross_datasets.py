@@ -6,6 +6,7 @@ from distutils.command.config import config
 from traceback import print_tb
 from lib.loss.loss_contrast_mem import PixelContrastLoss, PixelPrototypeDistanceLoss, PixelContrastLossOnlyNeg, PixelContrastLossMulProto
 from lib.loss.loss_helper import NLLPlusLoss, WeightedNLLPlusLoss, MultiLabelCrossEntropyLoss, CircleLoss
+from lib.loss.ohem_ce_loss import OhemCELoss
 
 import torch
 import torch.nn as nn
@@ -800,7 +801,9 @@ class CrossDatasetsCELoss_AdvGNN(nn.Module):
         for i in range(1, self.n_datasets+1):
             self.n_cats.append(self.configer.get('dataset'+str(i), 'n_cats'))
 
-        self.CELoss = torch.nn.CrossEntropyLoss(ignore_index=255)
+        # self.CELoss = nn.CrossEntropyLoss(ignore_index=255)
+        self.CELoss = OhemCELoss(0.7, ignore_lb=255)
+    
         self.advloss = nn.BCELoss()
         self.adv_loss_weight = self.configer.get('loss', 'adv_loss_weight')
         

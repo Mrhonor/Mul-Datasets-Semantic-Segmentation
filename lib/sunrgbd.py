@@ -53,7 +53,7 @@ labels_info = [
 {"name": "sink", "id": 34, "trainId": 34},
 {"name": "lamp", "id": 35, "trainId": 35},
 {"name": "bathtub", "id": 36, "trainId": 36},
-{"name": "bag", "id": 37, "trainId": 37},
+{"name": "bag", "id": 37, "trainId": 0},
 ]
 # labels_info_train = labels_info_eval
 ## CityScapes -> {unify class1, unify class2, ...}

@@ -30,6 +30,7 @@ def get_img_for_everyclass(configer):
     img_lists = []
     lb_lists  = []
     for i in range(0, n_datasets):
+        print("cur dataset id： ", i)
         this_img_lists = []
         this_lb_lists = []
         for label_id in range(0, num_classes[i]):
@@ -44,6 +45,12 @@ def get_img_for_everyclass(configer):
                     this_img_lists[label_id].append(im)
                     this_lb_lists[label_id].append(lb)
                     
+
+        for j, lb in enumerate(this_lb_lists):
+            if len(lb) == 0:
+                print("the number {} class has no image".format(j))
+        
+        
         img_lists.append(this_img_lists)
         lb_lists.append(this_lb_lists)
     
@@ -124,7 +131,6 @@ def crop_image_by_label_value(img, label, label_value):
 def gen_image_features(configer):
     img_lists, lb_lists = get_img_for_everyclass(configer)
     
-    
     n_datasets = configer.get('n_datasets')
     to_tensor = T.ToTensor(
                 mean=(0.48145466, 0.4578275, 0.40821073), # clip , rgb
@@ -135,8 +141,12 @@ def gen_image_features(configer):
     with torch.no_grad():
         out_features = []
         for dataset_id in range(0, n_datasets):
+            print("dataset_id: ", dataset_id)
             for i, im_lb_list in enumerate(zip(img_lists[dataset_id], lb_lists[dataset_id])):
                 im_list, lb_list = im_lb_list
+                if len(im_list) == 0:
+                    print("why dataset_id: ", dataset_id)
+                    continue
                 image_features_list = []
                 for im_path, lb in zip(im_list, lb_list):
                     image = cv2.imread(im_path)
@@ -153,9 +163,10 @@ def gen_image_features(configer):
                     image_features = model.encode_image(img).type(torch.float32)
                     image_features_list.append(image_features)
 
+                print("im_lb_list: ", im_lb_list)
                 img_feat = torch.cat(image_features_list, dim=0)
                 mean_feats = torch.mean(img_feat, dim=0, keepdim=True)
-                print(mean_feats.shape)
+                # print(mean_feats.shape)
                 out_features.append(mean_feats) 
     
     return out_features

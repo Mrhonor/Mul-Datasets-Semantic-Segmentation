@@ -175,16 +175,19 @@ def gen_sunrgbd():
         # print(lbs[0])
         im_names = [el.replace('img-', '00').split('/')[-1].replace('.jpg', '') for el in ims]
         lb_names = [el.split('/')[-1].replace('.png', '') for el in lbs]
-        # common_names = list(set(im_names) & set(lb_names))
+        common_names = list(set(im_names) & set(lb_names))
 
         lines = []
-        for i, im_lb in enumerate(zip(im_names, lb_names)):
-            # print (im_lb)
-            im, lb = im_lb
-            # im = im[0]
-            # lb = lb[0]
-            if im == lb:
-                lines.append(f'{ims[i]},{lbs[i]}')
+        # for i, im_lb in enumerate(zip(im_names, lb_names)):
+        #     # print (im_lb)
+        #     im, lb = im_lb
+        #     # im = im[0]
+        #     # lb = lb[0]
+        #     if im == lb:
+        #         lines.append(f'{ims[i]},{lbs[i]}')
+        for name in common_names:
+            lines.append(f'{im_root}/img-{name[2:]}.jpg,{lb_root}/{name}.png')
+
 
         # print(lines[0])
         # lines = [
@@ -428,5 +431,5 @@ def gen_BDD():
         with open(f'{save_path}{mode}.txt', 'w') as fw:
             fw.write('\n'.join(lines))
 
-
+gen_sunrgbd()
 # gen_voc()

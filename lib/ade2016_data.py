@@ -17,6 +17,7 @@ from lib.base_dataset import BaseDataset, BaseDatasetIm
 
 labels_info = [
     {"name": "unlabel", "id": 0, "trainId": 255},
+    {"name": "flag", "id": 150, "trainId": 0},
     {"name": "wall", "id": 1, "trainId": 1},
     {"name": "building, edifice", "id": 2, "trainId": 2},
     {"name": "sky", "id": 3, "trainId": 3},
@@ -166,7 +167,6 @@ labels_info = [
     {"name": "radiator", "id": 147, "trainId": 147},
     {"name": "glass, drinking glass", "id": 148, "trainId": 148},
     {"name": "clock", "id": 149, "trainId": 149},
-    {"name": "flag", "id": 150, "trainId": 150},
 ]
 # labels_info_train = labels_info_eval
 ## CityScapes -> {unify class1, unify class2, ...}

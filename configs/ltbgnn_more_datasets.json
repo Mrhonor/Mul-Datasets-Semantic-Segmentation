@@ -1,7 +1,7 @@
 {
     "model_name": "hrnet_w48_gnn",
     "aux_mode": "train",
-    "n_datasets": 8,
+    "n_datasets": 9,
     "hrnet": {
       "cfg": "hrnet48",
       "keep_imagenet_head": false,
@@ -49,10 +49,10 @@
     },
     "dataset3": {
       "n_cats": 36, 
-      "data_reader": "A2D2Data",
+      "data_reader": "A2D2Data_L",
       "im_root": "/home1/marong/datasets/a2d2",
-      "train_im_anns":"datasets/A2D2/train.txt",
-      "val_im_anns":"datasets/A2D2/val.txt", 
+      "train_im_anns":"datasets/A2D2_L/train.txt",
+      "val_im_anns":"datasets/A2D2_L/val.txt", 
       "ims_per_gpu": 2,
       "eval_ims_per_gpu": 1,
       "label_names": ["Car", "Bicycle", "Pedestrian", "Truck", "Small vehicles", "Traffic signal", "traffic sign", "Utility vehicle", "Sidebars", "Speed bumper", "Curbstone", "Solid line", "Irrelevant signs", "Road blocks", "Tractor", "Non-drivable street", "Zebra crossing", "Obstacles / trash", "Poles", "RD restricted area", "Animals", "Grid structure", "Signal corpus", "Drivable cobblestone", "Electronic traffic", "Slow drive area", "Nature object", "Parking area", "Sidewalk", "Ego car", "Painted driv. instr.", "Traffic guide obj.", "Dash line", "RD normal street", "Sky", "Buildings"]
@@ -60,12 +60,12 @@
     "dataset4": {
       "n_cats": 37, 
       "data_reader": "Sunrgbd",
-      "im_root": "/home1/marong/datasets/sunrgb",
+      "im_root": "/home1/marong/datasets/",
       "train_im_anns":"datasets/sunrgbd/train.txt",
-      "val_im_anns":"datasets/sunrgbd/val.txt", 
+      "val_im_anns":"datasets/sunrgbd/test.txt", 
       "ims_per_gpu": 2,
       "eval_ims_per_gpu": 1,
-      "label_names": ["wall", "floor", "cabinet", "bed", "chair", "sofa", "table", "door", "window", "bookshelf", "picture", "counter", "blinds", "desk", "shelves", "curtain", "dresser", "pillow", "mirror", "floor mat", "clothes", "ceiling", "books", "refridgerator", "television", "paper", "towel", "shower curtain", "box", "whiteboard", "person", "night stand", "toilet", "sink", "lamp", "bathtub", "bag"]
+      "label_names": [ "bag", "wall", "floor", "cabinet", "bed", "chair", "sofa", "table", "door", "window", "bookshelf", "picture", "counter", "blinds", "desk", "shelves", "curtain", "dresser", "pillow", "mirror", "floor mat", "clothes", "ceiling", "books", "refridgerator", "television", "paper", "towel", "shower curtain", "box", "whiteboard", "person", "night stand", "toilet", "sink", "lamp", "bathtub"]
     },
     "dataset5": {
       "n_cats": 150, 
@@ -75,19 +75,9 @@
       "val_im_anns":"datasets/ADE/validation.txt", 
       "ims_per_gpu": 2,
       "eval_ims_per_gpu": 1,
-      "label_names": ["wall", "building, edifice", "sky", "floor, flooring", "tree", "ceiling", "road, route", "bed ", "windowpane, window ", "grass", "cabinet", "sidewalk, pavement", "person, individual, someone, somebody, mortal, soul", "earth, ground", "door, double door", "table", "mountain, mount", "plant, flora, plant life", "curtain, drape, drapery, mantle, pall", "chair", "car, auto, automobile, machine, motorcar", "water", "painting, picture", "sofa, couch, lounge", "shelf", "house", "sea", "mirror", "rug, carpet, carpeting", "field", "armchair", "seat", "fence, fencing", "desk", "rock, stone", "wardrobe, closet, press", "lamp", "bathtub, bathing tub, bath, tub", "railing, rail", "cushion", "base, pedestal, stand", "box", "column, pillar", "signboard, sign", "chest of drawers, chest, bureau, dresser", "counter", "sand", "sink", "skyscraper", "fireplace, hearth, open fireplace", "refrigerator, icebox", "grandstand, covered stand", "path", "stairs, steps", "runway", "case, display case, showcase, vitrine", "pool table, billiard table, snooker table", "pillow", "screen door, screen", "stairway, staircase", "river", "bridge, span", "bookcase", "blind, screen", "coffee table, cocktail table", "toilet, can, commode, crapper, pot, potty, stool, throne", "flower", "book", "hill", "bench", "countertop", "stove, kitchen stove, range, kitchen range, cooking stove", "palm, palm tree", "kitchen island", "computer, computing machine, computing device, data processor, electronic computer, information processing system", "swivel chair", "boat", "bar", "arcade machine", "hovel, hut, hutch, shack, shanty", "bus, autobus, coach, charabanc, double-decker, jitney, motorbus, motorcoach, omnibus, passenger vehicle", "towel", "light, light source", "truck, motortruck", "tower", "chandelier, pendant, pendent", "awning, sunshade, sunblind", "streetlight, street lamp", "booth, cubicle, stall, kiosk", "television receiver, television, television set, tv, tv set, idiot box, boob tube, telly, goggle box", "airplane, aeroplane, plane", "dirt track", "apparel, wearing apparel, dress, clothes", "pole", "land, ground, soil", "bannister, banister, balustrade, balusters, handrail", "escalator, moving staircase, moving stairway", "ottoman, pouf, pouffe, puff, hassock", "bottle", "buffet, counter, sideboard", "poster, posting, placard, notice, bill, card", "stage", "van", "ship", "fountain", "conveyer belt, conveyor belt, conveyer, conveyor, transporter", "canopy", "washer, automatic washer, washing machine", "plaything, toy", "swimming pool, swimming bath, natatorium", "stool", "barrel, cask", "basket, handbasket", "waterfall, falls", "tent, collapsible shelter", "bag", "minibike, motorbike", "cradle", "oven", "ball", "food, solid food", "step, stair", "tank, storage tank", "trade name, brand name, brand, marque", "microwave, microwave oven", "pot, flowerpot", "animal, animate being, beast, brute, creature, fauna", "bicycle, bike, wheel, cycle ", "lake", "dishwasher, dish washer, dishwashing machine", "screen, silver screen, projection screen", "blanket, cover", "sculpture", "hood, exhaust hood", "sconce", "vase", "traffic light, traffic signal, stoplight", "tray", "ashcan, trash can, garbage can, wastebin, ash bin, ash-bin, ashbin, dustbin, trash barrel, trash bin", "fan", "pier, wharf, wharfage, dock", "crt screen", "plate", "monitor, monitoring device", "bulletin board, notice board", "shower", "radiator", "glass, drinking glass", "clock", "flag"]
+      "label_names": ["flag", "wall", "building, edifice", "sky", "floor, flooring", "tree", "ceiling", "road, route", "bed ", "windowpane, window ", "grass", "cabinet", "sidewalk, pavement", "person, individual, someone, somebody, mortal, soul", "earth, ground", "door, double door", "table", "mountain, mount", "plant, flora, plant life", "curtain, drape, drapery, mantle, pall", "chair", "car, auto, automobile, machine, motorcar", "water", "painting, picture", "sofa, couch, lounge", "shelf", "house", "sea", "mirror", "rug, carpet, carpeting", "field", "armchair", "seat", "fence, fencing", "desk", "rock, stone", "wardrobe, closet, press", "lamp", "bathtub, bathing tub, bath, tub", "railing, rail", "cushion", "base, pedestal, stand", "box", "column, pillar", "signboard, sign", "chest of drawers, chest, bureau, dresser", "counter", "sand", "sink", "skyscraper", "fireplace, hearth, open fireplace", "refrigerator, icebox", "grandstand, covered stand", "path", "stairs, steps", "runway", "case, display case, showcase, vitrine", "pool table, billiard table, snooker table", "pillow", "screen door, screen", "stairway, staircase", "river", "bridge, span", "bookcase", "blind, screen", "coffee table, cocktail table", "toilet, can, commode, crapper, pot, potty, stool, throne", "flower", "book", "hill", "bench", "countertop", "stove, kitchen stove, range, kitchen range, cooking stove", "palm, palm tree", "kitchen island", "computer, computing machine, computing device, data processor, electronic computer, information processing system", "swivel chair", "boat", "bar", "arcade machine", "hovel, hut, hutch, shack, shanty", "bus, autobus, coach, charabanc, double-decker, jitney, motorbus, motorcoach, omnibus, passenger vehicle", "towel", "light, light source", "truck, motortruck", "tower", "chandelier, pendant, pendent", "awning, sunshade, sunblind", "streetlight, street lamp", "booth, cubicle, stall, kiosk", "television receiver, television, television set, tv, tv set, idiot box, boob tube, telly, goggle box", "airplane, aeroplane, plane", "dirt track", "apparel, wearing apparel, dress, clothes", "pole", "land, ground, soil", "bannister, banister, balustrade, balusters, handrail", "escalator, moving staircase, moving stairway", "ottoman, pouf, pouffe, puff, hassock", "bottle", "buffet, counter, sideboard", "poster, posting, placard, notice, bill, card", "stage", "van", "ship", "fountain", "conveyer belt, conveyor belt, conveyer, conveyor, transporter", "canopy", "washer, automatic washer, washing machine", "plaything, toy", "swimming pool, swimming bath, natatorium", "stool", "barrel, cask", "basket, handbasket", "waterfall, falls", "tent, collapsible shelter", "bag", "minibike, motorbike", "cradle", "oven", "ball", "food, solid food", "step, stair", "tank, storage tank", "trade name, brand name, brand, marque", "microwave, microwave oven", "pot, flowerpot", "animal, animate being, beast, brute, creature, fauna", "bicycle, bike, wheel, cycle ", "lake", "dishwasher, dish washer, dishwashing machine", "screen, silver screen, projection screen", "blanket, cover", "sculpture", "hood, exhaust hood", "sconce", "vase", "traffic light, traffic signal, stoplight", "tray", "ashcan, trash can, garbage can, wastebin, ash bin, ash-bin, ashbin, dustbin, trash barrel, trash bin", "fan", "pier, wharf, wharfage, dock", "crt screen", "plate", "monitor, monitoring device", "bulletin board, notice board", "shower", "radiator", "glass, drinking glass", "clock"]
     },
     "dataset6": {
-      "n_cats": 100, 
-      "data_reader": "ade20k",
-      "im_root": "/home1/marong/datasets/ADE20K_2016_07_26",
-      "train_im_anns":"datasets/ADE20K/training.txt",
-      "val_im_anns":"datasets/ADE20K/validation.txt", 
-      "ims_per_gpu": 2,
-      "eval_ims_per_gpu": 1,
-      "label_names": ["bed", "windowpane", "cabinet", "person", "door", "table", "curtain", "chair", "car", "painting", "sofa", "shelf", "mirror", "armchair", "seat", "fence", "desk", "wardrobe", "lamp", "bathtub", "railing", "cushion", "box", "column", "signboard", "chest of drawers", "counter", "sink", "fireplace", "refrigerator", "stairs", "case", "pool table", "pillow", "screen door", "bookcase", "coffee table", "toilet", "flower", "book", "bench", "countertop", "stove", "palm", "kitchen island", "computer", "swivel chair", "boat", "arcade machine", "bus", "towel", "light", "truck", "chandelier", "awning", "streetlight", "booth", "television receiver", "airplane", "apparel", "pole", "bannister", "ottoman", "bottle", "van", "ship", "fountain", "washer", "plaything", "stool", "barrel", "basket", "bag", "minibike", "oven", "ball", "food", "step", "trade name", "microwave", "pot", "animal", "bicycle", "dishwasher", "screen", "sculpture", "hood", "sconce", "vase", "traffic light", "tray", "ashcan", "fan", "plate", "monitor", "bulletin board", "radiator", "glass", "clock", "flag"]
-    },
-    "dataset7": {
       "n_cats": 19, 
       "data_reader": "Bdd100k",
       "im_root": "/home1/marong/datasets/bdd100k",
@@ -97,35 +87,35 @@
       "eval_ims_per_gpu": 1,
       "label_names": ["road", "sidewalk", "building", "wall", "fence", "pole", "traffic light", "traffic sign", "vegetation", "terrain", "sky", "person", "rider", "car", "truck", "bus", "train", "motorcycle", "bicycle"]
     },
-    "dataset8": {
-      "n_cats": 200, 
+    "dataset7": {
+      "n_cats": 133, 
       "data_reader": "Coco_data",
       "im_root": "/home1/marong/datasets/coco",
       "train_im_anns":"datasets/coco/train.txt",
       "val_im_anns":"datasets/coco/val.txt", 
       "ims_per_gpu": 2,
       "eval_ims_per_gpu": 1,
-      "label_names": ["person", "bicycle", "car", "motorcycle", "airplane", "bus", "train", "truck", "boat", "traffic light", "fire hydrant", "stop sign", "parking meter", "bench", "bird", "cat", "dog", "horse", "sheep", "cow", "elephant", "bear", "zebra", "giraffe", "backpack", "umbrella", "handbag", "tie", "suitcase", "frisbee", "skis", "snowboard", "sports ball", "kite", "baseball bat", "baseball glove", "skateboard", "surfboard", "tennis racket", "bottle", "wine glass", "cup", "fork", "knife", "spoon", "bowl", "banana", "apple", "sandwich", "orange", "broccoli", "carrot", "hot dog", "pizza", "donut", "cake", "chair", "couch", "potted plant", "bed", "dining table", "toilet", "tv", "laptop", "mouse", "remote", "keyboard", "cell phone", "microwave", "oven", "toaster", "sink", "refrigerator", "book", "clock", "vase", "scissors", "teddy bear", "hair drier", "toothbrush", "banner", "blanket", "bridge", "cardboard", "counter", "curtain", "door-stuff", "floor-wood", "flower", "fruit", "gravel", "house", "light", "mirror-stuff", "net", "pillow", "platform", "playingfield", "railroad", "river", "road", "roof", "sand", "sea", "shelf", "snow", "stairs", "tent", "towel", "wall-brick", "wall-stone", "wall-tile", "wall-wood", "water-other", "window-blind", "window-other", "tree-merged", "fence-merged", "ceiling-merged", "sky-other-merged", "cabinet-merged", "table-merged", "floor-other-merged", "pavement-merged", "mountain-merged", "grass-merged", "dirt-merged", "paper-merged", "food-other-merged", "building-other-merged", "rock-merged", "wall-other-merged", "rug-merged"]
+      "label_names": ["rug-merged", "person", "bicycle", "car", "motorcycle", "airplane", "bus", "train", "truck", "boat", "traffic light", "fire hydrant", "stop sign", "parking meter", "bench", "bird", "cat", "dog", "horse", "sheep", "cow", "elephant", "bear", "zebra", "giraffe", "backpack", "umbrella", "handbag", "tie", "suitcase", "frisbee", "skis", "snowboard", "sports ball", "kite", "baseball bat", "baseball glove", "skateboard", "surfboard", "tennis racket", "bottle", "wine glass", "cup", "fork", "knife", "spoon", "bowl", "banana", "apple", "sandwich", "orange", "broccoli", "carrot", "hot dog", "pizza", "donut", "cake", "chair", "couch", "potted plant", "bed", "dining table", "toilet", "tv", "laptop", "mouse", "remote", "keyboard", "cell phone", "microwave", "oven", "toaster", "sink", "refrigerator", "book", "clock", "vase", "scissors", "teddy bear", "hair drier", "toothbrush", "banner", "blanket", "bridge", "cardboard", "counter", "curtain", "door-stuff", "floor-wood", "flower", "fruit", "gravel", "house", "light", "mirror-stuff", "net", "pillow", "platform", "playingfield", "railroad", "river", "road", "roof", "sand", "sea", "shelf", "snow", "stairs", "tent", "towel", "wall-brick", "wall-stone", "wall-tile", "wall-wood", "water-other", "window-blind", "window-other", "tree-merged", "fence-merged", "ceiling-merged", "sky-other-merged", "cabinet-merged", "table-merged", "floor-other-merged", "pavement-merged", "mountain-merged", "grass-merged", "dirt-merged", "paper-merged", "food-other-merged", "building-other-merged", "rock-merged", "wall-other-merged"]
     },
-    "dataset9": {
-      "n_cats": 38, 
+    "dataset8": {
+      "n_cats": 37, 
       "data_reader": "Idd",
-      "im_root": "/home1/marong/datasets/IDD",
+      "im_root": "/home1/marong/datasets/idd",
       "train_im_anns":"datasets/IDD/train.txt",
-      "val_im_anns":"datasets/bdd100k/val.txt", 
+      "val_im_anns":"datasets/IDD/val.txt", 
       "ims_per_gpu": 2,
       "eval_ims_per_gpu": 1,
-      "label_names": ["person", "truck", "fence", "billboard", "bus", "out of roi", "curb", "obs-str-bar-fallback", "tunnel", "non-drivable fallback", "bridge", "road", "wall", "traffic sign", "trailer", "animal", "building", "sky", "drivable fallback", "guard rail", "bicycle", "traffic light", "polegroup", "motorcycle", "car", "parking", "fallback background", "license plate", "rectification border", "train", "rider", "rail track", "sidewalk", "caravan", "pole", "vegetation", "autorickshaw", "vehicle fallback"]
+      "label_names": ["person", "truck", "fence", "billboard", "bus", "out of roi", "curb", "obs-str-bar-fallback", "tunnel", "non-drivable fallback", "bridge", "road", "wall", "traffic sign", "trailer", "animal", "building", "sky", "drivable fallback", "guard rail", "bicycle", "traffic light", "polegroup", "motorcycle", "car", "parking", "fallback background", "rectification border", "train", "rider", "rail track", "sidewalk", "caravan", "pole", "vegetation", "autorickshaw", "vehicle fallback"]
     },
-    "dataset10": {
-      "n_cats": 123, 
+    "dataset9": {
+      "n_cats": 88, 
       "data_reader": "Mapi",
-      "im_root": "/home1/marong/datasets/Mapi",
+      "im_root": "/home1/marong/datasets/mapi",
       "train_im_anns":"datasets/mapi/training.txt",
       "val_im_anns":"datasets/mapi/validation.txt", 
       "ims_per_gpu": 2,
       "eval_ims_per_gpu": 1,
-      "label_names": ["Bird", "Ground Animal", "Ambiguous Barrier", "Concrete Block", "Curb", "Fence", "Guard Rail", "Barrier", "Road Median", "Road Side", "Lane Separator", "Temporary Barrier", "Wall", "Bike Lane", "Crosswalk - Plain", "Curb Cut", "Driveway", "Parking", "Parking Aisle", "Pedestrian Area", "Rail Track", "Road", "Road Shoulder", "Service Lane", "Sidewalk", "Traffic Island", "Bridge", "Building", "Garage", "Tunnel", "Person", "Person Group", "Bicyclist", "Motorcyclist", "Other Rider", "Lane Marking - Dashed Line", "Lane Marking - Straight Line", "Lane Marking - Zigzag Line", "Lane Marking - Ambiguous", "Lane Marking - Arrow (Left)", "Lane Marking - Arrow (Other)", "Lane Marking - Arrow (Right)", "Lane Marking - Arrow (Split Left or Straight)", "Lane Marking - Arrow (Split Right or Straight)", "Lane Marking - Arrow (Straight)", "Lane Marking - Crosswalk", "Lane Marking - Give Way (Row)", "Lane Marking - Give Way (Single)", "Lane Marking - Hatched (Chevron)", "Lane Marking - Hatched (Diagonal)", "Lane Marking - Other", "Lane Marking - Stop Line", "Lane Marking - Symbol (Bicycle)", "Lane Marking - Symbol (Other)", "Lane Marking - Text", "Lane Marking (only) - Dashed Line", "Lane Marking (only) - Crosswalk", "Lane Marking (only) - Other", "Lane Marking (only) - Test", "Mountain", "Sand", "Sky", "Snow", "Terrain", "Vegetation", "Water", "Banner", "Bench", "Bike Rack", "Catch Basin", "CCTV Camera", "Fire Hydrant", "Junction Box", "Mailbox", "Manhole", "Parking Meter", "Phone Booth", "Pothole", "Signage - Advertisement", "Signage - Ambiguous", "Signage - Back", "Signage - Information", "Signage - Other", "Signage - Store", "Street Light", "Pole", "Pole Group", "Traffic Sign Frame", "Utility Pole", "Traffic Cone", "Traffic Light - General (Single)", "Traffic Light - Pedestrians", "Traffic Light - General (Upright)", "Traffic Light - General (Horizontal)", "Traffic Light - Cyclists", "Traffic Light - Other", "Traffic Sign - Ambiguous", "Traffic Sign (Back)", "Traffic Sign - Direction (Back)", "Traffic Sign - Direction (Front)", "Traffic Sign (Front)", "Traffic Sign - Parking", "Traffic Sign - Temporary (Back)", "Traffic Sign - Temporary (Front)", "Trash Can", "Bicycle", "Boat", "Bus", "Car", "Caravan", "Motorcycle", "On Rails", "Other Vehicle", "Trailer", "Truck", "Vehicle Group", "Wheeled Slow", "Water Valve", "Car Mount", "Dynamic", "Ego Vehicle", "Ground", "Static"]
+      "label_names": ["Bird", "Ground Animal", "Curb", "Fence", "Guard Rail", "Barrier", "Road Median", "Road Side", "Temporary Barrier", "Wall", "Bike Lane", "Crosswalk - Plain", "Driveway", "Parking", "Parking Aisle", "Pedestrian Area", "Rail Track", "Road", "Service Lane", "Sidewalk", "Traffic Island", "Bridge", "Building", "Garage", "Tunnel", "Person Group", "Bicyclist", "Motorcyclist", "Other Rider", "Lane Marking - Ambiguous", "Lane Marking - Arrow (Other)", "Lane Marking - Arrow (Right)", "Lane Marking - Arrow (Split Right or Straight)", "Lane Marking - Arrow (Straight)", "Lane Marking - Give Way (Row)", "Lane Marking - Give Way (Single)", "Lane Marking - Hatched (Diagonal)", "Lane Marking - Text", "Lane Marking (only) - Test", "Mountain", "Sand", "Sky", "Snow", "Terrain", "Vegetation", "Water", "Banner", "Bench", "Bike Rack", "Catch Basin", "CCTV Camera", "Fire Hydrant", "Junction Box", "Manhole", "Parking Meter", "Phone Booth", "Pothole", "Signage - Back", "Signage - Information", "Signage - Other", "Signage - Store", "Street Light", "Pole Group", "Traffic Sign Frame", "Utility Pole", "Traffic Cone", "Traffic Light - Other", "Traffic Sign - Parking", "Traffic Sign - Temporary (Back)", "Traffic Sign - Temporary (Front)", "Trash Can", "Bicycle", "Boat", "Bus", "Caravan", "Motorcycle", "On Rails", "Other Vehicle", "Trailer", "Truck", "Vehicle Group", "Wheeled Slow", "Water Valve", "Car Mount", "Dynamic", "Ego Vehicle", "Ground", "Static"]
     },
     "n_bn": 1,
     "class_remaper": "ClassRemapOneHotLabel",
@@ -152,24 +142,25 @@
       "weight_decay": 5e-5,
       "warmup_iters": 1000,
       "fix_param_iters": 0,
-      "max_iter": 200000
+      "max_iter": 400000
     },
     "train": {
       "scales": [0.5, 1.0, 2.0],
-      "cropsize": [512, 1024],
+      "cropsize": [512, 512],
       "finetune": true,
-      "finetune_from": "res/celoss/seg_model_185000.pth",
-      "graph_finetune": true,
-      "graph_finetune_from": "res/celoss/graph_model_185000.pth",
-      "seg_gnn_alter_iters": 10000,
+      "finetune_from": "res/celoss/pretrain_seg_model.pth",
+      "graph_finetune": false,
+      "graph_finetune_from": "res/celoss/pretrain_graph_model.pth",
+      "seg_iters": 20000,
+      "gnn_iters": 10000,
       "joint_train": true
     },
     "val": {
       "scales": [0.5, 0.75, 1.0, 1.25, 1.5, 1.75],
-      "cropsize": [512, 1024]
+      "cropsize": [512, 512]
     },
     "use_fp16": false,
-    "use_sync_bn": false,
+    "use_sync_bn": true,
     "contrast": {
       "use_contrast": true,
       "proj_dim": 512,

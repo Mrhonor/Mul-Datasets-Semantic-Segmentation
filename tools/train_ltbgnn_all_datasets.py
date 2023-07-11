@@ -3,6 +3,7 @@
 
 
 import sys
+from time import sleep
 sys.path.insert(0, '.')
 import os
 import os.path as osp
@@ -19,7 +20,7 @@ import torch.cuda.amp as amp
 
 from lib.models import model_factory
 from lib.get_dataloader import get_data_loader, get_single_data_loader
-from lib.ohem_ce_loss import OhemCELoss
+from lib.loss.ohem_ce_loss import OhemCELoss
 from lib.lr_scheduler import WarmupPolyLrScheduler
 from lib.meters import TimeMeter, AvgMeter
 from lib.logger import setup_logger, print_log_msg
@@ -57,7 +58,7 @@ def parse_args():
     parse.add_argument('--local_rank', dest='local_rank', type=int, default=-1,)
     parse.add_argument('--port', dest='port', type=int, default=16853,)
     parse.add_argument('--finetune_from', type=str, default=None,)
-    parse.add_argument('--config', dest='config', type=str, default='configs/ltbgnn_city_cam_lr_down.json',)
+    parse.add_argument('--config', dest='config', type=str, default='configs/ltbgnn_more_datasets.json',)
     return parse.parse_args()
 
 # 使用绝对路径
@@ -71,6 +72,13 @@ configer = Configer(configs=args.config)
 CITY_ID = 0
 CAM_ID = 1
 A2D2_ID = 2
+SUN_ID = 3
+ADE2016_ID = 4
+ADE20K_ID = 5
+BDD_ID = 6
+COCO_ID = 7
+IDD_ID = 8
+MAPI_ID = 9
 
 # ClassRemaper = ClassRemap(configer=configer)
 
@@ -734,4 +742,14 @@ if __name__ == "__main__":
     # # print(im_lb.shape)
     # print(im.shape)
     # print(lb.shape)
+    # dls = get_data_loader(configer, aux_mode='train', distributed=False)
+    # dl_iters = [iter(dl) for dl in dls]
+    
+    # for j in range(0,len(dl_iters)):
+    #     print("!!!!!!!!!")
+    #     print(j)
+    #     im, lb = next(dl_iters[j])
+    #     sleep(10)
+                
+    
     main()

@@ -21,7 +21,7 @@ from lib.models import model_factory
 from configs import set_cfg_from_file
 from lib.get_dataloader import get_data_loader
 from tools.evaluate import eval_model
-from lib.ohem_ce_loss import OhemCELoss
+from lib.loss.ohem_ce_loss import OhemCELoss
 from lib.lr_scheduler import WarmupPolyLrScheduler
 from lib.meters import TimeMeter, AvgMeter
 from lib.logger import setup_logger, print_log_msg
