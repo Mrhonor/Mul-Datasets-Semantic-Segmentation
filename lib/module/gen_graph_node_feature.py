@@ -163,7 +163,7 @@ def gen_image_features(configer):
                     image_features = model.encode_image(img).type(torch.float32)
                     image_features_list.append(image_features)
 
-                print("im_lb_list: ", im_lb_list)
+                # print("im_lb_list: ", im_lb_list)
                 img_feat = torch.cat(image_features_list, dim=0)
                 mean_feats = torch.mean(img_feat, dim=0, keepdim=True)
                 # print(mean_feats.shape)

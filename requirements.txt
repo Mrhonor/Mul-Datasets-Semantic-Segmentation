@@ -4,6 +4,8 @@ tensorboardX
 timm
 yacs
 munkres
-opencv-python
 numba
 matplotlib
+scipy
+opencv-python
+

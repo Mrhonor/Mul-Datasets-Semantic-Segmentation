@@ -1093,7 +1093,7 @@ class Learnable_Topology_BGNN(nn.Module):
                         out_bipartite_graphs[max_index, j] = 1
             else:
                 res = solve_optimal_transport(this_bipartite_graph[None], 100, 0.1)
-                indexes = res['matchers1']
+                indexes = res['matches1']
                 out_bipartite_graphs = torch.zeros_like(this_bipartite_graph)
                 for j, idx in enumerate(indexes[0]):
                     if idx == -1:

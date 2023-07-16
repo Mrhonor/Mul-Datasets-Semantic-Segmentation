@@ -17,15 +17,18 @@ COPY requirements.txt .
 # 安装PyTorch
 RUN conda install pytorch torchvision torchaudio pytorch-cuda=11.8 -c pytorch -c nvidia
 
-RUN conda install scipy
+
+# Using douban pipy mirror
+RUN pip3 install -i https://pypi.douban.com/simple/ -U pip 
+RUN pip3 config set global.index-url https://pypi.douban.com/simple/
 
 # 安装Python依赖项
-RUN pip install -r requirements.txt
+RUN pip3 install -r requirements.txt
 
 # 克隆GitHub仓库并安装
 # RUN git clone https://github.com/username/repository.git \
 #    && pip install -e repository
-RUN pip install git+https://github.com/openai/CLIP.git
+RUN pip3 install git+https://github.com/openai/CLIP.git
 
 # 复制PyTorch程序代码到容器中
 COPY . .

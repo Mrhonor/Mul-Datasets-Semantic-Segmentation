@@ -37,7 +37,7 @@ def log_sinkhorn_iterations(Z: torch.Tensor, log_mu: torch.Tensor, log_nu: torch
 #     Z = Z - norm  # multiply probabilities by M+N
 #     return Z
 
-def log_optimal_transport(scores: torch.Tensor, alpha: torch.Tensor, iters: int) -> torch.Tensor:
+def log_optimal_transport(scores: torch.Tensor, iters: int) -> torch.Tensor:
     """ Perform Differentiable Optimal Transport in Log-space for stability"""
     b, m, n = scores.shape
     one = scores.new_tensor(1)
@@ -57,7 +57,7 @@ def log_optimal_transport(scores: torch.Tensor, alpha: torch.Tensor, iters: int)
 def solve_optimal_transport(scores, iters, match_threshold):
     # Run the optimal transport.
     scores = log_optimal_transport(
-        scores, info.bin_score,
+        scores, 
         iters=iters)
 
     # Get the matches with score above "match_threshold".
