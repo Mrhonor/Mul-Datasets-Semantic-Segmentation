@@ -123,7 +123,7 @@ def get_data_loader(configer, aux_mode='eval', distributed=True):
             batch_size=bs,
             shuffle=shuffle,
             drop_last=drop_last,
-            num_workers=4,
+            num_workers=1,
             pin_memory=True,
         ) for dataset, bs in zip(ds, batchsize)]
     return dl
@@ -182,7 +182,7 @@ def get_single_data_loader(configer, aux_mode='eval', distributed=True):
         dl = DataLoader(
             Mds,
             batch_sampler=batchsampler,
-            num_workers=4,
+            num_workers=1,
             pin_memory=False)
     else:
 
@@ -191,7 +191,7 @@ def get_single_data_loader(configer, aux_mode='eval', distributed=True):
             batch_size=total_batchsize,
             shuffle=shuffle,
             drop_last=drop_last,
-            num_workers=4,
+            num_workers=1,
             pin_memory=False,
         )
     return dl
