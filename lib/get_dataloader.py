@@ -75,7 +75,7 @@ def get_data_loader(configer, aux_mode='eval', distributed=True):
     elif mode == 'ret_path':
         trans_func = TransformationVal()
         batchsize = [1 for i in range(1, n_datasets+1)]
-        annpath = [configer.get('dataset'+str(i), 'train_im_anns') for i in range(1, n_datasets+1)]
+        annpath = [configer.get('dataset'+str(i), 'val_im_anns') for i in range(1, n_datasets+1)]
         imroot = [configer.get('dataset'+str(i), 'im_root') for i in range(1, n_datasets+1)]
         data_reader = [configer.get('dataset'+str(i), 'data_reader') for i in range(1, n_datasets+1)]
         
@@ -103,7 +103,7 @@ def get_data_loader(configer, aux_mode='eval', distributed=True):
         dl = [DataLoader(
             dataset,
             batch_sampler=batchsamp,
-            num_workers=1,
+            num_workers=4,
             pin_memory=True,
         ) for dataset, batchsamp in zip(ds, batchsampler)]
     else:
@@ -123,7 +123,7 @@ def get_data_loader(configer, aux_mode='eval', distributed=True):
             batch_size=bs,
             shuffle=shuffle,
             drop_last=drop_last,
-            num_workers=1,
+            num_workers=4,
             pin_memory=True,
         ) for dataset, bs in zip(ds, batchsize)]
     return dl
@@ -182,7 +182,7 @@ def get_single_data_loader(configer, aux_mode='eval', distributed=True):
         dl = DataLoader(
             Mds,
             batch_sampler=batchsampler,
-            num_workers=1,
+            num_workers=4,
             pin_memory=False)
     else:
 
@@ -191,7 +191,7 @@ def get_single_data_loader(configer, aux_mode='eval', distributed=True):
             batch_size=total_batchsize,
             shuffle=shuffle,
             drop_last=drop_last,
-            num_workers=1,
+            num_workers=4,
             pin_memory=False,
         )
     return dl

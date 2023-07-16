@@ -3,6 +3,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from timm.models.layers import trunc_normal_
 from lib.module.module_helper import GraphAttentionLayer, SpGraphAttentionLayer, GraphConvolution, Discriminator, MultiHeadedAttention, AttentionalPropagation
+from lib.module.sinkhorn import solve_optimal_transport
 import numpy as np
 import scipy.sparse as sp
 from munkres import Munkres
@@ -905,7 +906,11 @@ class Learnable_Topology_BGNN(nn.Module):
         self.netD2 = Discriminator(self.nfeat_out, 128, 1, self.dropout_rate)
         self.netD2.weights_init()
         
-        self.km_algorithms = Munkres()
+        self.use_km = False
+        if self.use_km:
+            self.km_algorithms = Munkres()
+        # else:
+            
         
         
     def forward(self, x):
@@ -1070,21 +1075,33 @@ class Learnable_Topology_BGNN(nn.Module):
         cur_cat = 0
         for i in range(0, self.n_datasets):
             this_bipartite_graph = adj[cur_cat:cur_cat+self.dataset_cats[i], self.total_cats:]
-            ## TODO: use km to get the bipartite graph
-            indexes = self.km_algorithms.compute(-this_bipartite_graph.detach().cpu().numpy())
-            out_bipartite_graphs = torch.zeros_like(this_bipartite_graph)
-            
-            for j in range(0, self.max_num_unify_class):
-                flag = False
-                for row, col in indexes:
-                    if col == j:
-                        flag = True
-                        out_bipartite_graphs[row, col] = 1
-                        
-                if not flag:
-                    max_index = torch.argmax(this_bipartite_graph[:,j])
-                    out_bipartite_graphs[max_index, j] = 1
+            this_bipartite_graph = this_bipartite_graph.detach()
+            if self.use_km:
+                ## TODO: use km to get the bipartite graph
+                indexes = self.km_algorithms.compute(-this_bipartite_graph.cpu().numpy())
+                out_bipartite_graphs = torch.zeros_like(this_bipartite_graph)
                 
+                for j in range(0, self.max_num_unify_class):
+                    flag = False
+                    for row, col in indexes:
+                        if col == j:
+                            flag = True
+                            out_bipartite_graphs[row, col] = 1
+                            
+                    if not flag:
+                        max_index = torch.argmax(this_bipartite_graph[:,j])
+                        out_bipartite_graphs[max_index, j] = 1
+            else:
+                res = solve_optimal_transport(this_bipartite_graph[None], 100, 0.1)
+                indexes = res['matchers1']
+                out_bipartite_graphs = torch.zeros_like(this_bipartite_graph)
+                for j, idx in enumerate(indexes[0]):
+                    if idx == -1:
+                        max_index = torch.argmax(this_bipartite_graph[:,j])
+                        out_bipartite_graphs[max_index, j] = 1
+                    else:
+                        out_bipartite_graphs[idx, j] = 1
+
             self.bipartite_graphs.append(out_bipartite_graphs) 
                 
             cur_cat += self.dataset_cats[i]

@@ -3,7 +3,6 @@ einops
 tensorboardX
 timm
 yacs
-scipy
 munkres
 opencv-python
 numba
