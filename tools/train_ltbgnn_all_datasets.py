@@ -58,7 +58,7 @@ def parse_args():
     parse.add_argument('--local_rank', dest='local_rank', type=int, default=-1,)
     parse.add_argument('--port', dest='port', type=int, default=16853,)
     parse.add_argument('--finetune_from', type=str, default=None,)
-    parse.add_argument('--config', dest='config', type=str, default='configs/ltbgnn_more_datasets.json',)
+    parse.add_argument('--config', dest='config', type=str, default='configs/ltbgnn_more_datasets_my_linux.json',)
     return parse.parse_args()
 
 # 使用绝对路径
