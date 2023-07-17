@@ -1,7 +1,7 @@
 {
     "model_name": "hrnet_w48_gnn",
     "aux_mode": "train",
-    "n_datasets": 1,
+    "n_datasets": 2,
     "hrnet": {
       "cfg": "hrnet48",
       "keep_imagenet_head": false,
@@ -127,7 +127,7 @@
     },
     "train": {
       "scales": [0.5, 1.0, 2.0],
-      "cropsize": [256, 512],
+      "cropsize": [512, 512],
       "finetune": true,
       "finetune_from": "res/celoss/pretrain_seg_model.pth",
       "graph_finetune": false,

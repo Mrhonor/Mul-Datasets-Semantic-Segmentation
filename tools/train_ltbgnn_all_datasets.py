@@ -425,6 +425,7 @@ def train():
     SEG = 0
     GNN = 1
     train_seg_or_gnn = SEG
+    GNN_INIT = configer.get('train', 'graph_finetune')
 
     for i in range(starti, configer.get('lr','max_iter') + starti):
         configer.plus_one('iter')
@@ -515,6 +516,7 @@ def train():
             if train_seg_or_gnn == GNN:
                 is_adv = True
                 fix_graph = False
+                GNN_INIT = True
                 graph_net.train()
                 net.eval()
                 with torch.no_grad():
@@ -530,10 +532,10 @@ def train():
                 if fix_graph == False:
                     with torch.no_grad():
                         if is_distributed():
-                            unify_prototype, bi_graphs = graph_net.module.get_optimal_matching(graph_node_features)    
+                            unify_prototype, bi_graphs = graph_net.module.get_optimal_matching(graph_node_features, GNN_INIT)    
                         else:
-                            unify_prototype, bi_graphs = graph_net.get_optimal_matching(graph_node_features)     
-
+                            unify_prototype, bi_graphs = graph_net.get_optimal_matching(graph_node_features, GNN_INIT)     
+                        # print(bi_graphs)
                         unify_prototype = unify_prototype.detach()
                         bi_graphs = [bigh.detach() for bigh in bi_graphs]
                         fix_graph = True
