@@ -468,10 +468,7 @@ def train():
         dataset_lbs = dataset_lbs.cuda()
         # print(dataset_lbs)
 
-
         lb = torch.squeeze(lb, 1)
-
-
 
         if train_seg_or_gnn == SEG and alter_iter > configer.get('train', 'seg_iters'):
             train_seg_or_gnn = GNN
@@ -584,6 +581,21 @@ def train():
         #     if torch.isnan(param.grad).any() or torch.isinf(param.grad).any():
         #         print("seg NaN or Inf value found in gradients")
         
+        # if torch.isnan(seg_out['seg']).any() or torch.isinf(seg_out['seg']).any():
+        #     print("seg NaN or Inf value found in output")
+        #     print(backward_loss)
+        
+        # if torch.isnan(im).any() or torch.isinf(im).any():
+        #     print("find NaN or Inf value found in im")        
+
+        # if torch.isnan(lb).any() or torch.isinf(lb).any():
+        #     print("find NaN or Inf value found in lb")
+
+        # if torch.isnan(backward_loss).any() or torch.isinf(backward_loss).any():
+        #     print("find NaN or Inf value found in loss")
+        #     print(im)
+        #     print(lb)
+
         if train_seg_or_gnn == SEG: 
             scaler.step(optim)
         else:
@@ -619,7 +631,7 @@ def train():
         ## print training log message
         if (i + 1) % 100 == 0:
             writer.add_scalars("loss",{"seg":loss_pre_meter.getWoErase(),"contrast":loss_contrast_meter.getWoErase(), "domain":loss_domain_meter.getWoErase()},configer.get("iter")+1)
-            lr = gnn_lr_schdr.get_lr()
+            lr = lr_schdr.get_lr()
             lr = sum(lr) / len(lr)
             print_log_msg(
                 i, 0, 0, configer.get('lr', 'max_iter')+starti, lr, time_meter, loss_meter,
