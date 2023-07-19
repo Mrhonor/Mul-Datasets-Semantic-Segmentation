@@ -953,6 +953,7 @@ class Learnable_Topology_BGNN(nn.Module):
         cur_cat = 0
         for i in range(0, self.n_datasets):
             this_bipartite_graph = adj[cur_cat:cur_cat+self.dataset_cats[i], self.total_cats:]
+
             if self.output_max_adj:
                 # 找到每列的最大值
                 max_values, _ = torch.max(this_bipartite_graph, dim=0)
@@ -965,6 +966,7 @@ class Learnable_Topology_BGNN(nn.Module):
                 
             if self.output_softmax_and_max_adj or not self.output_max_adj:
                 softmax_bipartite_graph = F.softmax(this_bipartite_graph/0.07, dim=0)
+
                 self.bipartite_graphs.append(softmax_bipartite_graph)
             
             cur_cat += self.dataset_cats[i]
@@ -1069,7 +1071,8 @@ class Learnable_Topology_BGNN(nn.Module):
         feat_out = self.linear1(feat3)
 
         if init:
-            return feat_out[self.total_cats:], self.sep_bipartite_graphs_by_km(non_norm_adj_mI)
+            return feat_out[self.total_cats:], self.sep_bipartite_graphs(non_norm_adj_mI)
+            # return feat_out[self.total_cats:], self.sep_bipartite_graphs_by_km(non_norm_adj_mI)
         else:
             return feat_out[self.total_cats:], self.pretrain_bipartite_graphs(x.is_cuda)
 

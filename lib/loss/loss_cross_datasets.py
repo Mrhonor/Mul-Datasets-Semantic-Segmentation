@@ -832,6 +832,8 @@ class CrossDatasetsCELoss_AdvGNN(nn.Module):
         
         
         for i in range(0, self.n_datasets):
+
+            # print("logits shape:", )
             if not (dataset_ids == i).any():
                 continue
             

@@ -491,6 +491,8 @@ def train():
         #     seg_out = net(im)
 
         optim.zero_grad()
+        gnn_optim.zero_grad()
+        gnn_optimD.zero_grad()
         with amp.autocast(enabled=configer.get('use_fp16')):
             # if finetune and i >= fix_param_iters + aux_iter:
             #     finetune = False
@@ -511,6 +513,7 @@ def train():
                 
             fix_graph = False            
             if train_seg_or_gnn == GNN:
+                print
                 is_adv = True
                 fix_graph = False
                 GNN_INIT = True
@@ -529,16 +532,24 @@ def train():
                 if fix_graph == False:
                     with torch.no_grad():
                         if is_distributed():
-                            unify_prototype, bi_graphs = graph_net.module.get_optimal_matching(graph_node_features, GNN_INIT)    
+                            unify_prototype, ori_bi_graphs = graph_net.module.get_optimal_matching(graph_node_features, GNN_INIT)
+                            # unify_prototype, bi_graphs, adv_out = graph_net(graph_node_features)    
                         else:
-                            unify_prototype, bi_graphs = graph_net.get_optimal_matching(graph_node_features, GNN_INIT)     
+                            unify_prototype, ori_bi_graphs = graph_net.get_optimal_matching(graph_node_features, GNN_INIT)     
+                            # unify_prototype, bi_graphs, adv_out = graph_net(graph_node_features)     
                         # print(bi_graphs)
+
                         unify_prototype = unify_prototype.detach()
-                        bi_graphs = [bigh.detach() for bigh in bi_graphs]
+                        bi_graphs = []
+                        if configer.get('GNN', 'output_softmax_and_max_adj'):
+                            for i in range(0, len(ori_bi_graphs), 2):
+                                bi_graphs.append(ori_bi_graphs[i+1].detach())
+                        else:
+                            bi_graphs = [bigh.detach() for bigh in bi_graphs]
                         fix_graph = True
                         adv_out = None
                 
-            
+            # print("why: ", bi_graphs[1].shape)
             seg_out['seg'] = seg_out['seg']
             seg_out['unify_prototype'] = unify_prototype
             seg_out['bi_graphs'] = bi_graphs
@@ -562,7 +573,7 @@ def train():
         # print('before backward')
         # set_trace()
         # with torch.autograd.detect_anomaly():
-        
+        # print(backward_loss)
         scaler.scale(backward_loss).backward()
         if is_adv:
             scaler.scale(adv_loss).backward()
@@ -626,8 +637,7 @@ def train():
         # if i >= configer.get('lr', 'warmup_iters') and use_contrast:
         #     loss_contrast_meter.update(loss_contrast.item())
 
-        
-
+    
         ## print training log message
         if (i + 1) % 100 == 0:
             writer.add_scalars("loss",{"seg":loss_pre_meter.getWoErase(),"contrast":loss_contrast_meter.getWoErase(), "domain":loss_domain_meter.getWoErase()},configer.get("iter")+1)
