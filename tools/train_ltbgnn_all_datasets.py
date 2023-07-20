@@ -74,11 +74,10 @@ CAM_ID = 1
 A2D2_ID = 2
 SUN_ID = 3
 ADE2016_ID = 4
-ADE20K_ID = 5
-BDD_ID = 6
-COCO_ID = 7
-IDD_ID = 8
-MAPI_ID = 9
+BDD_ID = 5
+COCO_ID = 6
+IDD_ID = 7
+MAPI_ID = 8
 
 # ClassRemaper = ClassRemap(configer=configer)
 
@@ -390,8 +389,10 @@ def train():
 
     # 两个数据集分别处理
     # 使用迭代器读取数据
+    print("!")
     
     dl_iters = [iter(dl) for dl in dls]
+    print("!!")
     
     ## train loop
     # for it, (im, lb) in enumerate(dl):
@@ -407,6 +408,7 @@ def train():
         criteria_pre = OhemCELoss(0.7)
         criteria_aux = [OhemCELoss(0.7) for _ in range(configer.get('loss', 'aux_num'))]
     
+    
     finetune = configer.get('train', 'finetune')
     fix_param_iters = 0
     # if finetune:
@@ -417,6 +419,7 @@ def train():
     if is_distributed():
         net = set_model_dist(net)
         graph_net = set_model_dist(graph_net)
+    
 
     contrast_warmup_iters = configer.get("lr", "warmup_iters")
     with_aux = configer.get('loss', 'with_aux')
@@ -442,6 +445,7 @@ def train():
         # epoch = i * (configer.get('dataset1', 'ims_per_gpu') + configer.get('dataset2', 'ims_per_gpu')) / 2976
 
 
+        print('before loader')
         ims = []
         lbs = []        
         for j in range(0,len(dl_iters)):
@@ -456,6 +460,7 @@ def train():
             ims.append(im)
             lbs.append(lb)
                 
+        print('after loader')
 
         im = torch.cat(ims, dim=0)
         lb = torch.cat(lbs, dim=0)
@@ -510,6 +515,8 @@ def train():
                     net.module.set_train_dataset_aux(False)
                 else:
                     net.set_train_dataset_aux(False)    
+            
+            print('before forward')
                 
             fix_graph = False            
             if train_seg_or_gnn == GNN:
@@ -525,20 +532,25 @@ def train():
                 is_adv = False
                 graph_net.eval()
                 net.train()
+                print('before net')
                 seg_out = net(im)
+                print('after net')
                 
                 if fix_graph == False:
                     with torch.no_grad():
                         if is_distributed():
                             unify_prototype, bi_graphs = graph_net.module.get_optimal_matching(graph_node_features)    
                         else:
+                            print('before get_optimal_matching')
                             unify_prototype, bi_graphs = graph_net.get_optimal_matching(graph_node_features)     
 
+                        print('after get_optimal_matching')
                         unify_prototype = unify_prototype.detach()
                         bi_graphs = [bigh.detach() for bigh in bi_graphs]
                         fix_graph = True
                         adv_out = None
                 
+            print('after forward')
             
             seg_out['seg'] = seg_out['seg']
             seg_out['unify_prototype'] = unify_prototype
@@ -546,12 +558,15 @@ def train():
             seg_out['adv_out'] = adv_out
 
                 
+            print('before loss')
+            
             backward_loss, adv_loss = contrast_losses(seg_out, lb, dataset_lbs, is_adv)
             kl_loss = None
             loss_seg = backward_loss
             loss_aux = None
             loss_contrast = None
 
+            print('after loss')
             
         # if with_memory and 'key' in out:
         #     dequeue_and_enqueue(configer, city_out['seg'], city_out['key'], lb_city.detach(),
@@ -564,9 +579,13 @@ def train():
         # set_trace()
         # with torch.autograd.detect_anomaly():
         
+        print('before backward')
+        
         scaler.scale(backward_loss).backward()
         if is_adv:
             scaler.scale(adv_loss).backward()
+            
+        print('after backward')
         # print(backward_loss.item())
             
         # print('after backward')

@@ -104,7 +104,7 @@ def get_data_loader(configer, aux_mode='eval', distributed=True):
             dataset,
             batch_sampler=batchsamp,
             num_workers=1,
-            pin_memory=True,
+            pin_memory=False,
         ) for dataset, batchsamp in zip(ds, batchsampler)]
     else:
         # n_train_imgs = cfg.ims_per_gpu * cfg.max_iter
@@ -124,7 +124,7 @@ def get_data_loader(configer, aux_mode='eval', distributed=True):
             shuffle=shuffle,
             drop_last=drop_last,
             num_workers=1,
-            pin_memory=True,
+            pin_memory=False,
         ) for dataset, bs in zip(ds, batchsize)]
     return dl
 
