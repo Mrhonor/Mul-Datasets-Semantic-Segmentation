@@ -1071,8 +1071,8 @@ class Learnable_Topology_BGNN(nn.Module):
         feat_out = self.linear1(feat3)
 
         if init:
-            return feat_out[self.total_cats:], self.sep_bipartite_graphs(non_norm_adj_mI)
-            # return feat_out[self.total_cats:], self.sep_bipartite_graphs_by_km(non_norm_adj_mI)
+            # return feat_out[self.total_cats:], self.sep_bipartite_graphs(non_norm_adj_mI)
+            return feat_out[self.total_cats:], self.sep_bipartite_graphs_by_km(non_norm_adj_mI)
         else:
             return feat_out[self.total_cats:], self.pretrain_bipartite_graphs(x.is_cuda)
 

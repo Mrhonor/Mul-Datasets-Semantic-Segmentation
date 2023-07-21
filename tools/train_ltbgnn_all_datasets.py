@@ -513,7 +513,6 @@ def train():
                 
             fix_graph = False            
             if train_seg_or_gnn == GNN:
-                print
                 is_adv = True
                 fix_graph = False
                 GNN_INIT = True
@@ -541,15 +540,17 @@ def train():
 
                         unify_prototype = unify_prototype.detach()
                         bi_graphs = []
-                        if configer.get('GNN', 'output_softmax_and_max_adj'):
-                            for i in range(0, len(ori_bi_graphs), 2):
-                                bi_graphs.append(ori_bi_graphs[i+1].detach())
+                        if len(ori_bi_graphs) == 2*n_datasets:
+                            for j in range(0, len(ori_bi_graphs), 2):
+                                bi_graphs.append(ori_bi_graphs[j+1].detach())
                         else:
-                            bi_graphs = [bigh.detach() for bigh in bi_graphs]
+                            bi_graphs = [bigh.detach() for bigh in ori_bi_graphs]
                         fix_graph = True
                         adv_out = None
+            
+
                 
-            # print("why: ", bi_graphs[1].shape)
+
             seg_out['seg'] = seg_out['seg']
             seg_out['unify_prototype'] = unify_prototype
             seg_out['bi_graphs'] = bi_graphs
@@ -570,7 +571,6 @@ def train():
         #                         cam_out['segment_queue'], i, CAM_ID)
 
 
-        # print('before backward')
         # set_trace()
         # with torch.autograd.detect_anomaly():
         # print(backward_loss)
@@ -579,8 +579,6 @@ def train():
             scaler.scale(adv_loss).backward()
         # print(backward_loss.item())
             
-        # print('after backward')
-
         # configer.plus_one('iters')
         # self.configer.plus_one('iters')
 
@@ -648,18 +646,29 @@ def train():
                 loss_pre_meter, loss_aux_meters, loss_contrast_meter, loss_domain_meter, kl_loss_meter)
             
 
-        if (i + 1) % 10000 == 0:
+        if (i + 1) % 20000 == 0:
             seg_save_pth = osp.join(configer.get('res_save_pth'), 'seg_model_{}.pth'.format(i+1))
             gnn_save_pth = osp.join(configer.get('res_save_pth'), 'graph_model_{}.pth'.format(i+1))
             logger.info('\nsave seg_models to {}, gnn_models to {}'.format(seg_save_pth, gnn_save_pth))
+            if is_distributed():
+                gnn_state = graph_net.module.state_dict()
+                seg_state = net.module.state_dict()
+                if dist.get_rank() == 0: 
+                    torch.save(gnn_state, gnn_save_pth)
+                    torch.save(seg_state, seg_save_pth)
+            else:
+                gnn_state = graph_net.state_dict()
+                seg_state = net.state_dict()
+                torch.save(gnn_state, gnn_save_pth)
+                torch.save(seg_state, seg_save_pth)
 
             # if fix_graph == False:
-            with torch.no_grad():
-                # input_feats = torch.cat([graph_node_features, graph_net.unify_node_features], dim=0)
-                if is_distributed():
-                    unify_prototype, bi_graphs = graph_net.module.get_optimal_matching(graph_node_features)
-                else:
-                    unify_prototype, bi_graphs = graph_net.get_optimal_matching(graph_node_features) 
+            # with torch.no_grad():
+            #     # input_feats = torch.cat([graph_node_features, graph_net.unify_node_features], dim=0)
+            #     if is_distributed():
+            #         unify_prototype, bi_graphs = graph_net.module.get_optimal_matching(graph_node_features)
+            #     else:
+            #         unify_prototype, bi_graphs = graph_net.get_optimal_matching(graph_node_features) 
                 
             if use_dataset_aux_head and i < aux_iter:
                 eval_model_func = eval_model_aux
@@ -681,18 +690,7 @@ def train():
             # writer.export_scalars_to_json(osp.join(configer.get('res_save_pth'), str(time())+'_writer.json'))
             logger.info(tabulate([mious, ], headers=heads, tablefmt='orgtbl'))
             net.train()
-            
-            if is_distributed():
-                gnn_state = graph_net.module.state_dict()
-                seg_state = net.module.state_dict()
-                if dist.get_rank() == 0: 
-                    torch.save(gnn_state, gnn_save_pth)
-                    torch.save(seg_state, seg_save_pth)
-            else:
-                gnn_state = graph_net.state_dict()
-                seg_state = net.state_dict()
-                torch.save(gnn_state, gnn_save_pth)
-                torch.save(seg_state, seg_save_pth)
+        
                 
         if train_seg_or_gnn == SEG:
             lr_schdr.step()

@@ -793,6 +793,7 @@ class CrossDatasetsCELoss_AdvGNN(nn.Module):
         self.with_max_enc = self.configer.get('loss', 'with_max_enc')
         self.max_enc_weight = self.configer.get('loss', 'max_enc_weight')
         self.with_softmax_and_max = self.configer.get('GNN', 'output_softmax_and_max_adj')
+        self.with_max_adj = self.configer.get('GNN', 'output_max_adj')
         self.max_iter = self.configer.get('lr', 'max_iter')
         # self.seg_gnn_alter_iters = self.configer.get('train', 'seg_gnn_alter_iters')
         self.gnn_iters = self.configer.get('train', 'gnn_iters')
@@ -837,7 +838,7 @@ class CrossDatasetsCELoss_AdvGNN(nn.Module):
             if not (dataset_ids == i).any():
                 continue
             
-            if is_adv and self.with_softmax_and_max:
+            if is_adv and self.with_softmax_and_max and self.with_max_adj:
                 max_remap_logits = torch.einsum('bchw, nc -> bnhw', logits[dataset_ids==i], bi_graphs[2*i])
                 max_remap_logits = F.interpolate(max_remap_logits, size=(target.size(1), target.size(2)), mode="bilinear", align_corners=True) 
 
@@ -852,7 +853,7 @@ class CrossDatasetsCELoss_AdvGNN(nn.Module):
             # print("i : {}, a_max : {}, a_min : {}".format(i, torch.max(a), torch.min(a)))
             
             # print(torch.sum(bi_graphs[i]))
-            if is_adv and self.with_softmax_and_max:
+            if is_adv and self.with_softmax_and_max and self.with_max_adj:
                 cur_iter = self.configer.get('iter')
                 max_rate = (cur_iter % self.gnn_iters) / self.gnn_iters
                 if loss is None:
