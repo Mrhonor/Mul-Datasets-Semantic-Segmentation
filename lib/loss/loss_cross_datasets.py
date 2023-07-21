@@ -832,6 +832,8 @@ class CrossDatasetsCELoss_AdvGNN(nn.Module):
         
         
         for i in range(0, self.n_datasets):
+
+            # print("logits shape:", )
             if not (dataset_ids == i).any():
                 continue
             
@@ -852,7 +854,7 @@ class CrossDatasetsCELoss_AdvGNN(nn.Module):
             # print(torch.sum(bi_graphs[i]))
             if is_adv and self.with_softmax_and_max:
                 cur_iter = self.configer.get('iter')
-                max_rate = (cur_iter % self.seg_gnn_alter_iters) / self.seg_gnn_alter_iters
+                max_rate = (cur_iter % self.gnn_iters) / self.gnn_iters
                 if loss is None:
                     loss = max_rate * self.CELoss(max_remap_logits, target[dataset_ids==i]) + (1 - max_rate) * self.CELoss(softmax_remap_logits, target[dataset_ids==i]) 
                 else:

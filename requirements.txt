@@ -1,0 +1,11 @@
+tabulate
+einops
+tensorboardX
+timm
+yacs
+munkres
+numba
+matplotlib
+scipy
+opencv-python
+

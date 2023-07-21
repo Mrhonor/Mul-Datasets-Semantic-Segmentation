@@ -1,0 +1,50 @@
+# 基础镜像选择适合你的环境的Python版本
+FROM nvidia/cuda:11.8-base
+FROM continuumio/miniconda3:latest
+
+
+
+# RUN sed -i s@/archive.ubuntu.com/@/mirrors.aliyun.com/@g /etc/apt/sources.list
+# RUN sed -i s@/security.ubuntu.com/@/mirrors.aliyun.com/@g /etc/apt/sources.list
+# RUN apt-get update && apt-get install -y gnupg2
+# RUN apt-key adv --keyserver keyserver.ubuntu.com --recv-keys 3B4FE6ACC0B21F32
+# COPY ./sources.list /etc/apt/sources.list
+# RUN apt-get clean
+RUN apt-get update
+RUN apt-get install -y --no-install-recommends libgl1-mesa-glx
+
+# 设置工作目录
+WORKDIR /app
+
+# 复制conda环境文件和requirements.txt到容器中
+COPY environment.yml .
+COPY requirements.txt .
+
+# # 创建并激活conda环境
+# RUN conda env create -f environment.yml && \
+#     conda activate myenv
+
+
+
+# 安装PyTorch
+RUN conda install pytorch torchvision torchaudio pytorch-cuda=11.8 -c pytorch -c nvidia
+
+
+# Using douban pipy mirror
+RUN pip3 install -i https://pypi.douban.com/simple/ -U pip 
+RUN pip3 config set global.index-url https://pypi.douban.com/simple/
+
+# 安装Python依赖项
+RUN pip3 install -r requirements.txt
+
+# 克隆GitHub仓库并安装
+# RUN git clone https://github.com/username/repository.git \
+#    && pip install -e repository
+RUN pip3 install git+https://github.com/openai/CLIP.git
+
+# 复制PyTorch程序代码到容器中
+COPY . .
+
+# 设置容器启动命令
+CMD ["python", "tools/train_ltbgnn_all_datasets.py"]
+

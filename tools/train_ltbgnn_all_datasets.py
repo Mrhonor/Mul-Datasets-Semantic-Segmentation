@@ -58,7 +58,7 @@ def parse_args():
     parse.add_argument('--local_rank', dest='local_rank', type=int, default=-1,)
     parse.add_argument('--port', dest='port', type=int, default=16853,)
     parse.add_argument('--finetune_from', type=str, default=None,)
-    parse.add_argument('--config', dest='config', type=str, default='configs/ltbgnn_more_datasets.json',)
+    parse.add_argument('--config', dest='config', type=str, default='configs/ltbgnn_more_datasets_my_linux.json',)
     return parse.parse_args()
 
 # 使用绝对路径
@@ -428,6 +428,7 @@ def train():
     SEG = 0
     GNN = 1
     train_seg_or_gnn = SEG
+    GNN_INIT = configer.get('train', 'graph_finetune')
 
     for i in range(starti, configer.get('lr','max_iter') + starti):
         configer.plus_one('iter')
@@ -472,10 +473,7 @@ def train():
         dataset_lbs = dataset_lbs.cuda()
         # print(dataset_lbs)
 
-
         lb = torch.squeeze(lb, 1)
-
-
 
         if train_seg_or_gnn == SEG and alter_iter > configer.get('train', 'seg_iters'):
             train_seg_or_gnn = GNN
@@ -498,6 +496,8 @@ def train():
         #     seg_out = net(im)
 
         optim.zero_grad()
+        gnn_optim.zero_grad()
+        gnn_optimD.zero_grad()
         with amp.autocast(enabled=configer.get('use_fp16')):
             # if finetune and i >= fix_param_iters + aux_iter:
             #     finetune = False
@@ -520,8 +520,10 @@ def train():
                 
             fix_graph = False            
             if train_seg_or_gnn == GNN:
+                print
                 is_adv = True
                 fix_graph = False
+                GNN_INIT = True
                 graph_net.train()
                 net.eval()
                 with torch.no_grad():
@@ -539,14 +541,20 @@ def train():
                 if fix_graph == False:
                     with torch.no_grad():
                         if is_distributed():
-                            unify_prototype, bi_graphs = graph_net.module.get_optimal_matching(graph_node_features)    
+                            unify_prototype, ori_bi_graphs = graph_net.module.get_optimal_matching(graph_node_features, GNN_INIT)
+                            # unify_prototype, bi_graphs, adv_out = graph_net(graph_node_features)    
                         else:
-                            print('before get_optimal_matching')
-                            unify_prototype, bi_graphs = graph_net.get_optimal_matching(graph_node_features)     
+                            unify_prototype, ori_bi_graphs = graph_net.get_optimal_matching(graph_node_features, GNN_INIT)     
+                            # unify_prototype, bi_graphs, adv_out = graph_net(graph_node_features)     
+                        # print(bi_graphs)
 
-                        print('after get_optimal_matching')
                         unify_prototype = unify_prototype.detach()
-                        bi_graphs = [bigh.detach() for bigh in bi_graphs]
+                        bi_graphs = []
+                        if configer.get('GNN', 'output_softmax_and_max_adj'):
+                            for i in range(0, len(ori_bi_graphs), 2):
+                                bi_graphs.append(ori_bi_graphs[i+1].detach())
+                        else:
+                            bi_graphs = [bigh.detach() for bigh in bi_graphs]
                         fix_graph = True
                         adv_out = None
                 
@@ -601,6 +609,21 @@ def train():
         #     if torch.isnan(param.grad).any() or torch.isinf(param.grad).any():
         #         print("seg NaN or Inf value found in gradients")
         
+        # if torch.isnan(seg_out['seg']).any() or torch.isinf(seg_out['seg']).any():
+        #     print("seg NaN or Inf value found in output")
+        #     print(backward_loss)
+        
+        # if torch.isnan(im).any() or torch.isinf(im).any():
+        #     print("find NaN or Inf value found in im")        
+
+        # if torch.isnan(lb).any() or torch.isinf(lb).any():
+        #     print("find NaN or Inf value found in lb")
+
+        # if torch.isnan(backward_loss).any() or torch.isinf(backward_loss).any():
+        #     print("find NaN or Inf value found in loss")
+        #     print(im)
+        #     print(lb)
+
         if train_seg_or_gnn == SEG: 
             scaler.step(optim)
         else:
@@ -631,12 +654,11 @@ def train():
         # if i >= configer.get('lr', 'warmup_iters') and use_contrast:
         #     loss_contrast_meter.update(loss_contrast.item())
 
-        
-
+    
         ## print training log message
         if (i + 1) % 100 == 0:
             writer.add_scalars("loss",{"seg":loss_pre_meter.getWoErase(),"contrast":loss_contrast_meter.getWoErase(), "domain":loss_domain_meter.getWoErase()},configer.get("iter")+1)
-            lr = gnn_lr_schdr.get_lr()
+            lr = lr_schdr.get_lr()
             lr = sum(lr) / len(lr)
             print_log_msg(
                 i, 0, 0, configer.get('lr', 'max_iter')+starti, lr, time_meter, loss_meter,
