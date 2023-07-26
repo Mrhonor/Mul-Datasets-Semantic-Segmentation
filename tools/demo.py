@@ -13,6 +13,7 @@ import lib.transform_cv2 as T
 from lib.models import model_factory
 from configs import set_cfg_from_file
 from tools.configer import Configer
+from lib.module.gen_graph_node_feature import gen_graph_node_feature
 
 torch.set_grad_enabled(False) 
 np.random.seed(123)
@@ -20,9 +21,9 @@ np.random.seed(123)
 # args
 parse = argparse.ArgumentParser()
 
-parse.add_argument('--weight_path', type=str, default='res/celoss/model_100000.pth',)
-parse.add_argument('--config', dest='config', type=str, default='configs/clip_city_cam_a2d2.json',)
-parse.add_argument('--img_path', dest='img_path', type=str, default='img/Seq05VD_f02070.png',)
+parse.add_argument('--weight_path', type=str, default='res/celoss/seg_model_20000.pth',)
+parse.add_argument('--config', dest='config', type=str, default='configs/ltbgnn_more_datasets_my_linux.json',)
+parse.add_argument('--img_path', dest='img_path', type=str, default='img/berlin_000011_000019_leftImg8bit.png',)
 args = parse.parse_args()
 # cfg = set_cfg_from_file(args.config)
 configer = Configer(configs=args.config)
@@ -192,6 +193,7 @@ elif dataset_id is A2D2_ID:
 else:
     labels_info = labels_info_eval
 
+labels_info = labels_info_city + labels_info_a2d2
 def buildPalette(label_info):
     palette = []
     for el in label_info:
@@ -216,6 +218,18 @@ class E2EModel(torch.nn.Module):
         self.net.aux_mode='pred'
         # self.net.train()
         self.net.cuda()
+
+        graph_net = model_factory[configer.get('GNN','model_name')](configer)
+        graph_net.load_state_dict(torch.load(configer.get('train', 'graph_finetune_from'), map_location='cpu'), strict=False)
+        graph_net.cuda()
+        graph_net.eval()
+        graph_node_features = gen_graph_node_feature(configer)
+        unify_prototype, bi_graphs = graph_net.get_optimal_matching(graph_node_features, init=True) 
+        print(bi_graphs)
+
+        self.net.set_unify_prototype(unify_prototype)
+        self.net.set_bipartite_graphs(bi_graphs)
+                
         
     def forward(self, x):
         x = x.permute(0, 3, 1, 2)
@@ -223,7 +237,7 @@ class E2EModel(torch.nn.Module):
         x = x.sub_(self.mean).div_(self.std).clone()
         # out = self.net(x)[0]
         # x = torch.cat((x,x), dim=0)
-        out = self.net(x.cuda(), dataset=dataset_id)
+        out = self.net(x.cuda(), dataset=0)
         return out
     
 ## mean: [0.3038, 0.3383, 0.3034] std: [0.2071, 0.2088, 0.2090]    

@@ -39,23 +39,29 @@ class BaseDataset(Dataset):
 
     def __getitem__(self, idx):
         impth, lbpth = self.img_paths[idx], self.lb_paths[idx]        
-        img, label = self.get_image(impth, lbpth)
+        label = self.get_label(lbpth)
         if not self.lb_map is None:
             label = self.lb_map[label]
+        if self.mode == 'ret_path':
+            return impth, label, lbpth
+
+        img = self.get_image(impth)
+
         im_lb = dict(im=img, lb=label)
         if not self.trans_func is None:
             im_lb = self.trans_func(im_lb)
         im_lb = self.to_tensor(im_lb)
         img, label = im_lb['im'], im_lb['lb']
-        if self.mode == 'ret_path':
-            return impth, label
         
         return img.detach(), label.unsqueeze(0).detach()
         # return img.detach()
 
-    def get_image(self, impth, lbpth):
-        img, label = cv2.imread(impth)[:, :, ::-1], cv2.imread(lbpth, 0)
-        return img, label
+    def get_label(self, lbpth):
+        return cv2.imread(lbpth, 0)
+
+    def get_image(self, impth):
+        img = cv2.imread(impth)[:, :, ::-1]
+        return img
 
     def __len__(self):
         return self.len

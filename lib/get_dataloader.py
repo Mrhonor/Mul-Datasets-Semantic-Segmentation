@@ -19,6 +19,7 @@ from lib.coco_data import Coco_data
 from lib.a2d2_city_dataset import A2D2CityScapes
 from lib.CamVid_lb import CamVid
 from lib.MultiSetReader import MultiSetReader
+from lib.all_datasets_reader import AllDatasetsReader
 
 
 
@@ -75,7 +76,13 @@ def get_data_loader(configer, aux_mode='eval', distributed=True):
     elif mode == 'ret_path':
         trans_func = TransformationVal()
         batchsize = [1 for i in range(1, n_datasets+1)]
-        annpath = [configer.get('dataset'+str(i), 'val_im_anns') for i in range(1, n_datasets+1)]
+        annpath = []
+        for i in range(1, n_datasets+1):
+            if configer.get('dataset'+str(i), 'data_reader') != 'Idd':
+                annpath.append(configer.get('dataset'+str(i), 'val_im_anns'))
+            else:
+                annpath.append(configer.get('dataset'+str(i), 'train_im_anns'))
+            
         imroot = [configer.get('dataset'+str(i), 'im_root') for i in range(1, n_datasets+1)]
         data_reader = [configer.get('dataset'+str(i), 'data_reader') for i in range(1, n_datasets+1)]
         
@@ -127,6 +134,83 @@ def get_data_loader(configer, aux_mode='eval', distributed=True):
             pin_memory=False,
         ) for dataset, bs in zip(ds, batchsize)]
     return dl
+
+def get_data_loader_all_in_one(configer, aux_mode='eval', distributed=True):
+    mode = aux_mode
+    n_datasets = configer.get('n_datasets')
+    max_iter = configer.get('lr', 'max_iter')
+    
+    if mode == 'train':
+        scales = configer.get('train', 'scales')
+        cropsize = configer.get('train', 'cropsize')
+        trans_func = TransformationTrain(scales, cropsize)
+        batchsize = 0
+        for i in range(1, n_datasets+1):
+            batchsize += configer.get('dataset'+str(i), 'ims_per_gpu')
+        annpath = "datasets/all/train.txt"
+        imroot = "/home1/marong/datasets/"
+        data_reader = "AllDatasetsReader"
+        
+        shuffle = True
+        drop_last = True
+    else:
+        trans_func = TransformationVal()
+        batchsize = 0
+        for i in range(1, n_datasets+1):
+            batchsize += configer.get('dataset'+str(i), 'eval_ims_per_gpu')
+        annpath = "datasets/all/val.txt"
+        imroot = "/home1/marong/datasets/"
+        data_reader = "AllDatasetsReader"
+        
+        shuffle = False
+        drop_last = False
+
+    ds = eval(data_reader)(imroot, annpath, trans_func=trans_func, mode=mode)
+          
+    # ds = [eval(reader)(root, path, trans_func=trans_func, mode=mode)
+    #       for reader, root, path in zip(data_reader, imroot, annpath)]
+
+    if distributed:
+        assert dist.is_available(), "dist should be initialzed"
+        if mode == 'train':
+            assert not max_iter is None
+            n_train_imgs = batchsize * dist.get_world_size() * max_iter
+            sampler = RepeatedDistSampler(ds, n_train_imgs, shuffle=shuffle)
+        else:
+            sampler = torch.utils.data.distributed.DistributedSampler(
+                ds, shuffle=shuffle)
+            
+        batchsampler = torch.utils.data.sampler.BatchSampler(
+            sampler, batchsize, drop_last=drop_last
+        )
+        dl = DataLoader(
+            ds,
+            batch_sampler=batchsampler,
+            num_workers=2,
+            pin_memory=False,
+        )
+    else:
+        # n_train_imgs = cfg.ims_per_gpu * cfg.max_iter
+        # sampler = RepeatedDistSampler(ds, n_train_imgs, shuffle=shuffle, num_replicas=1, rank=0)
+        # batchsampler = torch.utils.data.sampler.BatchSampler(
+        #     sampler, batchsize, drop_last=drop_last
+        # )
+        # dl = DataLoader(
+        #     ds,
+        #     batch_sampler=batchsampler,
+        #     num_workers=4,
+        #     pin_memory=True,
+        # )
+        dl = DataLoader(
+            ds,
+            batch_size=batchsize,
+            shuffle=shuffle,
+            drop_last=drop_last,
+            num_workers=2,
+            pin_memory=False,
+        )
+    return dl
+
 
 def get_single_data_loader(configer, aux_mode='eval', distributed=True):
     mode = aux_mode
@@ -182,7 +266,7 @@ def get_single_data_loader(configer, aux_mode='eval', distributed=True):
         dl = DataLoader(
             Mds,
             batch_sampler=batchsampler,
-            num_workers=4,
+            num_workers=1,
             pin_memory=False)
     else:
 
@@ -191,7 +275,7 @@ def get_single_data_loader(configer, aux_mode='eval', distributed=True):
             batch_size=total_batchsize,
             shuffle=shuffle,
             drop_last=drop_last,
-            num_workers=4,
+            num_workers=1,
             pin_memory=False,
         )
     return dl

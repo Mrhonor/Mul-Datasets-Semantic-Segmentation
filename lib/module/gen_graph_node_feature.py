@@ -37,13 +37,13 @@ def get_img_for_everyclass(configer):
             this_img_lists.append([])
             this_lb_lists.append([])
             
-        for im, lb in dls[i]:
+        for im, lb, lbpth in dls[i]:
             im = im[0]
             lb = lb.squeeze()
             for label_id in range(0, num_classes[i]):
                 if len(this_img_lists[label_id]) < 50 and (lb == label_id).any():
                     this_img_lists[label_id].append(im)
-                    this_lb_lists[label_id].append(lb)
+                    this_lb_lists[label_id].append(lbpth)
                     
 
         for j, lb in enumerate(this_lb_lists):
@@ -148,12 +148,14 @@ def gen_image_features(configer):
                     print("why dataset_id: ", dataset_id)
                     continue
                 image_features_list = []
-                for im_path, lb in zip(im_list, lb_list):
+                for im_path, lb_path in zip(im_list, lb_list):
                     image = cv2.imread(im_path)
+                    # print(lb_path[0])
+                    lb = cv2.imread(lb_path[0], 0)
                     if image is None:
                         print(im_path)
                         continue
-                    lb = lb.numpy()
+                    # lb = lb.numpy()
                     cropped_img = crop_image_by_label_value(image, lb, i)
                         
                     im_lb = dict(im=cropped_img, lb=lb)
@@ -188,8 +190,13 @@ def get_encode_lb_vec(configer):
 def gen_graph_node_feature(configer):
     if not osp.exists(configer.get('res_save_pth')): os.makedirs(configer.get('res_save_pth'))
     
-    if osp.exists(configer.get('res_save_pth') + 'graph_node_features'+str(configer.get('n_datasets'))+'.pt'):
-        graph_node_features = torch.load(configer.get('res_save_pth') + 'graph_node_features'+str(configer.get('n_datasets'))+'.pt')
+    file_name = configer.get('res_save_pth') + 'graph_node_features'+str(configer.get('n_datasets'))
+    for i in range(0, configer.get('n_datasets')):
+        file_name += '_'+str(configer.get('dataset'+str(i+1), 'data_reader'))
+    
+    file_name += '.pt'
+    if osp.exists(file_name):
+        graph_node_features = torch.load(file_name)
     else:
         print("gen_graph_node_feature")
         text_feature_vecs = get_encode_lb_vec(configer)
@@ -202,7 +209,7 @@ def gen_graph_node_feature(configer):
         print("gen_img_features")
         graph_node_features = torch.cat([text_feat_tensor, img_feat_tensor], dim=1)
         print(graph_node_features.shape)
-        torch.save(graph_node_features.clone(), configer.get('res_save_pth') + 'graph_node_features'+str(configer.get('n_datasets'))+'.pt')
+        torch.save(graph_node_features.clone(), file_name)
     
     return graph_node_features
 
