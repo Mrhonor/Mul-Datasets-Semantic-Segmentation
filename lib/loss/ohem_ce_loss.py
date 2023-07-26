@@ -23,9 +23,11 @@ class OhemCELoss(nn.Module):
         # print(logits.shape)
         # print(torch.max(labels))
         loss = self.criteria(logits, labels).view(-1)
+        
         loss_hard = loss[loss > self.thresh]
         if loss_hard.numel() < n_min:
             loss_hard, _ = loss.topk(n_min)
+        
         return torch.mean(loss_hard)
     
     

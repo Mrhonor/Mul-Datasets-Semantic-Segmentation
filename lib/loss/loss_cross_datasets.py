@@ -802,8 +802,8 @@ class CrossDatasetsCELoss_AdvGNN(nn.Module):
         for i in range(1, self.n_datasets+1):
             self.n_cats.append(self.configer.get('dataset'+str(i), 'n_cats'))
 
-        # self.CELoss = nn.CrossEntropyLoss(ignore_index=255)
-        self.CELoss = OhemCELoss(0.7, ignore_lb=255)
+        self.CELoss = nn.CrossEntropyLoss(ignore_index=255)
+        self.OhemCELoss = OhemCELoss(0.7, ignore_lb=255)
     
         self.advloss = nn.BCELoss()
         self.adv_loss_weight = self.configer.get('loss', 'adv_loss_weight')
@@ -811,7 +811,12 @@ class CrossDatasetsCELoss_AdvGNN(nn.Module):
         if self.with_max_enc:
             self.MSE_loss = torch.nn.MSELoss()
 
-    def forward(self, preds, target, dataset_ids, is_adv=True):
+    def forward(self, preds, target, dataset_ids, is_adv=True, init_gnn_stage=False):
+        if self.configer.get('iter') > 100000:
+            CELoss = self.OhemCELoss
+        else:
+            CELoss = self.CELoss
+
         logits = preds['seg']
         unify_prototype = preds['unify_prototype']
         bi_graphs = preds['bi_graphs']
@@ -828,7 +833,8 @@ class CrossDatasetsCELoss_AdvGNN(nn.Module):
         
         loss = None
         adv_loss = None
-        logits = torch.einsum('bchw, nc -> bnhw', logits, unify_prototype)
+        if unify_prototype is not None and not init_gnn_stage:
+            logits = torch.einsum('bchw, nc -> bnhw', logits, unify_prototype)
         # print("logits_max : {}, logits_min : {}".format(torch.max(logits), torch.min(logits)))
         
         
@@ -838,7 +844,7 @@ class CrossDatasetsCELoss_AdvGNN(nn.Module):
             if not (dataset_ids == i).any():
                 continue
             
-            if is_adv and self.with_softmax_and_max and self.with_max_adj:
+            if is_adv and self.with_softmax_and_max and self.with_max_adj and not init_gnn_stage:
                 max_remap_logits = torch.einsum('bchw, nc -> bnhw', logits[dataset_ids==i], bi_graphs[2*i])
                 max_remap_logits = F.interpolate(max_remap_logits, size=(target.size(1), target.size(2)), mode="bilinear", align_corners=True) 
 
@@ -851,21 +857,23 @@ class CrossDatasetsCELoss_AdvGNN(nn.Module):
             # a = target[dataset_ids==i].clone()
             # a[a == 255] = 0
             # print("i : {}, a_max : {}, a_min : {}".format(i, torch.max(a), torch.min(a)))
-            
-            # print(torch.sum(bi_graphs[i]))
-            if is_adv and self.with_softmax_and_max and self.with_max_adj:
-                cur_iter = self.configer.get('iter')
-                max_rate = (cur_iter % self.gnn_iters) / self.gnn_iters
-                if loss is None:
-                    loss = max_rate * self.CELoss(max_remap_logits, target[dataset_ids==i]) + (1 - max_rate) * self.CELoss(softmax_remap_logits, target[dataset_ids==i]) 
-                else:
-                    loss = loss + max_rate * self.CELoss(max_remap_logits, target[dataset_ids==i]) + (1 - max_rate) * self.CELoss(softmax_remap_logits, target[dataset_ids==i]) 
+
                 
-            else:
-                if loss is None:
-                    loss = self.CELoss(remap_logits, target[dataset_ids==i])
+            # print(torch.sum(bi_graphs[i]))
+            if not init_gnn_stage:
+                if is_adv and self.with_softmax_and_max and self.with_max_adj:
+                    cur_iter = self.configer.get('iter')
+                    max_rate = (cur_iter % self.gnn_iters) / self.gnn_iters
+                    if loss is None:
+                        loss = max_rate * CELoss(max_remap_logits, target[dataset_ids==i]) + (1 - max_rate) * CELoss(softmax_remap_logits, target[dataset_ids==i]) 
+                    else:
+                        loss = loss + max_rate * CELoss(max_remap_logits, target[dataset_ids==i]) + (1 - max_rate) * CELoss(softmax_remap_logits, target[dataset_ids==i]) 
+                    
                 else:
-                    loss = loss + self.CELoss(remap_logits, target[dataset_ids==i])
+                    if loss is None or torch.isnan(loss):
+                        loss = CELoss(remap_logits, target[dataset_ids==i])
+                    else:
+                        loss = loss + CELoss(remap_logits, target[dataset_ids==i])
 
             if is_adv and self.with_spa:
                 spa_loss = self.spa_loss_weight * torch.pow(torch.norm(bi_graphs[i], p='fro'), 2)
@@ -874,7 +882,16 @@ class CrossDatasetsCELoss_AdvGNN(nn.Module):
             if is_adv and self.with_max_enc:
                 max_enc_loss = self.max_enc_weight * self.MSE_loss(torch.max(bi_graphs[i], dim=1)[0], torch.ones(bi_graphs[i].size(0)).cuda())
                 loss = loss + max_enc_loss
+
+            if torch.isnan(loss):
+                print("NaN value found in datasets :", i)
               
+        if init_gnn_stage:
+            if loss is None:
+                loss = self.MSE_loss(unify_prototype, logits)
+            else:
+                loss = loss + self.MSE_loss(unify_prototype, logits)
+        
         if is_adv:  
             real_out = self.advloss(adv_out['ADV1'][0], label_real) + self.advloss(adv_out['ADV2'][0], label_real)
             fake_out = self.advloss(adv_out['ADV1'][1], label_fake) + self.advloss(adv_out['ADV2'][1], label_fake)
@@ -883,6 +900,7 @@ class CrossDatasetsCELoss_AdvGNN(nn.Module):
             G_fake_out = self.advloss(adv_out['ADV1'][2], label_real) + self.advloss(adv_out['ADV2'][2], label_real)
             loss = loss + self.adv_loss_weight * G_fake_out
                    
+
         return loss, adv_loss
     
 if __name__ == "__main__":

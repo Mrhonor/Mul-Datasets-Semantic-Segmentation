@@ -47,6 +47,7 @@ class BaseDataset(Dataset):
             im_lb = self.trans_func(im_lb)
         im_lb = self.to_tensor(im_lb)
         img, label = im_lb['im'], im_lb['lb']
+
         if self.mode == 'ret_path':
             return impth, label
         

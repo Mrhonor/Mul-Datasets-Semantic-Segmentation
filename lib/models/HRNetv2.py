@@ -582,6 +582,19 @@ class HRNet_W48_GNN(nn.Module):
         in_channels = 720  # 48 + 96 + 192 + 384
 
         self.proj_head = ProjectionHeadOri(dim_in=in_channels, proj_dim=self.output_feat_dim, bn_type=self.configer.get('network', 'bn_type'))
+
+        self.total_cats = 0
+        
+        for i in range(0, self.n_datasets):
+            self.total_cats += self.configer.get('dataset'+str(i+1), 'n_cats')
+        print("self.total_cats:", self.total_cats)
+        
+        self.max_num_unify_class = int(self.configer.get('GNN', 'unify_ratio') * self.total_cats)
+        
+
+        self.unify_prototype = nn.Parameter(torch.zeros(self.max_num_unify_class, self.output_feat_dim),
+                                requires_grad=True)
+        trunc_normal_(self.unify_prototype, std=0.02)
             
         self.init_weights()    
        
@@ -598,7 +611,11 @@ class HRNet_W48_GNN(nn.Module):
         feats = torch.cat([feat1, feat2, feat3, feat4], 1)
         emb = self.proj_head(feats)
         if self.aux_mode == 'train':
-            return {'seg':emb}
+            if self.training:
+                logits = torch.einsum('bchw, nc -> bnhw', emb, self.unify_prototype)
+                return {'seg':logits}
+            else:
+                return {'seg':emb}
         elif self.aux_mode == 'eval':
             logits = torch.einsum('bchw, nc -> bnhw', emb, self.unify_prototype)
             remap_logits = torch.einsum('bchw, nc -> bnhw', logits, self.bipartite_graphs[dataset])
@@ -606,7 +623,7 @@ class HRNet_W48_GNN(nn.Module):
             return remap_logits
         else:
             logits = torch.einsum('bchw, nc -> bnhw', emb, self.unify_prototype)
-            logits = torch.einsum('bchw, nc -> bnhw', logits, self.bipartite_graphs[dataset])
+            # logits = torch.einsum('bchw, nc -> bnhw', logits, self.bipartite_graphs[dataset])
             logits = F.interpolate(logits, size=(logits.size(2)*4, logits.size(3)*4), mode="bilinear", align_corners=True)
             # remap_logits = torch.einsum('bchw, nc -> bnhw', logits, self.bipartite_graphs[dataset])
             pred = logits.argmax(dim=1)
@@ -667,6 +684,7 @@ class HRNet_W48_GNN(nn.Module):
     def set_bipartite_graphs(self, bi_graphs):
         self.bipartite_graphs = bi_graphs
         
-    def set_unify_prototype(self, unify_prototype):
-        self.unify_prototype = unify_prototype
+    def set_unify_prototype(self, unify_prototype, grad=False):
+        self.unify_prototype = nn.Parameter(unify_prototype,
+                                requires_grad=grad)
         
