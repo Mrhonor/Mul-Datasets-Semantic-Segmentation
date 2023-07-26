@@ -59,7 +59,6 @@ def solve_optimal_transport(scores, iters, match_threshold):
     scores = log_optimal_transport(
         scores, 
         iters=iters)
-
     # Get the matches with score above "match_threshold".
     max0, max1 = scores[:, :, :].max(2), scores[:, :, :].max(1)
     indices0, indices1 = max0.indices, max1.indices

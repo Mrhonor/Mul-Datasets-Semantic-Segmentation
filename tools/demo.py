@@ -22,6 +22,7 @@ np.random.seed(123)
 parse = argparse.ArgumentParser()
 
 parse.add_argument('--weight_path', type=str, default='res/celoss/seg_model_20000.pth',)
+parse.add_argument('--gnn_weight_path', type=str, default='res/celoss/graph_model_20000.pth',)
 parse.add_argument('--config', dest='config', type=str, default='configs/ltbgnn_more_datasets_my_linux.json',)
 parse.add_argument('--img_path', dest='img_path', type=str, default='img/berlin_000011_000019_leftImg8bit.png',)
 args = parse.parse_args()
@@ -220,12 +221,15 @@ class E2EModel(torch.nn.Module):
         self.net.cuda()
 
         graph_net = model_factory[configer.get('GNN','model_name')](configer)
-        graph_net.load_state_dict(torch.load(configer.get('train', 'graph_finetune_from'), map_location='cpu'), strict=False)
+        torch.set_printoptions(profile="full")
+        graph_net.load_state_dict(torch.load(args.gnn_weight_path, map_location='cpu'), strict=False)
         graph_net.cuda()
         graph_net.eval()
         graph_node_features = gen_graph_node_feature(configer)
         unify_prototype, bi_graphs = graph_net.get_optimal_matching(graph_node_features, init=True) 
-        print(bi_graphs)
+
+        print(bi_graphs[0])
+        # print(bi_graphs[0][18])
 
         self.net.set_unify_prototype(unify_prototype)
         self.net.set_bipartite_graphs(bi_graphs)

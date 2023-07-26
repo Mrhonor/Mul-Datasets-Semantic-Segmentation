@@ -427,7 +427,9 @@ def train():
     alter_iter = 0
     SEG = 0
     GNN = 1
-    fix_graph = False            
+    init_stage = True
+    init_gnn_stage = False
+    fix_graph = False
     train_seg_or_gnn = SEG
     GNN_INIT = configer.get('train', 'graph_finetune')
 
@@ -448,16 +450,21 @@ def train():
 
 
         ims = []
-        lbs = []        
+        lbs = []    
         for j in range(0,len(dl_iters)):
             try:
                 im, lb = next(dl_iters[j])
+                while torch.min(lb) == 255:
+                    im, lb = next(dl_iters[j])
+
                 if not im.size()[0] == configer.get('dataset'+str(j+1), 'ims_per_gpu'):
                     raise StopIteration
             except StopIteration:
                 dl_iters[j] = iter(dls[j])
                 im, lb = next(dl_iters[j])
-                
+                while torch.min(lb) == 255:
+                    im, lb = next(dl_iters[j])
+            
             ims.append(im)
             lbs.append(lb)
                 
@@ -475,7 +482,9 @@ def train():
 
         lb = torch.squeeze(lb, 1)
 
+
         if train_seg_or_gnn == SEG and alter_iter > configer.get('train', 'seg_iters'):
+            alter_iter = 0
             train_seg_or_gnn = GNN
             gnn_lr_schdr = WarmupPolyLrScheduler(gnn_optim, power=0.9,
                 max_iter=configer.get('train','gnn_iters'), warmup_iter=configer.get('lr','warmup_iters'),
@@ -486,6 +495,7 @@ def train():
                 warmup_ratio=0.1, warmup='exp', last_epoch=-1,)
 
         elif train_seg_or_gnn == GNN and alter_iter >  configer.get('train', 'gnn_iters'):
+            alter_iter = 0
             train_seg_or_gnn = SEG
             lr_schdr = WarmupPolyLrScheduler(optim, power=0.9,
                 max_iter=configer.get('train','seg_iters'), warmup_iter=configer.get('lr','warmup_iters'),
@@ -517,21 +527,34 @@ def train():
                     net.set_train_dataset_aux(False)    
             
                 
+                        
+            seg_out = {}
             if train_seg_or_gnn == GNN:
                 is_adv = True
                 fix_graph = False
                 GNN_INIT = True
                 graph_net.train()
                 net.eval()
-                with torch.no_grad():
-                    seg_out = net(im)
                 
+                if init_stage:
+                    init_stage = False
+                    init_gnn_stage = True
+                
+                if init_gnn_stage:    
+                    if is_distributed():
+                        seg_out['seg'] = net.module.unify_prototype
+                    else:
+                        seg_out['seg'] = net.unify_prototype
+                else:
+                    with torch.no_grad():
+                        seg_out = net(im)
+
                 unify_prototype, bi_graphs, adv_out = graph_net(graph_node_features)
+                seg_out['unify_prototype'] = unify_prototype
             else:
                 is_adv = False
                 graph_net.eval()
                 net.train()
-                seg_out = net(im)
                 
                 if fix_graph == False:
                     with torch.no_grad():
@@ -552,17 +575,35 @@ def train():
                             bi_graphs = [bigh.detach() for bigh in ori_bi_graphs]
                         fix_graph = True
                         adv_out = None
+
+
+                        if not init_stage:
+                            init_gnn_stage = False
+                            if is_distributed():
+                                net.module.set_unify_prototype(unify_prototype)
+                                net.module.set_bipartite_graphs(bi_graphs)
+                            else:
+                                net.set_unify_prototype(unify_prototype)
+                                net.set_bipartite_graphs(bi_graphs)
+                        else:
+                            if is_distributed():
+                                net.module.set_bipartite_graphs(bi_graphs)
+                            else:
+                                net.set_bipartite_graphs(bi_graphs)                            
+
+                
+                seg_out = net(im)
+                seg_out['unify_prototype'] = None
             
 
                 
             seg_out['seg'] = seg_out['seg']
-            seg_out['unify_prototype'] = unify_prototype
+            
             seg_out['bi_graphs'] = bi_graphs
             seg_out['adv_out'] = adv_out
-
                 
-            
-            backward_loss, adv_loss = contrast_losses(seg_out, lb, dataset_lbs, is_adv)
+            backward_loss, adv_loss = contrast_losses(seg_out, lb, dataset_lbs, is_adv, init_gnn_stage)
+            # print(backward_loss)
             kl_loss = None
             loss_seg = backward_loss
             loss_aux = None
@@ -578,12 +619,14 @@ def train():
 
         # set_trace()
         # with torch.autograd.detect_anomaly():
-        
-        
+        # print(backward_loss)
+
+
         scaler.scale(backward_loss).backward()
         if is_adv:
             scaler.scale(adv_loss).backward()
-            
+
+        # print(net.backbone.conv1.weight.grad)
         # print(backward_loss.item())
             
         # configer.plus_one('iters')
@@ -653,7 +696,7 @@ def train():
                 loss_pre_meter, loss_aux_meters, loss_contrast_meter, loss_domain_meter, kl_loss_meter)
             
 
-        if (i + 1) % 20000 == 0:
+        if (i + 1) % 10000 == 0:
             seg_save_pth = osp.join(configer.get('res_save_pth'), 'seg_model_{}.pth'.format(i+1))
             gnn_save_pth = osp.join(configer.get('res_save_pth'), 'graph_model_{}.pth'.format(i+1))
             logger.info('\nsave seg_models to {}, gnn_models to {}'.format(seg_save_pth, gnn_save_pth))
@@ -684,13 +727,17 @@ def train():
                 eval_model_func = eval_model_contrast
 
             optim.zero_grad()
+            gnn_optim.zero_grad()
+            gnn_optimD.zero_grad()
             if is_distributed():
                 net.module.set_unify_prototype(unify_prototype)
                 net.module.set_bipartite_graphs(bi_graphs)
+                torch.cuda.empty_cache()
                 heads, mious = eval_model_func(configer, net.module)
             else:
                 net.set_unify_prototype(unify_prototype)
                 net.set_bipartite_graphs(bi_graphs)
+                torch.cuda.empty_cache()
                 heads, mious = eval_model_func(configer, net)
                 
             writer.add_scalars("mious",{"Cityscapes":mious[CITY_ID],"Camvid":mious[CAM_ID]},configer.get("iter")+1)

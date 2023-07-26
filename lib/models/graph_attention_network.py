@@ -906,7 +906,7 @@ class Learnable_Topology_BGNN(nn.Module):
         self.netD2 = Discriminator(self.nfeat_out, 128, 1, self.dropout_rate)
         self.netD2.weights_init()
         
-        self.use_km = False
+        self.use_km = True
         if self.use_km:
             self.km_algorithms = Munkres()
         # else:
@@ -1098,9 +1098,10 @@ class Learnable_Topology_BGNN(nn.Module):
                         out_bipartite_graphs[max_index, j] = 1
             else:
                 # print('datasets id : ', i)
-                res = solve_optimal_transport(this_bipartite_graph[None], 100, 0)
+                res = solve_optimal_transport(this_bipartite_graph[None], 100, -10)
                 # print(res)
                 indexes = res['matches1']
+                # print(this_bipartite_graph)
                 out_bipartite_graphs = torch.zeros_like(this_bipartite_graph)
                 for j, idx in enumerate(indexes[0]):
                     if idx == -1:
@@ -1166,6 +1167,8 @@ class Learnable_Topology_BGNN(nn.Module):
                 add_param_to_list(child, wd_params, nowd_params)
         return wd_params, nowd_params, lr_mul_wd_params, lr_mul_nowd_params
 
+    def set_unify_node_features(self, unify_node_features, grad=True):
+        self.unify_node_features = nn.Parameter(unify_node_features, requires_grad=grad)
 
 # class Learnable_Topology_BGNN_2(nn.Module):
     # def __init__(self, configer):
