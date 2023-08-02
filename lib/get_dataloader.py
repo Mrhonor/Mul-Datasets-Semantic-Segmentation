@@ -79,7 +79,7 @@ def get_data_loader(configer, aux_mode='eval', distributed=True):
         annpath = []
         for i in range(1, n_datasets+1):
             if configer.get('dataset'+str(i), 'data_reader') != 'Idd':
-                annpath.append(configer.get('dataset'+str(i), 'val_im_anns'))
+                annpath.append(configer.get('dataset'+str(i), 'train_im_anns'))
             else:
                 annpath.append(configer.get('dataset'+str(i), 'train_im_anns'))
             

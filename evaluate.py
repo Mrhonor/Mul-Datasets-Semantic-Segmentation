@@ -162,6 +162,83 @@ class MscEvalV0_Contrast(object):
         miou = np.nanmean(ious.detach().cpu().numpy())
         return miou.item()
 
+class MscEvalV0_AutoLink(object):
+
+    def __init__(self, configer, scales=(0.5, ), flip=False, ignore_label=255):
+        self.configer = configer
+        self.n_datasets = self.configer.get('n_datasets')
+        self.scales = scales
+        self.flip = flip
+        self.ignore_label = ignore_label
+
+    def __call__(self, net, dl, n_classes, dataset_id):
+        ## evaluate
+        # hist = torch.zeros(n_classes, n_classes).cuda().detach()
+        datasets_remap = []
+        # hist = torch.zeros(n_classes, n_classes).cuda().detach()
+        if dist.is_initialized() and dist.get_rank() != 0:
+            diter = enumerate(dl)
+        else:
+            diter = enumerate(tqdm(dl))
+        for i, (imgs, label) in diter:
+            N, _, H, W = label.shape
+
+            label = label.squeeze(1).cuda()
+            size = label.size()[-2:]
+
+            scale = self.scales[0]
+            sH, sW = int(scale * H), int(scale * W)
+            sH, sW = get_round_size((sH, sW))
+            im_sc = F.interpolate(imgs, size=(sH, sW),
+                    mode='bilinear', align_corners=True)
+
+            im_sc = im_sc.cuda()
+            
+            for index in range(0, self.n_datasets):
+                if index == dataset_id:
+                    if len(datasets_remap) <= index:
+                        datasets_remap.append(torch.diag(n_classes, n_classes).cuda().detach())
+                     
+                    continue
+                
+                n_cats = self.configer.get('dataset'+str(index+1), 'n_cats')
+                this_data_hist = torch.zeros(n_classes, n_cats).cuda().detach()
+
+                logits = net(im_sc, dataset=dataset_id)
+                logits = F.interpolate(logits, size=size,
+                        mode='bilinear', align_corners=True)
+                probs = torch.softmax(logits, dim=1)
+                preds = torch.argmax(probs, dim=1)
+                keep = label != self.ignore_label
+        
+                this_data_hist = torch.tensor(np.bincount(
+                    label.cpu().numpy()[keep.cpu().numpy()] * n_cats + preds.cpu().numpy()[keep.cpu().numpy()],
+                    minlength=n_classes * n_cats
+                )).cuda().view(n_classes, n_cats)
+                if len(datasets_remap) <= index:
+                    datasets_remap.append(this_data_hist)
+                else:
+                    datasets_remap[index] += this_data_hist
+                         
+        return [torch.argmax(hist, dim=1) for hist in datasets_remap]
+        # if dist.is_initialized():
+        #     dist.all_reduce(hist, dist.ReduceOp.SUM)
+            
+        # ious = hist.diag() / (hist.sum(dim=0) + hist.sum(dim=1) - hist.diag())
+        # print(ious)
+        # miou = np.nanmean(ious.detach().cpu().numpy())
+        # return miou.item()
+
+def Find_label_relation(configer, datasets_remaps):
+    n_datasets = configer.get('n_datasets')
+    for i in range(0, n_datasets):
+        this_datasets_sets = datasets_remaps[i]
+        for j in range(0, n_datasets):
+            if i == j:
+                continue
+    
+    
+    pass
 
 class MscEvalCrop(object):
 
@@ -647,6 +724,38 @@ def eval_model_contrast(configer, net):
         mious.append(mIOU)
     
 
+    heads.append('single_scale')
+    # mious.append(mIOU_cam)
+    # mious.append(mIOU_city)
+    # mious.append(mIOU_a2d2)
+    # logger.info('Cam single mIOU is: %s\nCityScapes single mIOU is: %s\n A2D2 single mIOU is: %s\n', mIOU_cam, mIOU_city, mIOU_a2d2)
+    # logger.info('Cam single mIOU is: %s\nCityScapes single mIOU is: %s\n', mIOU_cam, mIOU_city)
+
+    net.aux_mode = org_aux
+    return heads, mious
+
+@torch.no_grad()
+def eval_model_label_link(configer, net):
+    org_aux = net.aux_mode
+    net.aux_mode = 'eval'
+
+    is_dist = dist.is_initialized()
+
+    n_datasets = configer.get("n_datasets")
+
+    dls = get_data_loader(configer, aux_mode='eval', distributed=is_dist)
+
+    net.eval()
+
+    heads, mious = [], []
+    logger = logging.getLogger()
+
+    single_scale = MscEvalV0_Contrast(configer, (1., ), False)
+    
+    for i in range(0, configer.get('n_datasets')):
+        mIOU = single_scale(net, dls[i], configer.get('dataset'+str(i+1),"n_cats"), i)
+        mious.append(mIOU)
+    
     heads.append('single_scale')
     # mious.append(mIOU_cam)
     # mious.append(mIOU_city)

@@ -688,3 +688,406 @@ class HRNet_W48_GNN(nn.Module):
         self.unify_prototype = nn.Parameter(unify_prototype,
                                 requires_grad=grad)
         
+
+
+class HRNet_W48_CLIP(nn.Module):
+    """
+    deep high-resolution representation learning for human pose estimation, CVPR2019
+    """
+
+    def __init__(self, configer):
+        super(HRNet_W48_CLIP, self).__init__()
+        self.configer = configer
+        self.aux_mode = self.configer.get('aux_mode')
+        self.n_bn = self.configer.get('n_bn')
+        self.num_unify_classes = self.configer.get('num_unify_classes')
+        self.n_datasets = self.configer.get('n_datasets')
+        self.backbone = HRNetBackbone_ori(configer)
+        self.proj_dim = self.configer.get('contrast', 'proj_dim')
+        self.full_res_stem = self.configer.get('hrnet', 'full_res_stem')
+        self.num_prototype = self.configer.get('contrast', 'num_prototype')
+        self.with_unify_lb = self.configer.get('loss', 'with_unify_label')
+        
+        if self.full_res_stem:
+            up_fac = 1
+        else:
+            up_fac = 4
+
+        # extra added layers
+        in_channels = 720  # 48 + 96 + 192 + 384
+
+        self.proj_head = ProjectionHeadOri(dim_in=in_channels, proj_dim=512, bn_type=self.configer.get('network', 'bn_type'))
+            
+        # self.init_weights()    
+       
+
+    def forward(self, x_, dataset=0):
+        x = self.backbone(x_)
+        _, _, h, w = x[0].size()
+
+        feat1 = x[0]
+        feat2 = F.interpolate(x[1], size=(h, w), mode="bilinear", align_corners=True)
+        feat3 = F.interpolate(x[2], size=(h, w), mode="bilinear", align_corners=True)
+        feat4 = F.interpolate(x[3], size=(h, w), mode="bilinear", align_corners=True)
+
+        feats = torch.cat([feat1, feat2, feat3, feat4], 1)
+        emb = self.proj_head(feats)
+        if self.aux_mode == 'train':
+            return {'seg':emb}
+        elif self.aux_mode == 'eval':
+            # logits = torch.einsum('bchw, nc -> bnhw', emb, self.text_feature_vecs[dataset])
+            logits = torch.einsum('bchw, nc -> bnhw', emb, self.text_feature_vecs[self.n_datasets])
+            
+            return logits
+        elif self.aux_mode == 'pred':
+            logits = torch.einsum('bchw, nc -> bnhw', emb, self.text_feature_vecs[self.n_datasets])
+            #logits = torch.einsum('bchw, nc -> bnhw', emb, self.text_feature_vecs[dataset])
+            logits = F.interpolate(logits, size=(x_.size(2), x_.size(3)), mode="bilinear", align_corners=True)
+            pred = logits.argmax(dim=1)
+            return pred
+        else:
+            raise NotImplementedError
+
+    def init_weights(self):
+        for name, module in self.named_modules():
+            if isinstance(module, (nn.Conv2d, nn.Linear)):
+                nn.init.kaiming_normal_(module.weight, mode='fan_out')
+                if not module.bias is None: nn.init.constant_(module.bias, 0)
+            # elif isinstance(module, nn.modules.batchnorm._BatchNorm):
+            #     if hasattr(module, 'last_bn') and module.last_bn:
+            #         nn.init.zeros_(module.weight)
+            #     else:
+            #         nn.init.ones_(module.weight)
+            #     nn.init.zeros_(module.bias)
+        for name, param in self.named_parameters():
+            if name.find('affine_weight') != -1:
+                if hasattr(param, 'last_bn') and param.last_bn:
+                    nn.init.zeros_(param)
+                else:
+                    nn.init.ones_(param)
+            elif name.find('affine_bias') != -1:
+                nn.init.zeros_(param)
+                        
+        self.get_encode_lb_vec()
+        self.load_pretrain()
+
+    def get_encode_lb_vec(self):
+        self.text_feature_vecs = []
+        with torch.no_grad():
+            clip_model, _ = clip.load("ViT-B/32", device="cuda")
+            for i in range(0, self.n_datasets):
+                lb_name = self.configer.get("dataset"+str(i+1), "label_names")
+                lb_name = ["a photo of " + name + "." for name in lb_name]
+                text = clip.tokenize(lb_name).cuda()
+                text_features = clip_model.encode_text(text).type(torch.float32)
+                self.text_feature_vecs.append(text_features)
+                
+            if self.with_unify_lb:
+                lb_name = self.configer.get("unify_classes_name")
+                lb_name = ["a photo of " + name + "." for name in lb_name]
+                text = clip.tokenize(lb_name).cuda()
+                text_features = clip_model.encode_text(text).type(torch.float32)
+                self.text_feature_vecs.append(text_features)
+                
+            
+        
+    def load_pretrain(self):
+        state = torch.load(backbone_url)
+        self.backbone.load_state_dict(state, strict=False)
+
+    def get_params(self):
+        def add_param_to_list(mod, wd_params, nowd_params):
+            for param in mod.parameters():
+                if param.requires_grad == False:
+                    continue
+                
+                if param.dim() == 1:
+                    nowd_params.append(param)
+                elif param.dim() == 4:
+                    wd_params.append(param)
+                else:
+                    nowd_params.append(param)
+                    # print(param.dim())
+                    # print(param)
+                    print(name)
+
+        wd_params, nowd_params, lr_mul_wd_params, lr_mul_nowd_params = [], [], [], []
+        for name, child in self.named_children():
+            if 'head' in name or 'aux' in name:
+                add_param_to_list(child, lr_mul_wd_params, lr_mul_nowd_params)
+            else:
+                add_param_to_list(child, wd_params, nowd_params)
+        return wd_params, nowd_params, lr_mul_wd_params, lr_mul_nowd_params
+
+class HRNet_W48_GNN(nn.Module):
+    """
+    deep high-resolution representation learning for human pose estimation, CVPR2019
+    """
+
+    def __init__(self, configer):
+        super(HRNet_W48_GNN, self).__init__()
+        self.configer = configer
+        self.aux_mode = self.configer.get('aux_mode')
+        self.n_bn = self.configer.get('n_bn')
+        # self.num_unify_classes = self.configer.get('num_unify_classes')
+        self.n_datasets = self.configer.get('n_datasets')
+        self.backbone = HRNetBackbone_ori(configer)
+        self.proj_dim = self.configer.get('contrast', 'proj_dim')
+        self.full_res_stem = self.configer.get('hrnet', 'full_res_stem')
+        self.num_prototype = self.configer.get('contrast', 'num_prototype')
+        # self.output_feat_dim = self.configer.get('GNN', 'output_feat_dim')
+        self.output_feat_dim = self.configer.get('GNN', 'output_feat_dim')
+        
+        if self.full_res_stem:
+            up_fac = 1
+        else:
+            up_fac = 4
+
+        # extra added layers
+        in_channels = 720  # 48 + 96 + 192 + 384
+
+        self.proj_head = ProjectionHeadOri(dim_in=in_channels, proj_dim=self.output_feat_dim, bn_type=self.configer.get('network', 'bn_type'))
+
+        self.total_cats = 0
+        
+        for i in range(0, self.n_datasets):
+            self.total_cats += self.configer.get('dataset'+str(i+1), 'n_cats')
+        print("self.total_cats:", self.total_cats)
+        
+        self.max_num_unify_class = int(self.configer.get('GNN', 'unify_ratio') * self.total_cats)
+        
+
+        self.unify_prototype = nn.Parameter(torch.zeros(self.max_num_unify_class, self.output_feat_dim),
+                                requires_grad=True)
+        trunc_normal_(self.unify_prototype, std=0.02)
+            
+        self.init_weights()    
+       
+
+    def forward(self, x_, dataset=0):
+        x = self.backbone(x_)
+        _, _, h, w = x[0].size()
+
+        feat1 = x[0]
+        feat2 = F.interpolate(x[1], size=(h, w), mode="bilinear", align_corners=True)
+        feat3 = F.interpolate(x[2], size=(h, w), mode="bilinear", align_corners=True)
+        feat4 = F.interpolate(x[3], size=(h, w), mode="bilinear", align_corners=True)
+
+        feats = torch.cat([feat1, feat2, feat3, feat4], 1)
+        emb = self.proj_head(feats)
+        if self.aux_mode == 'train':
+            if self.training:
+                logits = torch.einsum('bchw, nc -> bnhw', emb, self.unify_prototype)
+                return {'seg':logits}
+            else:
+                return {'seg':emb}
+        elif self.aux_mode == 'eval':
+            logits = torch.einsum('bchw, nc -> bnhw', emb, self.unify_prototype)
+            remap_logits = torch.einsum('bchw, nc -> bnhw', logits, self.bipartite_graphs[dataset])
+            # remap_logits = F.interpolate(remap_logits, size=(target.size(1), target.size(2)), mode="bilinear", align_corners=True)
+            return remap_logits
+        else:
+            logits = torch.einsum('bchw, nc -> bnhw', emb, self.unify_prototype)
+            # logits = torch.einsum('bchw, nc -> bnhw', logits, self.bipartite_graphs[dataset])
+            logits = F.interpolate(logits, size=(logits.size(2)*4, logits.size(3)*4), mode="bilinear", align_corners=True)
+            # remap_logits = torch.einsum('bchw, nc -> bnhw', logits, self.bipartite_graphs[dataset])
+            pred = logits.argmax(dim=1)
+            
+            return pred
+
+    def init_weights(self):
+        for name, module in self.named_modules():
+            if isinstance(module, (nn.Conv2d, nn.Linear)):
+                nn.init.kaiming_normal_(module.weight, mode='fan_out')
+                if not module.bias is None: nn.init.constant_(module.bias, 0)
+            # elif isinstance(module, nn.modules.batchnorm._BatchNorm):
+            #     if hasattr(module, 'last_bn') and module.last_bn:
+            #         nn.init.zeros_(module.weight)
+            #     else:
+            #         nn.init.ones_(module.weight)
+            #     nn.init.zeros_(module.bias)
+        for name, param in self.named_parameters():
+            if name.find('affine_weight') != -1:
+                if hasattr(param, 'last_bn') and param.last_bn:
+                    nn.init.zeros_(param)
+                else:
+                    nn.init.ones_(param)
+            elif name.find('affine_bias') != -1:
+                nn.init.zeros_(param)
+                        
+        # self.load_pretrain()
+
+        
+    def load_pretrain(self):
+        state = torch.load(backbone_url)
+        self.backbone.load_state_dict(state, strict=False)
+
+    def get_params(self):
+        def add_param_to_list(mod, wd_params, nowd_params):
+            for param in mod.parameters():
+                if param.requires_grad == False:
+                    continue
+                
+                if param.dim() == 1:
+                    nowd_params.append(param)
+                elif param.dim() == 4 or param.dim() == 2:
+                    wd_params.append(param)
+                else:
+                    nowd_params.append(param)
+                    print(param.dim())
+                    # print(param)
+                    print(name)
+
+        wd_params, nowd_params, lr_mul_wd_params, lr_mul_nowd_params = [], [], [], []
+        for name, child in self.named_children():
+            if 'head' in name or 'aux' in name:
+                add_param_to_list(child, lr_mul_wd_params, lr_mul_nowd_params)
+            else:
+                add_param_to_list(child, wd_params, nowd_params)
+        return wd_params, nowd_params, lr_mul_wd_params, lr_mul_nowd_params
+    
+    def set_bipartite_graphs(self, bi_graphs):
+        self.bipartite_graphs = bi_graphs
+        
+    def set_unify_prototype(self, unify_prototype, grad=False):
+        self.unify_prototype = nn.Parameter(unify_prototype,
+                                requires_grad=grad)
+        
+
+
+class HRNet_W48_GNN_MulHead(nn.Module):
+    """
+    deep high-resolution representation learning for human pose estimation, CVPR2019
+    """
+
+    def __init__(self, configer):
+        super(HRNet_W48_GNN_MulHead, self).__init__()
+        self.configer = configer
+        self.aux_mode = self.configer.get('aux_mode')
+        self.n_bn = self.configer.get('n_bn')
+        # self.num_unify_classes = self.configer.get('num_unify_classes')
+        self.n_datasets = self.configer.get('n_datasets')
+        self.backbone = HRNetBackbone_ori(configer)
+        self.proj_dim = self.configer.get('contrast', 'proj_dim')
+        self.full_res_stem = self.configer.get('hrnet', 'full_res_stem')
+        self.num_prototype = self.configer.get('contrast', 'num_prototype')
+        # self.output_feat_dim = self.configer.get('GNN', 'output_feat_dim')
+        self.output_feat_dim = self.configer.get('GNN', 'output_feat_dim')
+        
+        if self.full_res_stem:
+            up_fac = 1
+        else:
+            up_fac = 4
+
+        # extra added layers
+        in_channels = 720  # 48 + 96 + 192 + 384
+
+        self.proj_head = ProjectionHeadOri(dim_in=in_channels, proj_dim=self.output_feat_dim, bn_type=self.configer.get('network', 'bn_type'))
+
+        self.total_cats = 0
+        self.cats = []
+        for i in range(0, self.n_datasets):
+            self.cats.append(self.configer.get('dataset'+str(i+1), 'n_cats'))
+            self.total_cats += self.configer.get('dataset'+str(i+1), 'n_cats')
+        print("self.total_cats:", self.total_cats)
+        
+        self.max_num_unify_class = int(self.configer.get('GNN', 'unify_ratio') * self.total_cats)
+        
+
+        self.unify_prototype = nn.Parameter(torch.zeros(self.max_num_unify_class, self.output_feat_dim),
+                                requires_grad=True)
+        trunc_normal_(self.unify_prototype, std=0.02)
+            
+        self.init_weights()    
+       
+
+    def forward(self, x_, dataset=0):
+        x = self.backbone(x_)
+        _, _, h, w = x[0].size()
+
+        feat1 = x[0]
+        feat2 = F.interpolate(x[1], size=(h, w), mode="bilinear", align_corners=True)
+        feat3 = F.interpolate(x[2], size=(h, w), mode="bilinear", align_corners=True)
+        feat4 = F.interpolate(x[3], size=(h, w), mode="bilinear", align_corners=True)
+
+        feats = torch.cat([feat1, feat2, feat3, feat4], 1)
+        emb = self.proj_head(feats)
+        if self.aux_mode == 'train':
+            if self.training:
+                logits = torch.einsum('bchw, nc -> bnhw', emb, self.unify_prototype)
+                return {'seg':logits}
+            else:
+                return {'seg':emb}
+        elif self.aux_mode == 'eval':
+            logits = torch.einsum('bchw, nc -> bnhw', emb, self.unify_prototype)
+            # remap_logits = F.interpolate(remap_logits, size=(target.size(1), target.size(2)), mode="bilinear", align_corners=True)
+            this_index = sum(self.cats[:dataset])
+            return logits[this_index:this_index+self.cats[dataset]]
+        else:
+            logits = torch.einsum('bchw, nc -> bnhw', emb, self.unify_prototype)
+            # logits = torch.einsum('bchw, nc -> bnhw', logits, self.bipartite_graphs[dataset])
+            logits = F.interpolate(logits, size=(logits.size(2)*4, logits.size(3)*4), mode="bilinear", align_corners=True)
+            # remap_logits = torch.einsum('bchw, nc -> bnhw', logits, self.bipartite_graphs[dataset])
+            pred = logits.argmax(dim=1)
+            
+            return pred
+
+    def init_weights(self):
+        for name, module in self.named_modules():
+            if isinstance(module, (nn.Conv2d, nn.Linear)):
+                nn.init.kaiming_normal_(module.weight, mode='fan_out')
+                if not module.bias is None: nn.init.constant_(module.bias, 0)
+            # elif isinstance(module, nn.modules.batchnorm._BatchNorm):
+            #     if hasattr(module, 'last_bn') and module.last_bn:
+            #         nn.init.zeros_(module.weight)
+            #     else:
+            #         nn.init.ones_(module.weight)
+            #     nn.init.zeros_(module.bias)
+        for name, param in self.named_parameters():
+            if name.find('affine_weight') != -1:
+                if hasattr(param, 'last_bn') and param.last_bn:
+                    nn.init.zeros_(param)
+                else:
+                    nn.init.ones_(param)
+            elif name.find('affine_bias') != -1:
+                nn.init.zeros_(param)
+                        
+        # self.load_pretrain()
+
+        
+    def load_pretrain(self):
+        state = torch.load(backbone_url)
+        self.backbone.load_state_dict(state, strict=False)
+
+    def get_params(self):
+        def add_param_to_list(mod, wd_params, nowd_params):
+            for param in mod.parameters():
+                if param.requires_grad == False:
+                    continue
+                
+                if param.dim() == 1:
+                    nowd_params.append(param)
+                elif param.dim() == 4 or param.dim() == 2:
+                    wd_params.append(param)
+                else:
+                    nowd_params.append(param)
+                    print(param.dim())
+                    # print(param)
+                    print(name)
+
+        wd_params, nowd_params, lr_mul_wd_params, lr_mul_nowd_params = [], [], [], []
+        for name, child in self.named_children():
+            if 'head' in name or 'aux' in name:
+                add_param_to_list(child, lr_mul_wd_params, lr_mul_nowd_params)
+            else:
+                add_param_to_list(child, wd_params, nowd_params)
+        return wd_params, nowd_params, lr_mul_wd_params, lr_mul_nowd_params
+    
+    def set_bipartite_graphs(self, bi_graphs):
+        self.bipartite_graphs = bi_graphs
+        
+    def set_unify_prototype(self, unify_prototype, grad=False):
+        self.unify_prototype = nn.Parameter(unify_prototype,
+                                requires_grad=grad)
+        
+

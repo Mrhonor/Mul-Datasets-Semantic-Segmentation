@@ -30,7 +30,7 @@
     "dataset1": {
       "n_cats": 19,
       "data_reader": "CityScapes",
-      "im_root": "/mnt/disk1/dataset",
+      "im_root": "/home1/marong/datasets",
       "train_im_anns":"datasets/Cityscapes/train.txt",
       "val_im_anns":"datasets/Cityscapes/val.txt", 
       "ims_per_gpu": 1,
@@ -40,7 +40,7 @@
     "dataset2": {
       "n_cats": 12, 
       "data_reader": "CamVid",
-      "im_root": "/mnt/disk1/dataset/CamVid",
+      "im_root": "/home1/marong/datasets/CamVid",
       "train_im_anns":"datasets/CamVid/train.txt",
       "val_im_anns":"datasets/CamVid/test.txt", 
       "ims_per_gpu": 1,
@@ -50,7 +50,7 @@
     "dataset3": {
       "n_cats": 37, 
       "data_reader": "Sunrgbd",
-      "im_root": "/mnt/disk1/dataset/",
+      "im_root": "/home1/marong/datasets/",
       "train_im_anns":"datasets/sunrgbd/train.txt",
       "val_im_anns":"datasets/sunrgbd/test.txt", 
       "ims_per_gpu": 1,
@@ -60,7 +60,7 @@
     "dataset4": {
       "n_cats": 150, 
       "data_reader": "ade2016",
-      "im_root": "/mnt/disk1/dataset/ADEChallengeData2016",
+      "im_root": "/home1/marong/datasets/ADEChallengeData2016",
       "train_im_anns":"datasets/ADE/training.txt",
       "val_im_anns":"datasets/ADE/validation.txt", 
       "ims_per_gpu": 1,
@@ -70,7 +70,7 @@
     "dataset5": {
       "n_cats": 19, 
       "data_reader": "Bdd100k",
-      "im_root": "/mnt/disk1/dataset/bdd100k",
+      "im_root": "/home1/marong/datasets/bdd100k",
       "train_im_anns":"datasets/bdd100k/train.txt",
       "val_im_anns":"datasets/bdd100k/val.txt", 
       "ims_per_gpu": 1,
@@ -80,7 +80,7 @@
     "dataset6": {
       "n_cats": 133, 
       "data_reader": "Coco_data",
-      "im_root": "/mnt/disk1/dataset/coco",
+      "im_root": "/home1/marong/datasets/coco",
       "train_im_anns":"datasets/coco/train.txt",
       "val_im_anns":"datasets/coco/val.txt", 
       "ims_per_gpu": 1,
@@ -90,7 +90,7 @@
     "dataset7": {
       "n_cats": 37, 
       "data_reader": "Idd",
-      "im_root": "/mnt/disk1/dataset/idd",
+      "im_root": "/home1/marong/datasets/idd",
       "train_im_anns":"datasets/IDD/train.txt",
       "val_im_anns":"datasets/IDD/val.txt", 
       "ims_per_gpu": 1,
@@ -132,7 +132,7 @@
       "graph_finetune": false,
       "graph_finetune_from": "res/celoss/pretrain_graph_model.pth",
       "seg_iters": 20000,
-      "gnn_iters": 20000,
+      "gnn_iters": 30000,
       "joint_train": true
     },
     "val": {

@@ -843,16 +843,16 @@ class CrossDatasetsCELoss_AdvGNN(nn.Module):
             # print("logits shape:", )
             if not (dataset_ids == i).any():
                 continue
-            
-            if is_adv and self.with_softmax_and_max and self.with_max_adj and not init_gnn_stage:
-                max_remap_logits = torch.einsum('bchw, nc -> bnhw', logits[dataset_ids==i], bi_graphs[2*i])
-                max_remap_logits = F.interpolate(max_remap_logits, size=(target.size(1), target.size(2)), mode="bilinear", align_corners=True) 
+            if not init_gnn_stage:
+                if is_adv and self.with_softmax_and_max and self.with_max_adj:
+                    max_remap_logits = torch.einsum('bchw, nc -> bnhw', logits[dataset_ids==i], bi_graphs[2*i])
+                    max_remap_logits = F.interpolate(max_remap_logits, size=(target.size(1), target.size(2)), mode="bilinear", align_corners=True) 
 
-                softmax_remap_logits = torch.einsum('bchw, nc -> bnhw', logits[dataset_ids==i], bi_graphs[2*i + 1])
-                softmax_remap_logits = F.interpolate(softmax_remap_logits, size=(target.size(1), target.size(2)), mode="bilinear", align_corners=True) 
-            else:
-                remap_logits = torch.einsum('bchw, nc -> bnhw', logits[dataset_ids==i], bi_graphs[i])
-                remap_logits = F.interpolate(remap_logits, size=(target.size(1), target.size(2)), mode="bilinear", align_corners=True)
+                    softmax_remap_logits = torch.einsum('bchw, nc -> bnhw', logits[dataset_ids==i], bi_graphs[2*i + 1])
+                    softmax_remap_logits = F.interpolate(softmax_remap_logits, size=(target.size(1), target.size(2)), mode="bilinear", align_corners=True) 
+                else:
+                    remap_logits = torch.einsum('bchw, nc -> bnhw', logits[dataset_ids==i], bi_graphs[i])
+                    remap_logits = F.interpolate(remap_logits, size=(target.size(1), target.size(2)), mode="bilinear", align_corners=True)
             # print("remap_logits_max : {}, remap_logits_min : {}".format(torch.max(remap_logits), torch.min(remap_logits)))
             # a = target[dataset_ids==i].clone()
             # a[a == 255] = 0
@@ -877,11 +877,17 @@ class CrossDatasetsCELoss_AdvGNN(nn.Module):
 
             if is_adv and self.with_spa:
                 spa_loss = self.spa_loss_weight * torch.pow(torch.norm(bi_graphs[i], p='fro'), 2)
-                loss = loss + spa_loss
+                if loss is None:
+                    loss = spa_loss
+                else:
+                    loss = loss + spa_loss
             
             if is_adv and self.with_max_enc:
                 max_enc_loss = self.max_enc_weight * self.MSE_loss(torch.max(bi_graphs[i], dim=1)[0], torch.ones(bi_graphs[i].size(0)).cuda())
-                loss = loss + max_enc_loss
+                if loss is None:
+                    loss = max_enc_loss
+                else:
+                    loss = loss + max_enc_loss
 
             if torch.isnan(loss):
                 print("NaN value found in datasets :", i)

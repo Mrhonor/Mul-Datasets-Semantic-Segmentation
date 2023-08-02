@@ -389,10 +389,8 @@ def train():
 
     # 两个数据集分别处理
     # 使用迭代器读取数据
-    print("!")
     
     dl_iters = [iter(dl) for dl in dls]
-    print("!!")
     
     ## train loop
     # for it, (im, lb) in enumerate(dl):
@@ -689,7 +687,10 @@ def train():
         ## print training log message
         if (i + 1) % 100 == 0:
             writer.add_scalars("loss",{"seg":loss_pre_meter.getWoErase(),"contrast":loss_contrast_meter.getWoErase(), "domain":loss_domain_meter.getWoErase()},configer.get("iter")+1)
-            lr = lr_schdr.get_lr()
+            if train_seg_or_gnn == SEG:
+                lr = lr_schdr.get_lr()
+            else:
+                lr = gnn_lr_schdr.get_lr()
             lr = sum(lr) / len(lr)
             print_log_msg(
                 i, 0, 0, configer.get('lr', 'max_iter')+starti, lr, time_meter, loss_meter,
