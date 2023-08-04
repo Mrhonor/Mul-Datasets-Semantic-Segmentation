@@ -1,0 +1,151 @@
+{
+    "model_name": "hrnet_w48_clip",
+    "aux_mode": "eval",
+    "n_datasets": 3,
+    "hrnet": {
+      "cfg": "hrnet48",
+      "keep_imagenet_head": false,
+      "drop_stage4": false,
+      "full_res_stem": false
+    },
+    "dataset11": {
+      "n_cats": 19,
+      "data_reader": "CityScapes",
+      "im_root": "/home1/marong/datasets",
+      "train_im_anns":"datasets/Cityscapes/train.txt",
+      "val_im_anns":"datasets/Cityscapes/val.txt", 
+      "ims_per_gpu": 1,
+      "eval_ims_per_gpu": 1,
+      "label_names": ["road", "sidewalk", "building", "wall", "fence", "pole", "traffic light", "traffic sign", "vegetation", "terrain", "sky", "person", "rider", "car", "truck", "bus", "train", "motorcycle", "bicycle"]
+    },
+    "dataset21": {
+      "n_cats": 12, 
+      "data_reader": "CamVid",
+      "im_root": "/home1/marong/datasets/CamVid",
+      "train_im_anns":"datasets/CamVid/train.txt",
+      "val_im_anns":"datasets/CamVid/test.txt", 
+      "ims_per_gpu": 1,
+      "eval_ims_per_gpu": 1,
+      "label_names": ["Sky", "Building", "Column_Pole", "Road", "Sidewalk", "Tree", "SignSymbol", "Fence", "Car", "Pedestrian", "Bicyclist", "Wall"]
+    },
+    "dataset31": {
+      "n_cats": 37, 
+      "data_reader": "Sunrgbd",
+      "im_root": "/home1/marong/datasets/",
+      "train_im_anns":"datasets/sunrgbd/train.txt",
+      "val_im_anns":"datasets/sunrgbd/test.txt", 
+      "ims_per_gpu": 1,
+      "eval_ims_per_gpu": 1,
+      "label_names": [ "bag", "wall", "floor", "cabinet", "bed", "chair", "sofa", "table", "door", "window", "bookshelf", "picture", "counter", "blinds", "desk", "shelves", "curtain", "dresser", "pillow", "mirror", "floor mat", "clothes", "ceiling", "books", "refridgerator", "television", "paper", "towel", "shower curtain", "box", "whiteboard", "person", "night stand", "toilet", "sink", "lamp", "bathtub"]
+    },
+    "dataset1": {
+      "n_cats": 150, 
+      "data_reader": "ade2016",
+      "im_root": "/home1/marong/datasets/ADEChallengeData2016",
+      "train_im_anns":"datasets/ADE/training.txt",
+      "val_im_anns":"datasets/ADE/validation.txt", 
+      "ims_per_gpu": 1,
+      "eval_ims_per_gpu": 1,
+      "label_names": ["flag", "wall", "building, edifice", "sky", "floor, flooring", "tree", "ceiling", "road, route", "bed ", "windowpane, window ", "grass", "cabinet", "sidewalk, pavement", "person, individual, someone, somebody, mortal, soul", "earth, ground", "door, double door", "table", "mountain, mount", "plant, flora, plant life", "curtain, drape, drapery, mantle, pall", "chair", "car, auto, automobile, machine, motorcar", "water", "painting, picture", "sofa, couch, lounge", "shelf", "house", "sea", "mirror", "rug, carpet, carpeting", "field", "armchair", "seat", "fence, fencing", "desk", "rock, stone", "wardrobe, closet, press", "lamp", "bathtub, bathing tub, bath, tub", "railing, rail", "cushion", "base, pedestal, stand", "box", "column, pillar", "signboard, sign", "chest of drawers, chest, bureau, dresser", "counter", "sand", "sink", "skyscraper", "fireplace, hearth, open fireplace", "refrigerator, icebox", "grandstand, covered stand", "path", "stairs, steps", "runway", "case, display case, showcase, vitrine", "pool table, billiard table, snooker table", "pillow", "screen door, screen", "stairway, staircase", "river", "bridge, span", "bookcase", "blind, screen", "coffee table, cocktail table", "toilet, can, commode, crapper, pot, potty, stool, throne", "flower", "book", "hill", "bench", "countertop", "stove, kitchen stove, range, kitchen range, cooking stove", "palm, palm tree", "kitchen island", "computer, computing machine, computing device, data processor, electronic computer, information processing system", "swivel chair", "boat", "bar", "arcade machine", "hovel, hut, hutch, shack, shanty", "bus, autobus, coach, charabanc, double-decker, jitney, motorbus, motorcoach, omnibus, passenger vehicle", "towel", "light, light source", "truck, motortruck", "tower", "chandelier, pendant, pendent", "awning, sunshade, sunblind", "streetlight, street lamp", "booth, cubicle, stall, kiosk", "television receiver, television, television set, tv, tv set, idiot box, boob tube, telly, goggle box", "airplane, aeroplane, plane", "dirt track", "apparel, wearing apparel, dress, clothes", "pole", "land, ground, soil", "bannister, banister, balustrade, balusters, handrail", "escalator, moving staircase, moving stairway", "ottoman, pouf, pouffe, puff, hassock", "bottle", "buffet, counter, sideboard", "poster, posting, placard, notice, bill, card", "stage", "van", "ship", "fountain", "conveyer belt, conveyor belt, conveyer, conveyor, transporter", "canopy", "washer, automatic washer, washing machine", "plaything, toy", "swimming pool, swimming bath, natatorium", "stool", "barrel, cask", "basket, handbasket", "waterfall, falls", "tent, collapsible shelter", "bag", "minibike, motorbike", "cradle", "oven", "ball", "food, solid food", "step, stair", "tank, storage tank", "trade name, brand name, brand, marque", "microwave, microwave oven", "pot, flowerpot", "animal, animate being, beast, brute, creature, fauna", "bicycle, bike, wheel, cycle ", "lake", "dishwasher, dish washer, dishwashing machine", "screen, silver screen, projection screen", "blanket, cover", "sculpture", "hood, exhaust hood", "sconce", "vase", "traffic light, traffic signal, stoplight", "tray", "ashcan, trash can, garbage can, wastebin, ash bin, ash-bin, ashbin, dustbin, trash barrel, trash bin", "fan", "pier, wharf, wharfage, dock", "crt screen", "plate", "monitor, monitoring device", "bulletin board, notice board", "shower", "radiator", "glass, drinking glass", "clock"]
+    },
+    "dataset2": {
+      "n_cats": 19, 
+      "data_reader": "Bdd100k",
+      "im_root": "/home1/marong/datasets/bdd100k",
+      "train_im_anns":"datasets/bdd100k/train.txt",
+      "val_im_anns":"datasets/bdd100k/val.txt", 
+      "ims_per_gpu": 1,
+      "eval_ims_per_gpu": 1,
+      "label_names": ["road", "sidewalk", "building", "wall", "fence", "pole", "traffic light", "traffic sign", "vegetation", "terrain", "sky", "person", "rider", "car", "truck", "bus", "train", "motorcycle", "bicycle"]
+    },
+    "dataset33": {
+      "n_cats": 133, 
+      "data_reader": "Coco_data",
+      "im_root": "/home1/marong/datasets/coco",
+      "train_im_anns":"datasets/coco/train.txt",
+      "val_im_anns":"datasets/coco/val.txt", 
+      "ims_per_gpu": 1,
+      "eval_ims_per_gpu": 1,
+      "label_names": ["rug-merged", "person", "bicycle", "car", "motorcycle", "airplane", "bus", "train", "truck", "boat", "traffic light", "fire hydrant", "stop sign", "parking meter", "bench", "bird", "cat", "dog", "horse", "sheep", "cow", "elephant", "bear", "zebra", "giraffe", "backpack", "umbrella", "handbag", "tie", "suitcase", "frisbee", "skis", "snowboard", "sports ball", "kite", "baseball bat", "baseball glove", "skateboard", "surfboard", "tennis racket", "bottle", "wine glass", "cup", "fork", "knife", "spoon", "bowl", "banana", "apple", "sandwich", "orange", "broccoli", "carrot", "hot dog", "pizza", "donut", "cake", "chair", "couch", "potted plant", "bed", "dining table", "toilet", "tv", "laptop", "mouse", "remote", "keyboard", "cell phone", "microwave", "oven", "toaster", "sink", "refrigerator", "book", "clock", "vase", "scissors", "teddy bear", "hair drier", "toothbrush", "banner", "blanket", "bridge", "cardboard", "counter", "curtain", "door-stuff", "floor-wood", "flower", "fruit", "gravel", "house", "light", "mirror-stuff", "net", "pillow", "platform", "playingfield", "railroad", "river", "road", "roof", "sand", "sea", "shelf", "snow", "stairs", "tent", "towel", "wall-brick", "wall-stone", "wall-tile", "wall-wood", "water-other", "window-blind", "window-other", "tree-merged", "fence-merged", "ceiling-merged", "sky-other-merged", "cabinet-merged", "table-merged", "floor-other-merged", "pavement-merged", "mountain-merged", "grass-merged", "dirt-merged", "paper-merged", "food-other-merged", "building-other-merged", "rock-merged", "wall-other-merged"]
+    },
+    "dataset7": {
+      "n_cats": 37, 
+      "data_reader": "Idd",
+      "im_root": "/home1/marong/datasets/idd",
+      "train_im_anns":"datasets/IDD/train.txt",
+      "val_im_anns":"datasets/IDD/val.txt", 
+      "ims_per_gpu": 1,
+      "eval_ims_per_gpu": 1,
+      "label_names": ["person", "truck", "fence", "billboard", "bus", "out of roi", "curb", "obs-str-bar-fallback", "tunnel", "non-drivable fallback", "bridge", "road", "wall", "traffic sign", "trailer", "animal", "building", "sky", "drivable fallback", "guard rail", "bicycle", "traffic light", "polegroup", "motorcycle", "car", "parking", "fallback background", "rectification border", "train", "rider", "rail track", "sidewalk", "caravan", "pole", "vegetation", "autorickshaw", "vehicle fallback"]
+    },
+    "n_bn": 1,
+    "class_remaper": "ClassRemapOneHotLabel",
+    "loss":{
+      "type": "MultiLabelCrossEntropyLoss",
+      "reweight": false,
+      "with_aux": false,
+      "with_unify_label": true,
+      "aux_weight": 1,
+      "aux_num": 4,
+      "ignore_index": 255,
+      "domain_loss_weight": 1,
+      "m": 0,
+      "gamma": 12
+    },
+    "use_ema": false,
+    "lr": {
+      "lr_start": 1e-2,
+      "weight_decay": 5e-5,
+      "warmup_iters": 0,
+      "fix_param_iters": 0,
+      "max_iter": 100000
+    },
+    "train": {
+      "scales": [0.5, 1.0, 2.0],
+      "cropsize": [512, 1024],
+      "finetune": false,
+      "finetune_from": "res/celoss/model_final.pth"
+    },
+    "val": {
+      "scales": [0.5, 0.75, 1.0, 1.25, 1.5, 1.75],
+      "cropsize": [512, 1024]
+    },
+    "use_fp16": false,
+    "use_sync_bn": true,
+    "contrast": {
+      "use_contrast": true,
+      "proj_dim": 512,
+      "temperature": 0.07,
+      "base_temperature": 0.07,
+      "max_samples": 4096,
+      "max_views": 24,
+      "loss_weight": 1,
+      "num_prototype": 1,
+      "coefficient": 0.999,
+      "upsample": false,
+      "downsample": false,
+      "update_confidence_thresh": 0.1,
+      "update_sim_thresh": 0.4,
+      "with_ppd": false,
+      "ppd_loss_weight": 1,
+      "with_hard_lb_contrast": false,
+      "hard_lb_contrast_loss_weight": 1,
+      "with_consistence": false,
+      "consistent_loss_weight": 10,
+      "with_mulbn": false,
+      "memory_bank": false,
+      "memory_bank_size": 5000
+    },
+    "res_save_pth": "res/celoss/",
+    "network": {
+      "stride": 4,
+      "with_domain_adversarial": false,
+      "bn_type": "torchbn"
+    },
+    "dataset_aux_head": {
+      "use_dataset_aux_head": false,
+      "aux_iter": 15000
+    },
+    "optim": "AdamW",
+    "iter": 0
+}

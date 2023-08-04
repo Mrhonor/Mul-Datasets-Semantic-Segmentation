@@ -435,7 +435,7 @@ class HRNet_W48_CLIP(nn.Module):
         self.configer = configer
         self.aux_mode = self.configer.get('aux_mode')
         self.n_bn = self.configer.get('n_bn')
-        self.num_unify_classes = self.configer.get('num_unify_classes')
+        # self.num_unify_classes = self.configer.get('num_unify_classes')
         self.n_datasets = self.configer.get('n_datasets')
         self.backbone = HRNetBackbone_ori(configer)
         self.proj_dim = self.configer.get('contrast', 'proj_dim')
@@ -451,7 +451,7 @@ class HRNet_W48_CLIP(nn.Module):
         # extra added layers
         in_channels = 720  # 48 + 96 + 192 + 384
 
-        self.proj_head = ProjectionHeadOri(dim_in=in_channels, proj_dim=512, bn_type=self.configer.get('network', 'bn_type'))
+        self.proj_head = ProjectionHeadOri(dim_in=in_channels, proj_dim=256, bn_type=self.configer.get('network', 'bn_type'))
             
         # self.init_weights()    
        

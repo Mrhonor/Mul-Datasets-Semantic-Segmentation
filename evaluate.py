@@ -229,17 +229,6 @@ class MscEvalV0_AutoLink(object):
         # miou = np.nanmean(ious.detach().cpu().numpy())
         # return miou.item()
 
-def Find_label_relation(configer, datasets_remaps):
-    n_datasets = configer.get('n_datasets')
-    for i in range(0, n_datasets):
-        this_datasets_sets = datasets_remaps[i]
-        for j in range(0, n_datasets):
-            if i == j:
-                continue
-    
-    
-    pass
-
 class MscEvalCrop(object):
 
     def __init__(
@@ -619,7 +608,7 @@ def evaluate(cfg, weight_pth):
 
     ## evaluator
     heads, mious = eval_model(cfg, net.module)
-    logger.info(tabulate([mious, ], headers=heads, tablefmt='orgtbl'))
+    # logger.info(tabulate([mious, ], headers=heads, tablefmt='orgtbl'))
 
 def evaluate_cdcl(cfg_a2d2, cfg_city, cfg_cam, weight_pth):
     # 修改后用于多数据集
@@ -869,7 +858,7 @@ def parse_args():
     parse.add_argument('--local_rank', dest='local_rank', type=int, default=-1,)
     parse.add_argument('--port', dest='port', type=int, default=16745,)
     parse.add_argument('--finetune_from', type=str, default=None,)
-    parse.add_argument('--config', dest='config', type=str, default='configs/clip_city_cam_a2d2.json',)
+    parse.add_argument('--config', dest='config', type=str, default='configs/test/test_ltbgnn.json',)
     return parse.parse_args()
 
 
@@ -904,6 +893,50 @@ def main():
     logger.info(tabulate([mious, ], headers=heads, tablefmt='orgtbl'))
     
     
+def Find_label_relation(configer, datasets_remaps):
+    n_datasets = configer.get('n_datasets')
+    out_label_relation = []
+    total_cats = 0
+    dataset_cats = []
+    for i in range(0, n_datasets):
+        dataset_cats.append(configer.get('dataset'+str(i+1), 'n_cats'))
+        total_cats += configer.get('dataset'+str(i+1), 'n_cats')
+        
+    bipart_graph =torch.zeros((total_cats, total_cats), dtype=torch.float) 
+    for i in range(0, n_datasets):
+        this_datasets_sets = datasets_remaps[i]
+        for j in range(i+1, n_datasets):
+
+            this_datasets_map = datasets_remaps[i][j]
+            other_datasets_map = datasets_remaps[j][i]
+            this_size = len(this_datasets_map)+len(other_datasets_map)
+            this_label_relation = torch.zeros((this_size, this_size), dtype=torch.bool)
+            
+            for index, val in enumerate(this_datasets_map):
+                this_label_relation[index][len(this_datasets_map)+val] = True
+            
+            for index, val in enumerate(other_datasets_map):
+                this_label_relation[len(this_datasets_map)+index][val] = True
+            out_label_relation.append(this_label_relation)
+        
+    return out_label_relation
+    conflict = []
+    
+
 
 if __name__ == "__main__":
-    main()
+    # main()
+    args = parse_args()
+    configer = Configer(configs=args.config)
+    datasets_remaps = []
+    set0 = []
+    set0.append([])
+    set0.append([2,0])
+    datasets_remaps.append(set0)
+
+    set1 = []
+    set1.append([0,1,0])
+    set1.append([])
+    datasets_remaps.append(set1)
+    print(Find_label_relation(configer, datasets_remaps))
+
