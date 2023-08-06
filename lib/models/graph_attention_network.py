@@ -913,7 +913,7 @@ class Learnable_Topology_BGNN(nn.Module):
             
         
         
-    def forward(self, x):
+    def forward(self, x, pretraining=False):
         x = torch.cat([x, self.unify_node_features], dim=0)
         
         feat1 = self.linear_before(x)
@@ -940,7 +940,9 @@ class Learnable_Topology_BGNN(nn.Module):
         adv_out = {}
         adv_out['ADV1'] = [out_real_1, out_fake_1, g_out_fake_1]
         adv_out['ADV2'] = [out_real_2, out_fake_2, g_out_fake_2]
-        if self.calc_bipartite:
+        if pretraining:
+            return feat_out[self.total_cats:], self.sep_bipartite_graphs(non_norm_adj_mI), adv_out, non_norm_adj_mI
+        elif self.calc_bipartite:
             arch_x = self.relu(feat3_drop + feat_out)
             arch_x = self.linear2(arch_x)
             

@@ -24,7 +24,7 @@ from lib.loss.ohem_ce_loss import OhemCELoss
 from lib.lr_scheduler import WarmupPolyLrScheduler
 from lib.meters import TimeMeter, AvgMeter
 from lib.logger import setup_logger, print_log_msg
-from lib.loss.loss_cross_datasets import CrossDatasetsLoss, CrossDatasetsCELoss, CrossDatasetsCELoss_KMeans, CrossDatasetsCELoss_CLIP, CrossDatasetsCELoss_GNN, CrossDatasetsCELoss_AdvGNN
+from lib.loss.loss_cross_datasets import CrossDatasetsLoss, CrossDatasetsCELoss, CrossDatasetsCELoss_KMeans, CrossDatasetsCELoss_CLIP, CrossDatasetsCELoss_GNN, CrossDatasetsCELoss_AdvGNN, CrossDatasetsCELoss_AdvGNN_Only
 from lib.class_remap import ClassRemap
 
 from tools.configer import Configer
@@ -32,7 +32,8 @@ from evaluate import eval_model_contrast, eval_model_aux, eval_model, eval_model
 
 from tensorboardX import SummaryWriter
 
-from lib.module.gen_graph_node_feature import gen_graph_node_feature
+from lib.module.gen_graph_node_feature import gen_graph_node_feature, gen_graph_node_feature_single
+from lib.module.get_pretrain_bipart_graph import get_pretrain_bipart_graph
 
 
 
@@ -225,7 +226,8 @@ def set_model_dist(net):
 def set_contrast_loss(configer):
     loss_factory = {
         'GNN': CrossDatasetsCELoss_GNN,
-        'Adv_GNN': CrossDatasetsCELoss_AdvGNN
+        'Adv_GNN': CrossDatasetsCELoss_AdvGNN,
+        'Adv_GNN_Only': CrossDatasetsCELoss_AdvGNN_Only
     }
     # return CrossDatasetsCELoss_KMeans(configer)
     return loss_factory[configer.get('loss', 'type')](configer)
@@ -350,7 +352,7 @@ def train():
     ## dataset
 
     # dl = get_single_data_loader(configer, aux_mode='train', distributed=is_dist)
-    # dls = get_data_loader(configer, aux_mode='train', distributed=is_dist)
+    dls = get_data_loader(configer, aux_mode='train', distributed=is_dist)
     # dl_city, dl_cam = get_data_loader(configer, aux_mode='train', distributed=is_dist)
     
     ## model
@@ -390,7 +392,7 @@ def train():
     # 两个数据集分别处理
     # 使用迭代器读取数据
     
-    # dl_iters = [iter(dl) for dl in dls]
+    dl_iters = [iter(dl) for dl in dls]
     
     ## train loop
     # for it, (im, lb) in enumerate(dl):
@@ -430,6 +432,7 @@ def train():
     fix_graph = False
     train_seg_or_gnn = SEG
     GNN_INIT = configer.get('train', 'graph_finetune')
+    pretrain_bipart_graph = get_pretrain_bipart_graph()
 
     for i in range(starti, configer.get('lr','max_iter') + starti):
         configer.plus_one('iter')
@@ -472,7 +475,7 @@ def train():
 
         # im = im.cuda()
         # lb = lb.cuda()
-        graph_node_features = ori_graph_node_features.cuda()
+        graph_node_features = gen_graph_node_feature_single(configer, dl_iters, dls).cuda()
 
 
         # net.eval()
@@ -523,8 +526,9 @@ def train():
                 #     with torch.no_grad():
                 #         seg_out = net(im)
 
-                unify_prototype, bi_graphs, adv_out = graph_net(graph_node_features)
+                unify_prototype, bi_graphs, adv_out, adj_matrix = graph_net(graph_node_features, True)
                 seg_out['unify_prototype'] = unify_prototype
+                seg_out['adj'] = adj_matrix
             # else:
             #     is_adv = False
             #     graph_net.eval()
@@ -576,6 +580,8 @@ def train():
             seg_out['bi_graphs'] = bi_graphs
             seg_out['adv_out'] = adv_out
                 
+            lb = pretrain_bipart_graph
+            dataset_lbs = None
             backward_loss, adv_loss = contrast_losses(seg_out, lb, dataset_lbs, is_adv, init_gnn_stage)
             # print(backward_loss)
             kl_loss = None
@@ -697,7 +703,7 @@ def train():
                 # eval_model = eval_model_contrast
                 eval_model_func = eval_model_contrast
 
-            optim.zero_grad()
+            # optim.zero_grad()
             gnn_optim.zero_grad()
             gnn_optimD.zero_grad()
             if is_distributed():
@@ -717,11 +723,8 @@ def train():
             net.train()
         
                 
-        if train_seg_or_gnn == SEG:
-            lr_schdr.step()
-        else:
-            gnn_lr_schdr.step()
-            gnn_lr_schdrD.step()
+        gnn_lr_schdr.step()
+        gnn_lr_schdrD.step()
         
 
     ## dump the final model and evaluate the result

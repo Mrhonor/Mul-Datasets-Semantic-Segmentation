@@ -909,6 +909,105 @@ class CrossDatasetsCELoss_AdvGNN(nn.Module):
 
         return loss, adv_loss
     
+class CrossDatasetsCELoss_AdvGNN_Only(nn.Module):
+    def __init__(self, configer=None):
+        super(CrossDatasetsCELoss_AdvGNN_Only, self).__init__()
+        self.configer = configer
+        self.n_datasets = self.configer.get('n_datasets')
+        self.num_prototype = self.configer.get('contrast', 'num_prototype')
+        self.temperature = self.configer.get('contrast', 'temperature')
+        self.with_mulbn = self.configer.get('contrast', 'with_mulbn')
+        self.reweight = self.configer.get('loss', 'reweight')
+        self.ignore_index = self.configer.get('loss', 'ignore_index')
+        self.with_unify_label = self.configer.get('loss', 'with_unify_label')
+        self.with_spa = self.configer.get('loss', 'with_spa')
+        self.spa_loss_weight = self.configer.get('loss', 'spa_loss_weight')
+        self.with_max_enc = self.configer.get('loss', 'with_max_enc')
+        self.max_enc_weight = self.configer.get('loss', 'max_enc_weight')
+        self.with_softmax_and_max = self.configer.get('GNN', 'output_softmax_and_max_adj')
+        self.with_max_adj = self.configer.get('GNN', 'output_max_adj')
+        self.max_iter = self.configer.get('lr', 'max_iter')
+        # self.seg_gnn_alter_iters = self.configer.get('train', 'seg_gnn_alter_iters')
+        self.gnn_iters = self.configer.get('train', 'gnn_iters')
+        
+        self.n_cats = []
+        for i in range(1, self.n_datasets+1):
+            self.n_cats.append(self.configer.get('dataset'+str(i), 'n_cats'))
+
+        self.CELoss = nn.CrossEntropyLoss(ignore_index=255)
+        self.OhemCELoss = OhemCELoss(0.7, ignore_lb=255)
+    
+        self.advloss = nn.BCELoss()
+        self.adv_loss_weight = self.configer.get('loss', 'adv_loss_weight')
+        
+        if self.with_max_enc:
+            self.MSE_loss = torch.nn.MSELoss()
+
+    def forward(self, preds, target, dataset_ids, is_adv=True, init_gnn_stage=False):
+        if self.configer.get('iter') > 100000:
+            CELoss = self.OhemCELoss
+        else:
+            CELoss = self.CELoss
+
+        bi_graphs = preds['bi_graphs']
+        
+        if is_adv:
+            adv_out = preds['adv_out']
+            
+            label_real = torch.zeros(adv_out['ADV1'][0].shape[0], 1)
+            label_fake = torch.ones(adv_out['ADV1'][0].shape[0], 1)
+            
+            if adv_out['ADV1'][0].is_cuda:
+                label_real = label_real.cuda()
+                label_fake = label_fake.cuda()
+        
+        loss = None
+        adv_loss = None
+        # print("logits_max : {}, logits_min : {}".format(torch.max(logits), torch.min(logits)))
+        loss = 
+        
+        for i in range(0, self.n_datasets):
+
+            # print("logits shape:", )
+            if not (dataset_ids == i).any():
+                continue
+            # print("remap_logits_max : {}, remap_logits_min : {}".format(torch.max(remap_logits), torch.min(remap_logits)))
+            # a = target[dataset_ids==i].clone()
+            # a[a == 255] = 0
+            # print("i : {}, a_max : {}, a_min : {}".format(i, torch.max(a), torch.min(a)))
+
+                
+            # print(torch.sum(bi_graphs[i]))
+
+            if is_adv and self.with_spa:
+                spa_loss = self.spa_loss_weight * torch.pow(torch.norm(bi_graphs[i], p='fro'), 2)
+                if loss is None:
+                    loss = spa_loss
+                else:
+                    loss = loss + spa_loss
+            
+            if is_adv and self.with_max_enc:
+                max_enc_loss = self.max_enc_weight * self.MSE_loss(torch.max(bi_graphs[i], dim=1)[0], torch.ones(bi_graphs[i].size(0)).cuda())
+                if loss is None:
+                    loss = max_enc_loss
+                else:
+                    loss = loss + max_enc_loss
+
+            if torch.isnan(loss):
+                print("NaN value found in datasets :", i)
+              
+        
+        if is_adv:  
+            real_out = self.advloss(adv_out['ADV1'][0], label_real) + self.advloss(adv_out['ADV2'][0], label_real)
+            fake_out = self.advloss(adv_out['ADV1'][1], label_fake) + self.advloss(adv_out['ADV2'][1], label_fake)
+            adv_loss = real_out + fake_out
+
+            G_fake_out = self.advloss(adv_out['ADV1'][2], label_real) + self.advloss(adv_out['ADV2'][2], label_real)
+            loss = loss + self.adv_loss_weight * G_fake_out
+                   
+
+        return loss, adv_loss
+    
 if __name__ == "__main__":
     test_CrossDatasetsCELoss()
     # test_LabelToOneHot()
