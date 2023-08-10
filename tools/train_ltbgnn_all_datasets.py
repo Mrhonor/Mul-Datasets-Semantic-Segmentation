@@ -425,7 +425,7 @@ def train():
     alter_iter = 0
     SEG = 0
     GNN = 1
-    init_stage = True
+    init_stage = False
     init_gnn_stage = False
     fix_graph = False
     train_seg_or_gnn = SEG

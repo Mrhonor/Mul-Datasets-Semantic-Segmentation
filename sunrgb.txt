@@ -1,0 +1,38 @@
+{'name': 'unlabeled', 'id': 0, 'trainId': 255, 'color': [242, 188, 232]}，
+{'name': 'wall', 'id': 1, 'trainId': 1, 'color': [233, 202, 59]}，
+{'name': 'floor', 'id': 2, 'trainId': 2, 'color': [213, 38, 18]}，
+{'name': 'cabinet', 'id': 3, 'trainId': 3, 'color': [194, 2, 224]}，
+{'name': 'bed', 'id': 4, 'trainId': 4, 'color': [223, 11, 214]}，
+{'name': 'chair', 'id': 5, 'trainId': 5, 'color': [85, 73, 155]}，
+{'name': 'sofa', 'id': 6, 'trainId': 6, 'color': [74, 250, 181]}，
+{'name': 'table', 'id': 7, 'trainId': 7, 'color': [183, 246, 222]}，
+{'name': 'door', 'id': 8, 'trainId': 8, 'color': [58, 98, 138]}，
+{'name': 'window', 'id': 9, 'trainId': 9, 'color': [85, 222, 236]}，
+{'name': 'bookshelf', 'id': 10, 'trainId': 10, 'color': [41, 191, 193]}，
+{'name': 'picture', 'id': 11, 'trainId': 11, 'color': [163, 9, 4]}，
+{'name': 'counter', 'id': 12, 'trainId': 12, 'color': [228, 169, 95]}，
+{'name': 'blinds', 'id': 13, 'trainId': 13, 'color': [122, 95, 180]}，
+{'name': 'desk', 'id': 14, 'trainId': 14, 'color': [223, 156, 194]}，
+{'name': 'shelves', 'id': 15, 'trainId': 15, 'color': [221, 123, 19]}，
+{'name': 'curtain', 'id': 16, 'trainId': 16, 'color': [234, 172, 3]}，
+{'name': 'dresser', 'id': 17, 'trainId': 17, 'color': [239, 156, 24]}，
+{'name': 'pillow', 'id': 18, 'trainId': 18, 'color': [89, 198, 1]}，
+{'name': 'mirror', 'id': 19, 'trainId': 19, 'color': [23, 233, 129]}，
+{'name': 'floor mat', 'id': 20, 'trainId': 20, 'color': [42, 172, 55]}，
+{'name': 'clothes', 'id': 21, 'trainId': 21, 'color': [160, 198, 54]}，
+{'name': 'ceiling', 'id': 22, 'trainId': 22, 'color': [212, 80, 88]}，
+{'name': 'books', 'id': 23, 'trainId': 23, 'color': [78, 137, 207]}，
+{'name': 'refridgerator', 'id': 24, 'trainId': 24, 'color': [176, 239, 185]}，
+{'name': 'television', 'id': 25, 'trainId': 25, 'color': [160, 28, 99]}，
+{'name': 'paper', 'id': 26, 'trainId': 26, 'color': [77, 139, 91]}，
+{'name': 'towel', 'id': 27, 'trainId': 27, 'color': [170, 55, 89]}，
+{'name': 'shower curtain', 'id': 28, 'trainId': 28, 'color': [37, 230, 191]}，
+{'name': 'box', 'id': 29, 'trainId': 29, 'color': [54, 74, 19]}，
+{'name': 'whiteboard', 'id': 30, 'trainId': 30, 'color': [180, 74, 241]}，
+{'name': 'person', 'id': 31, 'trainId': 31, 'color': [189, 141, 151]}，
+{'name': 'night stand', 'id': 32, 'trainId': 32, 'color': [155, 246, 163]}，
+{'name': 'toilet', 'id': 33, 'trainId': 33, 'color': [186, 133, 177]}，
+{'name': 'sink', 'id': 34, 'trainId': 34, 'color': [253, 11, 213]}，
+{'name': 'lamp', 'id': 35, 'trainId': 35, 'color': [83, 84, 29]}，
+{'name': 'bathtub', 'id': 36, 'trainId': 36, 'color': [159, 143, 221]}，
+{'name': 'bag', 'id': 37, 'trainId': 0, 'color': [117, 178, 149]}，

@@ -1,0 +1,20 @@
+{'name': 'unlabel', 'id': 255, 'color': [83, 104, 40], 'trainId': 255}，
+{'name': 'road', 'id': 0, 'color': [20, 109, 144], 'trainId': 0}，
+{'name': 'sidewalk', 'id': 1, 'color': [230, 135, 48], 'trainId': 1}，
+{'name': 'building', 'id': 2, 'color': [70, 167, 229], 'trainId': 2}，
+{'name': 'wall', 'id': 3, 'color': [220, 234, 62], 'trainId': 3}，
+{'name': 'fence', 'id': 4, 'color': [209, 86, 88], 'trainId': 4}，
+{'name': 'pole', 'id': 5, 'color': [253, 97, 48], 'trainId': 5}，
+{'name': 'traffic light', 'id': 6, 'color': [130, 187, 207], 'trainId': 6}，
+{'name': 'traffic sign', 'id': 7, 'color': [145, 78, 159], 'trainId': 7}，
+{'name': 'vegetation', 'id': 8, 'color': [168, 10, 202], 'trainId': 8}，
+{'name': 'terrain', 'id': 9, 'color': [127, 204, 255], 'trainId': 9}，
+{'name': 'sky', 'id': 10, 'color': [237, 183, 72], 'trainId': 10}，
+{'name': 'person', 'id': 11, 'color': [226, 206, 193], 'trainId': 11}，
+{'name': 'rider', 'id': 12, 'color': [7, 158, 237], 'trainId': 12}，
+{'name': 'car', 'id': 13, 'color': [172, 237, 137], 'trainId': 13}，
+{'name': 'truck', 'id': 14, 'color': [59, 44, 172], 'trainId': 14}，
+{'name': 'bus', 'id': 15, 'color': [119, 83, 141], 'trainId': 15}，
+{'name': 'train', 'id': 16, 'color': [175, 189, 48], 'trainId': 16}，
+{'name': 'motorcycle', 'id': 17, 'color': [215, 166, 104], 'trainId': 17}，
+{'name': 'bicycle', 'id': 18, 'color': [124, 248, 126], 'trainId': 18}，

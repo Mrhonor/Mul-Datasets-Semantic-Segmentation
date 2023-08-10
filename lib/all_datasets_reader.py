@@ -580,46 +580,7 @@ sunrgb_labels = [
 {"name": "bag", "id": 37, "trainId": 0},
 ]
 
-sunrgb_labels = [
-{"name": "unlabeled", "id": 0, "trainId": 255},
-{"name": "wall", "id": 1, "trainId": 1},
-{"name": "floor", "id": 2, "trainId": 2},
-{"name": "cabinet", "id": 3, "trainId": 3},
-{"name": "bed", "id": 4, "trainId": 4},
-{"name": "chair", "id": 5, "trainId": 5},
-{"name": "sofa", "id": 6, "trainId": 6},
-{"name": "table", "id": 7, "trainId": 7},
-{"name": "door", "id": 8, "trainId": 8},
-{"name": "window", "id": 9, "trainId": 9},
-{"name": "bookshelf", "id": 10, "trainId": 10},
-{"name": "picture", "id": 11, "trainId": 11},
-{"name": "counter", "id": 12, "trainId": 12},
-{"name": "blinds", "id": 13, "trainId": 13},
-{"name": "desk", "id": 14, "trainId": 14},
-{"name": "shelves", "id": 15, "trainId": 15},
-{"name": "curtain", "id": 16, "trainId": 16},
-{"name": "dresser", "id": 17, "trainId": 17},
-{"name": "pillow", "id": 18, "trainId": 18},
-{"name": "mirror", "id": 19, "trainId": 19},
-{"name": "floor mat", "id": 20, "trainId": 20},
-{"name": "clothes", "id": 21, "trainId": 21},
-{"name": "ceiling", "id": 22, "trainId": 22},
-{"name": "books", "id": 23, "trainId": 23},
-{"name": "refridgerator", "id": 24, "trainId": 24},
-{"name": "television", "id": 25, "trainId": 25},
-{"name": "paper", "id": 26, "trainId": 26},
-{"name": "towel", "id": 27, "trainId": 27},
-{"name": "shower curtain", "id": 28, "trainId": 28},
-{"name": "box", "id": 29, "trainId": 29},
-{"name": "whiteboard", "id": 30, "trainId": 30},
-{"name": "person", "id": 31, "trainId": 31},
-{"name": "night stand", "id": 32, "trainId": 32},
-{"name": "toilet", "id": 33, "trainId": 33},
-{"name": "sink", "id": 34, "trainId": 34},
-{"name": "lamp", "id": 35, "trainId": 35},
-{"name": "bathtub", "id": 36, "trainId": 36},
-{"name": "bag", "id": 37, "trainId": 0},
-]
+
 
 label_map = {'a2d2': a2d2_labels, 'ade': ade_labels, 'bdd': bdd_labels, 'cityscapes': cityscapes_labels, 'coco': coco_labels, 'idd': idd_labels, 'camvid': camvid_labels, 'sunrgb': sunrgb_labels}
 

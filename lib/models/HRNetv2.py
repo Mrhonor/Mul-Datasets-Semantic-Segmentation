@@ -700,7 +700,7 @@ class HRNet_W48_CLIP(nn.Module):
         self.configer = configer
         self.aux_mode = self.configer.get('aux_mode')
         self.n_bn = self.configer.get('n_bn')
-        self.num_unify_classes = self.configer.get('num_unify_classes')
+        # self.num_unify_classes = self.configer.get('num_unify_classes')
         self.n_datasets = self.configer.get('n_datasets')
         self.backbone = HRNetBackbone_ori(configer)
         self.proj_dim = self.configer.get('contrast', 'proj_dim')
@@ -718,7 +718,7 @@ class HRNet_W48_CLIP(nn.Module):
 
         self.proj_head = ProjectionHeadOri(dim_in=in_channels, proj_dim=512, bn_type=self.configer.get('network', 'bn_type'))
             
-        # self.init_weights()    
+        self.init_weights()    
        
 
     def forward(self, x_, dataset=0):
@@ -735,8 +735,8 @@ class HRNet_W48_CLIP(nn.Module):
         if self.aux_mode == 'train':
             return {'seg':emb}
         elif self.aux_mode == 'eval':
-            # logits = torch.einsum('bchw, nc -> bnhw', emb, self.text_feature_vecs[dataset])
-            logits = torch.einsum('bchw, nc -> bnhw', emb, self.text_feature_vecs[self.n_datasets])
+            logits = torch.einsum('bchw, nc -> bnhw', emb, self.text_feature_vecs[dataset])
+            # logits = torch.einsum('bchw, nc -> bnhw', emb, self.text_feature_vecs[self.n_datasets])
             
             return logits
         elif self.aux_mode == 'pred':
@@ -890,7 +890,7 @@ class HRNet_W48_GNN(nn.Module):
             logits = torch.einsum('bchw, nc -> bnhw', emb, self.unify_prototype)
             # logits = torch.einsum('bchw, nc -> bnhw', logits, self.bipartite_graphs[dataset])
             logits = F.interpolate(logits, size=(logits.size(2)*4, logits.size(3)*4), mode="bilinear", align_corners=True)
-            # remap_logits = torch.einsum('bchw, nc -> bnhw', logits, self.bipartite_graphs[dataset])
+            logits = torch.einsum('bchw, nc -> bnhw', logits, self.bipartite_graphs[dataset])
             pred = logits.argmax(dim=1)
             
             return pred

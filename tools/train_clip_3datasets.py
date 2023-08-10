@@ -571,7 +571,7 @@ def train():
 
 
 def main():
-    if True:
+    if configer.get('use_sync_bn'):
         local_rank = int(os.environ["LOCAL_RANK"])
         # torch.cuda.set_device(args.local_rank)
         # dist.init_process_group(

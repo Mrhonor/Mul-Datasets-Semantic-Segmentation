@@ -320,9 +320,9 @@ coco_cats = 133
 
 def get_pretrain_bipart_graph():
     
-    file_path1 = 'ade_bdd_mapping.csv'
-    file_path2 = 'ade_coco_mapping.csv'
-    file_path3 = 'bdd_coco_mapping.csv'
+    file_path1 = 'lib/module/ade_bdd_mapping.csv'
+    file_path2 = 'lib/module/ade_coco_mapping.csv'
+    file_path3 = 'lib/module/bdd_coco_mapping.csv'
 
     total_cats = ade_cats + bdd_cats + coco_cats
 

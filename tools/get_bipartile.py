@@ -55,7 +55,7 @@ def parse_args():
     parse.add_argument('--local_rank', dest='local_rank', type=int, default=-1,)
     parse.add_argument('--port', dest='port', type=int, default=16855,)
     parse.add_argument('--finetune_from', type=str, default=None,)
-    parse.add_argument('--config', dest='config', type=str, default='configs/ltbgnn_city_cam_a2d2.json',)
+    parse.add_argument('--config', dest='config', type=str, default='configs/ltbgnn_5_datasets.json',)
     return parse.parse_args()
 
 # 使用绝对路径
@@ -83,7 +83,8 @@ def set_graph_model(configer):
     #     print("!")
     #     logger.info(f"load pretrained weights from {configer.get('train', 'graph_finetune_from')}")
     #     net.load_state_dict(torch.load(configer.get('train', 'graph_finetune_from'), map_location='cpu'), strict=True)
-    state = torch.load("res/celoss/gnn_model_final.pth", map_location='cpu')
+    # state = torch.load("res/celoss/ltbgnn_5_datasets_gnn.pth", map_location='cpu')
+    state = torch.load("res/celoss/graph_model_270000.pth", map_location='cpu')
     # print(state['adj_matrix'])
 
     net.load_state_dict(state, strict=True) 
@@ -103,14 +104,16 @@ def train():
     graph_node_features = graph_node_features.cuda()
 
     graph_net.eval()
-    unify_prototype, bi_graphs,_ = graph_net(graph_node_features) 
+    # unify_prototype, bi_graphs,_ = graph_net(graph_node_features) 
+    unify_prototype, bi_graphs = graph_net.get_optimal_matching(graph_node_features, True)
+
     if configer.get('GNN', 'output_max_adj') and configer.get('GNN', 'output_softmax_and_max_adj'):
         bi_graphs = [bi_graph for i, bi_graph in filter(lambda x : x[0] % 2 == 0, enumerate(bi_graphs))]
     # print(bi_graphs)
     for i in range(0, n_datasets):
         
         max_value, max_index = torch.max(bi_graphs[i], dim=0)
-        print(max_value)
+        # print(max_value)
         n_cat = configer.get(f'dataset{i+1}', 'n_cats')
         
         buckets = {}

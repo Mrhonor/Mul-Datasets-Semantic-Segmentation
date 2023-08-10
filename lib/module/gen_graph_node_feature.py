@@ -83,7 +83,8 @@ def get_img_for_everyclass_single(configer, dl_iters, dls):
                 while torch.min(lb) == 255:
                     im, lb, lbpth = next(dl_iters[i])
 
-                if not im.size()[0] == configer.get('dataset'+str(i+1), 'ims_per_gpu'):
+                # print(len(im))
+                if not len(im) == configer.get('dataset'+str(i+1), 'ims_per_gpu'):
                     raise StopIteration
             except StopIteration:
                 dl_iters[i] = iter(dls[i])

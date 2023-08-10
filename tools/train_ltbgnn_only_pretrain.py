@@ -59,7 +59,7 @@ def parse_args():
     parse.add_argument('--local_rank', dest='local_rank', type=int, default=-1,)
     parse.add_argument('--port', dest='port', type=int, default=16853,)
     parse.add_argument('--finetune_from', type=str, default=None,)
-    parse.add_argument('--config', dest='config', type=str, default='configs/ltbgnn_7_datasets.json',)
+    parse.add_argument('--config', dest='config', type=str, default='configs/clip_3_datasets.json',)
     return parse.parse_args()
 
 # 使用绝对路径
@@ -352,7 +352,7 @@ def train():
     ## dataset
 
     # dl = get_single_data_loader(configer, aux_mode='train', distributed=is_dist)
-    dls = get_data_loader(configer, aux_mode='train', distributed=is_dist)
+    dls = get_data_loader(configer, aux_mode='ret_path', distributed=is_dist)
     # dl_city, dl_cam = get_data_loader(configer, aux_mode='train', distributed=is_dist)
     
     ## model
@@ -675,19 +675,19 @@ def train():
 
         if (i + 1) % 10000 == 0:
             seg_save_pth = osp.join(configer.get('res_save_pth'), 'seg_model_{}.pth'.format(i+1))
-            gnn_save_pth = osp.join(configer.get('res_save_pth'), 'graph_model_{}.pth'.format(i+1))
+            gnn_save_pth = osp.join(configer.get('res_save_pth'), 'graphonly_model_{}.pth'.format(i+1))
             logger.info('\nsave seg_models to {}, gnn_models to {}'.format(seg_save_pth, gnn_save_pth))
             if is_distributed():
                 gnn_state = graph_net.module.state_dict()
                 seg_state = net.module.state_dict()
                 if dist.get_rank() == 0: 
                     torch.save(gnn_state, gnn_save_pth)
-                    torch.save(seg_state, seg_save_pth)
+                    # torch.save(seg_state, seg_save_pth)
             else:
                 gnn_state = graph_net.state_dict()
                 seg_state = net.state_dict()
                 torch.save(gnn_state, gnn_save_pth)
-                torch.save(seg_state, seg_save_pth)
+                # torch.save(seg_state, seg_save_pth)
 
             # if fix_graph == False:
             # with torch.no_grad():
@@ -697,25 +697,25 @@ def train():
             #     else:
             #         unify_prototype, bi_graphs = graph_net.get_optimal_matching(graph_node_features) 
                 
-            if use_dataset_aux_head and i < aux_iter:
-                eval_model_func = eval_model_aux
-            else:
-                # eval_model = eval_model_contrast
-                eval_model_func = eval_model_contrast
+            # if use_dataset_aux_head and i < aux_iter:
+            #     eval_model_func = eval_model_aux
+            # else:
+            #     # eval_model = eval_model_contrast
+            #     eval_model_func = eval_model_contrast
 
             # optim.zero_grad()
             gnn_optim.zero_grad()
             gnn_optimD.zero_grad()
-            if is_distributed():
-                net.module.set_unify_prototype(unify_prototype)
-                net.module.set_bipartite_graphs(bi_graphs)
-                torch.cuda.empty_cache()
-                heads, mious = eval_model_func(configer, net.module)
-            else:
-                net.set_unify_prototype(unify_prototype)
-                net.set_bipartite_graphs(bi_graphs)
-                torch.cuda.empty_cache()
-                heads, mious = eval_model_func(configer, net)
+            # if is_distributed():
+            #     net.module.set_unify_prototype(unify_prototype)
+            #     net.module.set_bipartite_graphs(bi_graphs)
+            #     torch.cuda.empty_cache()
+            #     heads, mious = eval_model_func(configer, net.module)
+            # else:
+            #     net.set_unify_prototype(unify_prototype)
+            #     net.set_bipartite_graphs(bi_graphs)
+            #     torch.cuda.empty_cache()
+            #     heads, mious = eval_model_func(configer, net)
                 
             writer.add_scalars("mious",{"Cityscapes":mious[CITY_ID],"Camvid":mious[CAM_ID]},configer.get("iter")+1)
             # writer.export_scalars_to_json(osp.join(configer.get('res_save_pth'), str(time())+'_writer.json'))

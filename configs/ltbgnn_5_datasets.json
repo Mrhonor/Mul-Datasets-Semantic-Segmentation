@@ -98,20 +98,20 @@
     },
     "use_ema": false,
     "lr": {
-      "lr_start": 1e-3,
+      "lr_start": 5e-3,
       "weight_decay": 5e-5,
       "warmup_iters": 1000,
       "fix_param_iters": 0,
-      "max_iter": 300000
+      "max_iter": 100000
     },
     "train": {
       "scales": [0.5, 1.0, 2.0],
       "cropsize": [512, 1024],
       "finetune": true,
-      "finetune_from": "res/celoss/pretrain_seg_model.pth",
-      "graph_finetune": false,
-      "graph_finetune_from": "res/celoss/pretrain_graph_model.pth",
-      "seg_iters": 20000,
+      "finetune_from": "res/celoss/ltbgnn_5_datasets_seg.pth",
+      "graph_finetune": true,
+      "graph_finetune_from": "res/celoss/ltbgnn_5_datasets_gnn.pth",
+      "seg_iters": 100000,
       "gnn_iters": 30000,
       "joint_train": true
     },

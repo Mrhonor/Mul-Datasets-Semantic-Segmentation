@@ -667,7 +667,7 @@ class CrossDatasetsCELoss_CLIP(nn.Module):
         super(CrossDatasetsCELoss_CLIP, self).__init__()
         self.configer = configer
         self.n_datasets = self.configer.get('n_datasets')
-        self.num_unify_classes = self.configer.get('num_unify_classes')
+        # self.num_unify_classes = self.configer.get('num_unify_classes')
         self.num_prototype = self.configer.get('contrast', 'num_prototype')
         self.temperature = self.configer.get('contrast', 'temperature')
         self.with_mulbn = self.configer.get('contrast', 'with_mulbn')
@@ -681,7 +681,8 @@ class CrossDatasetsCELoss_CLIP(nn.Module):
         for i in range(1, self.n_datasets+1):
             self.n_cats.append(self.configer.get('dataset'+str(i), 'n_cats'))
 
-        self.CELoss = torch.nn.CrossEntropyLoss(ignore_index=255)
+        # self.CELoss = torch.nn.CrossEntropyLoss(ignore_index=255)
+        self.CELoss = OhemCELoss(0.7, ignore_lb=255)
 
     def forward(self, preds, target, dataset_ids, is_warmup=False):
         logits = preds['seg']
@@ -695,11 +696,11 @@ class CrossDatasetsCELoss_CLIP(nn.Module):
             if not (dataset_ids == i).any():
                 continue
             
-            RemapMatrix = self.classRemapper.getRemapMatrix(i)
-            if logits.is_cuda:
-                RemapMatrix = RemapMatrix.cuda()
             
             if self.with_unify_label:
+                RemapMatrix = self.classRemapper.getRemapMatrix(i)
+                if logits.is_cuda:
+                    RemapMatrix = RemapMatrix.cuda()
                 remap_logits = torch.einsum('bchw, nc -> bnhw', logits[dataset_ids==i], RemapMatrix)
                 remap_logits = F.interpolate(remap_logits, size=(target.size(1), target.size(2)), mode="bilinear", align_corners=True)
             else:
@@ -930,9 +931,12 @@ class CrossDatasetsCELoss_AdvGNN_Only(nn.Module):
         # self.seg_gnn_alter_iters = self.configer.get('train', 'seg_gnn_alter_iters')
         self.gnn_iters = self.configer.get('train', 'gnn_iters')
         
+        self.total_cats = 0
         self.n_cats = []
         for i in range(1, self.n_datasets+1):
-            self.n_cats.append(self.configer.get('dataset'+str(i), 'n_cats'))
+            this_cat = self.configer.get('dataset'+str(i), 'n_cats')
+            self.n_cats.append(this_cat)
+            self.total_cats += this_cat
 
         self.CELoss = nn.CrossEntropyLoss(ignore_index=255)
         self.OhemCELoss = OhemCELoss(0.7, ignore_lb=255)
@@ -944,12 +948,9 @@ class CrossDatasetsCELoss_AdvGNN_Only(nn.Module):
             self.MSE_loss = torch.nn.MSELoss()
 
     def forward(self, preds, target, dataset_ids, is_adv=True, init_gnn_stage=False):
-        if self.configer.get('iter') > 100000:
-            CELoss = self.OhemCELoss
-        else:
-            CELoss = self.CELoss
 
         bi_graphs = preds['bi_graphs']
+        adj_matrix = preds['adj']
         
         if is_adv:
             adv_out = preds['adv_out']
@@ -963,8 +964,12 @@ class CrossDatasetsCELoss_AdvGNN_Only(nn.Module):
         
         loss = None
         adv_loss = None
+        
         # print("logits_max : {}, logits_min : {}".format(torch.max(logits), torch.min(logits)))
-        loss = 
+        
+        needed_adj = adj_matrix[:self.total_cats][:self.total_cats].view(-1)
+        
+        loss = self.MSE_loss(needed_adj, target)
         
         for i in range(0, self.n_datasets):
 
