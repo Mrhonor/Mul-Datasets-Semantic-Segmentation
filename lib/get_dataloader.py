@@ -110,7 +110,7 @@ def get_data_loader(configer, aux_mode='eval', distributed=True):
         dl = [DataLoader(
             dataset,
             batch_sampler=batchsamp,
-            num_workers=1,
+            num_workers=2,
             pin_memory=False,
         ) for dataset, batchsamp in zip(ds, batchsampler)]
     else:
@@ -130,7 +130,7 @@ def get_data_loader(configer, aux_mode='eval', distributed=True):
             batch_size=bs,
             shuffle=shuffle,
             drop_last=drop_last,
-            num_workers=1,
+            num_workers=2,
             pin_memory=False,
         ) for dataset, bs in zip(ds, batchsize)]
     return dl

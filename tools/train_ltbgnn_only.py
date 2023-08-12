@@ -55,9 +55,9 @@ def is_distributed():
 def parse_args():
     parse = argparse.ArgumentParser()
     parse.add_argument('--local_rank', dest='local_rank', type=int, default=-1,)
-    parse.add_argument('--port', dest='port', type=int, default=16853,)
+    parse.add_argument('--port', dest='port', type=int, default=16852,)
     parse.add_argument('--finetune_from', type=str, default=None,)
-    parse.add_argument('--config', dest='config', type=str, default='configs/ltbgnn_city_cam_a2d2.json',)
+    parse.add_argument('--config', dest='config', type=str, default='configs/clip_5_datasets.json',)
     return parse.parse_args()
 
 # 使用绝对路径
@@ -433,12 +433,17 @@ def train():
         for j in range(0,len(dl_iters)):
             try:
                 im, lb = next(dl_iters[j])
+                while torch.min(lb) == 255:
+                    im, lb = next(dl_iters[j])
+
                 if not im.size()[0] == configer.get('dataset'+str(j+1), 'ims_per_gpu'):
                     raise StopIteration
             except StopIteration:
                 dl_iters[j] = iter(dls[j])
                 im, lb = next(dl_iters[j])
-                
+                while torch.min(lb) == 255:
+                    im, lb = next(dl_iters[j])
+            
             ims.append(im)
             lbs.append(lb)
                 
@@ -459,15 +464,17 @@ def train():
 
         SEG = 0
         GNN = 1
-        if joint_train and configer.get('iter') // configer.get('train', 'seg_gnn_alter_iters') % 2 == 0:
-            train_seg_or_gnn = SEG
-        else:
-            train_seg_or_gnn = GNN
+        # if joint_train and configer.get('iter') // configer.get('train', 'seg_gnn_alter_iters') % 2 == 0:
+        #     train_seg_or_gnn = SEG
+        # else:
+        train_seg_or_gnn = GNN
         # net.eval()
         # with torch.no_grad():
         #     seg_out = net(im)
 
         optim.zero_grad()
+        gnn_optim.zero_grad()
+        gnn_optimD.zero_grad()
         with amp.autocast(enabled=configer.get('use_fp16')):
             # if finetune and i >= fix_param_iters + aux_iter:
             #     finetune = False
@@ -619,6 +626,8 @@ def train():
                 eval_model_func = eval_model_contrast
 
             optim.zero_grad()
+            gnn_optim.zero_grad()
+            gnn_optimD.zero_grad()
             if is_distributed():
                 net.module.set_unify_prototype(unify_prototype)
                 net.module.set_bipartite_graphs(bi_graphs)

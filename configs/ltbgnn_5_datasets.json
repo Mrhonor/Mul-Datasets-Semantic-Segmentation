@@ -30,7 +30,7 @@
     "dataset1": {
       "n_cats": 19,
       "data_reader": "CityScapes",
-      "im_root": "/home1/marong/datasets",
+      "im_root": "/cpfs01/projects-SSD/pujianxiangmuzu_SSD/pujian/mr/datasets",
       "train_im_anns":"datasets/Cityscapes/train.txt",
       "val_im_anns":"datasets/Cityscapes/val.txt", 
       "ims_per_gpu": 2,
@@ -40,27 +40,27 @@
     "dataset2": {
       "n_cats": 12, 
       "data_reader": "CamVid",
-      "im_root": "/home1/marong/datasets/CamVid",
+      "im_root": "/cpfs01/projects-SSD/pujianxiangmuzu_SSD/pujian/mr/datasets/CamVid",
       "train_im_anns":"datasets/CamVid/train.txt",
       "val_im_anns":"datasets/CamVid/test.txt", 
-      "ims_per_gpu": 1,
+      "ims_per_gpu": 2,
       "eval_ims_per_gpu": 2,
       "label_names": ["Sky", "Building", "Column_Pole", "Road", "Sidewalk", "Tree", "SignSymbol", "Fence", "Car", "Pedestrian", "Bicyclist", "Wall"]
     },
     "dataset3": {
       "n_cats": 37, 
       "data_reader": "Sunrgbd",
-      "im_root": "/home1/marong/datasets/",
+      "im_root": "/cpfs01/projects-SSD/pujianxiangmuzu_SSD/pujian/mr/datasets/",
       "train_im_anns":"datasets/sunrgbd/train.txt",
       "val_im_anns":"datasets/sunrgbd/test.txt", 
-      "ims_per_gpu": 1,
+      "ims_per_gpu": 2,
       "eval_ims_per_gpu": 1,
       "label_names": [ "bag", "wall", "floor", "cabinet", "bed", "chair", "sofa", "table", "door", "window", "bookshelf", "picture", "counter", "blinds", "desk", "shelves", "curtain", "dresser", "pillow", "mirror", "floor mat", "clothes", "ceiling", "books", "refridgerator", "television", "paper", "towel", "shower curtain", "box", "whiteboard", "person", "night stand", "toilet", "sink", "lamp", "bathtub"]
     },
     "dataset4": {
       "n_cats": 19, 
       "data_reader": "Bdd100k",
-      "im_root": "/home1/marong/datasets/bdd100k",
+      "im_root": "/cpfs01/projects-SSD/pujianxiangmuzu_SSD/pujian/mr/datasets/bdd100k",
       "train_im_anns":"datasets/bdd100k/train.txt",
       "val_im_anns":"datasets/bdd100k/val.txt", 
       "ims_per_gpu": 2,
@@ -70,7 +70,7 @@
     "dataset5": {
       "n_cats": 37, 
       "data_reader": "Idd",
-      "im_root": "/home1/marong/datasets/idd",
+      "im_root": "/cpfs01/projects-SSD/pujianxiangmuzu_SSD/pujian/mr/datasets/idd",
       "train_im_anns":"datasets/IDD/train.txt",
       "val_im_anns":"datasets/IDD/val.txt", 
       "ims_per_gpu": 2,
@@ -98,7 +98,7 @@
     },
     "use_ema": false,
     "lr": {
-      "lr_start": 5e-3,
+      "lr_start": 1e-3,
       "weight_decay": 5e-5,
       "warmup_iters": 1000,
       "fix_param_iters": 0,

@@ -229,6 +229,7 @@ class MscEvalV0_AutoLink(object):
         # miou = np.nanmean(ious.detach().cpu().numpy())
         # return miou.item()
 
+
 class MscEvalCrop(object):
 
     def __init__(
@@ -922,6 +923,8 @@ def Find_label_relation(configer, datasets_remaps):
     return out_label_relation
     conflict = []
     
+def find_unuse_label(configer, net, dl, n_classes, dataset_id):
+    pass
 
 
 if __name__ == "__main__":

@@ -1,3 +1,3 @@
-export CUDA_VISIBLE_DEVICES=1,2
+export CUDA_VISIBLE_DEVICES=0,1
 python -m torch.distributed.run \
---nproc_per_node=2 --master_port 16853 tools/train_clip_3datasets.py \
+--nproc_per_node=2 --master_port 16854 tools/train_clip_5datasets.py \

@@ -310,8 +310,8 @@ def gen_graph_node_feature(configer):
         img_feat_tensor = torch.cat(img_feature_vecs, dim=0)
         print(img_feat_tensor.shape)
         print("gen_img_features")
-        # graph_node_features = torch.cat([text_feat_tensor, img_feat_tensor], dim=1)
-        graph_node_features = (text_feat_tensor+img_feat_tensor)/2
+        graph_node_features = torch.cat([text_feat_tensor, img_feat_tensor], dim=1)
+        # graph_node_features = (text_feat_tensor+img_feat_tensor)/2
         print(graph_node_features.shape)
         torch.save(graph_node_features.clone(), file_name)
     

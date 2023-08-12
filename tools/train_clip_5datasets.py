@@ -61,7 +61,7 @@ def is_distributed():
 def parse_args():
     parse = argparse.ArgumentParser()
     parse.add_argument('--local_rank', dest='local_rank', type=int, default=-1,)
-    parse.add_argument('--port', dest='port', type=int, default=16853,)
+    parse.add_argument('--port', dest='port', type=int, default=16854,)
     parse.add_argument('--finetune_from', type=str, default=None,)
     parse.add_argument('--config', dest='config', type=str, default='configs/clip_5_datasets.json',)
     return parse.parse_args()
