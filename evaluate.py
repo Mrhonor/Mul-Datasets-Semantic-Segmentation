@@ -921,10 +921,84 @@ def Find_label_relation(configer, datasets_remaps):
             out_label_relation.append(this_label_relation)
         
     return out_label_relation
-    conflict = []
+    # conflict = []
     
 def find_unuse_label(configer, net, dl, n_classes, dataset_id):
-    pass
+        ## evaluate
+    # hist = torch.zeros(n_classes, n_classes).cuda().detach()
+    # datasets_remap = []
+    ignore_label = 255
+    n_datasets = configer.get("n_datasets")
+    total_cats = 0
+    net.aux_mode = 'train'
+    unify_prototype = net.unify_prototype
+    bipart_graph = net.bipartite_graphs
+    for i in range(0, n_datasets):
+        total_cats += configer.get("dataset"+str(i+1), "n_cats")
+
+    hist = torch.zeros(n_classes, total_cats).cuda().detach()
+    if dist.is_initialized() and dist.get_rank() != 0:
+        diter = enumerate(dl)
+    else:
+        diter = enumerate(tqdm(dl))
+    for i, (imgs, label) in diter:
+        N, _, H, W = label.shape
+
+        label = label.squeeze(1).cuda()
+        size = label.size()[-2:]
+
+        im_sc = F.interpolate(imgs, size=(H, W),
+                mode='bilinear', align_corners=True)
+
+        im_sc = im_sc.cuda()
+        
+            
+        emb = net(im_sc, dataset=dataset_id)
+        logits = torch.einsum('bchw, nc -> bnhw', emb, unify_prototype)
+
+        logits = F.interpolate(logits, size=size,
+                mode='bilinear', align_corners=True)
+        probs = torch.softmax(logits, dim=1)
+        preds = torch.argmax(probs, dim=1)
+        keep = label != ignore_label
+
+        hist += torch.tensor(np.bincount(
+            label.cpu().numpy()[keep.cpu().numpy()] * total_cats + preds.cpu().numpy()[keep.cpu().numpy()],
+            minlength=n_classes * total_cats
+        )).cuda().view(n_classes, total_cats)
+
+    max_value, max_index = torch.max(bipart_graph[dataset_id], dim=0)
+    # print(max_value)
+    n_cat = configer.get(f'dataset{dataset_id+1}', 'n_cats')
+    
+    buckets = {}
+    for index, j in enumerate(max_index):
+        
+        if int(j) not in buckets:
+            buckets[int(j)] = [index]
+        else:
+            buckets[int(j)].append(index)
+
+    for index in range(0, n_cat):
+        if index not in buckets:
+            buckets[index] = []
+
+    for index, val in buckets.items():
+        total_num = 0
+        for i in val:
+            total_cats += hist[index][val]
+        
+        
+        if total_num == 0:
+            print("no right cats")
+        else:
+            for i in val:
+                rate = hist[index][val] / total_num
+                if rate < 1e-3:
+                    buckets[index].remove(val)
+
+
+    return buckets 
 
 
 if __name__ == "__main__":
