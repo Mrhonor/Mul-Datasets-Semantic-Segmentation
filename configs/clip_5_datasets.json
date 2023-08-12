@@ -1,5 +1,5 @@
 {
-    "model_name": "hrnet_w48_clip",
+    "model_name": "hrnet_w48_gnn",
     "aux_mode": "train",
     "n_datasets": 5,
     "hrnet": {
