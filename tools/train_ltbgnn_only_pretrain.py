@@ -35,6 +35,7 @@ from tensorboardX import SummaryWriter
 from lib.module.gen_graph_node_feature import gen_graph_node_feature, gen_graph_node_feature_single
 from lib.module.get_pretrain_bipart_graph import get_pretrain_bipart_graph
 
+import pickle
 
 
 ## fix all random seeds
@@ -59,7 +60,7 @@ def parse_args():
     parse.add_argument('--local_rank', dest='local_rank', type=int, default=-1,)
     parse.add_argument('--port', dest='port', type=int, default=16853,)
     parse.add_argument('--finetune_from', type=str, default=None,)
-    parse.add_argument('--config', dest='config', type=str, default='configs/clip_3_datasets.json',)
+    parse.add_argument('--config', dest='config', type=str, default='configs/clip_5_datasets_2.json',)
     return parse.parse_args()
 
 # 使用绝对路径
@@ -185,7 +186,7 @@ def set_optimizer(model, configer):
     
 def set_optimizerD(model, configer):
     if hasattr(model, 'get_discri_params'):
-        wd_params, nowd_params, lr_mul_wd_params, lr_mul_nowd_params = model.get_params()
+        wd_params, nowd_params, lr_mul_wd_params, lr_mul_nowd_params = model.get_discri_params()
         #  wd_val = cfg.weight_decay
         wd_val = 0
         params_list = [
@@ -404,7 +405,7 @@ def train():
 
     if use_dataset_aux_head:
         aux_iter = configer.get('dataset_aux_head', 'aux_iter')
-        net.set_train_dataset_aux(starti < aux_iter)
+        # net.set_train_dataset_aux(starti < aux_iter)
         criteria_pre = OhemCELoss(0.7)
         criteria_aux = [OhemCELoss(0.7) for _ in range(configer.get('loss', 'aux_num'))]
     
@@ -417,7 +418,7 @@ def train():
     
     ## ddp training
     if is_distributed():
-        net = set_model_dist(net)
+        # net = set_model_dist(net)
         graph_net = set_model_dist(graph_net)
     
 
@@ -430,9 +431,14 @@ def train():
     init_stage = True
     init_gnn_stage = False
     fix_graph = False
+    gen_feature = False
     train_seg_or_gnn = SEG
+    lbpth_list = None
     GNN_INIT = configer.get('train', 'graph_finetune')
-    pretrain_bipart_graph = get_pretrain_bipart_graph()
+    with open('bipart_reshape.pkl', 'rb') as file:
+        pretrain_bipart_graph = pickle.load(file)  
+    # print(pretrain_bipart_graph.shape)
+    pretrain_bipart_graph = pretrain_bipart_graph.cuda()
 
     for i in range(starti, configer.get('lr','max_iter') + starti):
         configer.plus_one('iter')
@@ -475,7 +481,15 @@ def train():
 
         # im = im.cuda()
         # lb = lb.cuda()
-        graph_node_features = gen_graph_node_feature_single(configer, dl_iters, dls).cuda()
+        if gen_feature is False:
+            graph_node_features, lbpth_list = gen_graph_node_feature_single(configer, dls, gen_feature)
+            graph_node_features = graph_node_features.cuda()
+            gen_feature = True
+        else:
+            graph_node_features, _ = gen_graph_node_feature_single(configer, lbpth_list, gen_feature)
+            graph_node_features = graph_node_features.cuda()
+
+        
 
 
         # net.eval()
@@ -496,12 +510,12 @@ def train():
             
             ## 修改为多数据集模式
             
-            if train_aux:
-                train_aux = False
-                if is_distributed():
-                    net.module.set_train_dataset_aux(False)
-                else:
-                    net.set_train_dataset_aux(False)    
+            # if train_aux:
+            #     train_aux = False
+            #     if is_distributed():
+            #         net.module.set_train_dataset_aux(False)
+            #     else:
+            #         net.set_train_dataset_aux(False)    
             
                 
                         
@@ -511,17 +525,17 @@ def train():
                 fix_graph = False
                 GNN_INIT = True
                 graph_net.train()
-                net.eval()
+                # net.eval()
                 
                 if init_stage:
                     init_stage = False
                     init_gnn_stage = True
                 
-                if init_gnn_stage:    
-                    if is_distributed():
-                        seg_out['seg'] = net.module.unify_prototype
-                    else:
-                        seg_out['seg'] = net.unify_prototype
+                # if init_gnn_stage:    
+                #     if is_distributed():
+                #         seg_out['seg'] = net.module.unify_prototype
+                #     else:
+                #         seg_out['seg'] = net.unify_prototype
                 # else:
                 #     with torch.no_grad():
                 #         seg_out = net(im)
@@ -575,12 +589,13 @@ def train():
             
 
                 
-            seg_out['seg'] = seg_out['seg']
+            seg_out['seg'] = None
             
             seg_out['bi_graphs'] = bi_graphs
             seg_out['adv_out'] = adv_out
                 
             lb = pretrain_bipart_graph
+            print(pretrain_bipart_graph.shape)
             dataset_lbs = None
             backward_loss, adv_loss = contrast_losses(seg_out, lb, dataset_lbs, is_adv, init_gnn_stage)
             # print(backward_loss)
@@ -602,44 +617,32 @@ def train():
         # print(backward_loss)
 
 
-        scaler.scale(backward_loss).backward()
         if is_adv:
             scaler.scale(adv_loss).backward()
-
-        # print(net.backbone.conv1.weight.grad)
-        # print(backward_loss.item())
-            
-        # configer.plus_one('iters')
-        # self.configer.plus_one('iters')
-
-        # for name, param in graph_net.named_parameters():
-        #     if torch.isnan(param.grad).any() or torch.isinf(param.grad).any():
-        #         print("Graph NaN or Inf value found in gradients")
-
-        # for param in net.parameters():
-        #     if torch.isnan(param.grad).any() or torch.isinf(param.grad).any():
-        #         print("seg NaN or Inf value found in gradients")
+            scaler.step(gnn_optimD)
+            scaler.update()
+            torch.cuda.synchronize()
+            gnn_optimD.zero_grad()
         
-        # if torch.isnan(seg_out['seg']).any() or torch.isinf(seg_out['seg']).any():
-        #     print("seg NaN or Inf value found in output")
-        #     print(backward_loss)
+
+        scaler.scale(backward_loss).backward()
+        if train_seg_or_gnn == SEG: 
+            scaler.step(optim)
+        else:
+            scaler.step(gnn_optim)
         
-        # if torch.isnan(im).any() or torch.isinf(im).any():
-        #     print("find NaN or Inf value found in im")        
-
-        # if torch.isnan(lb).any() or torch.isinf(lb).any():
-        #     print("find NaN or Inf value found in lb")
-
-        # if torch.isnan(backward_loss).any() or torch.isinf(backward_loss).any():
-        #     print("find NaN or Inf value found in loss")
-        #     print(im)
-        #     print(lb)
-
-        scaler.step(gnn_optim)
-        scaler.step(gnn_optimD)
-            
         scaler.update()
         torch.cuda.synchronize()
+
+        # scaler.scale(backward_loss).backward()
+        # if is_adv:
+        #     scaler.scale(adv_loss).backward()
+
+        # scaler.step(gnn_optim)
+        # scaler.step(gnn_optimD)
+            
+        # scaler.update()
+        # torch.cuda.synchronize()
         if use_ema:
             ema_net.EMAUpdate(net.module)
         # print('synchronize')
@@ -679,13 +682,13 @@ def train():
             logger.info('\nsave seg_models to {}, gnn_models to {}'.format(seg_save_pth, gnn_save_pth))
             if is_distributed():
                 gnn_state = graph_net.module.state_dict()
-                seg_state = net.module.state_dict()
+                # seg_state = net.module.state_dict()
                 if dist.get_rank() == 0: 
                     torch.save(gnn_state, gnn_save_pth)
                     # torch.save(seg_state, seg_save_pth)
             else:
                 gnn_state = graph_net.state_dict()
-                seg_state = net.state_dict()
+                # seg_state = net.state_dict()
                 torch.save(gnn_state, gnn_save_pth)
                 # torch.save(seg_state, seg_save_pth)
 
@@ -720,7 +723,7 @@ def train():
             writer.add_scalars("mious",{"Cityscapes":mious[CITY_ID],"Camvid":mious[CAM_ID]},configer.get("iter")+1)
             # writer.export_scalars_to_json(osp.join(configer.get('res_save_pth'), str(time())+'_writer.json'))
             logger.info(tabulate([mious, ], headers=heads, tablefmt='orgtbl'))
-            net.train()
+            graph_net.train()
         
                 
         gnn_lr_schdr.step()

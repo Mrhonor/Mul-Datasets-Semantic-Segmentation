@@ -1,5 +1,5 @@
 {
-    "model_name": "hrnet_w48_clip",
+    "model_name": "hrnet_w48_gnn",
     "aux_mode": "train",
     "n_datasets": 5,
     "hrnet": {
@@ -100,7 +100,7 @@
     "n_bn": 1,
     "class_remaper": "ClassRemapOneHotLabel",
     "loss":{
-      "type": "Adv_GNN",
+      "type": "Adv_GNN_Only",
       "reweight": false,
       "with_aux": false,
       "with_unify_label": false,
@@ -118,11 +118,11 @@
     },
     "use_ema": false,
     "lr": {
-      "lr_start": 1e-3,
+      "lr_start": 5e-3,
       "weight_decay": 5e-5,
       "warmup_iters": 0,
       "fix_param_iters": 0,
-      "max_iter": 50000
+      "max_iter": 100000
     },
     "train": {
       "scales": [0.5, 1.0, 2.0],

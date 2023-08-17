@@ -17,6 +17,7 @@ import clip
 from PIL import Image
 import lib.transform_cv2 as T
 import torch.nn.functional as F
+import random
 
 def get_img_for_everyclass(configer):
     n_datasets = configer.get("n_datasets")
@@ -30,7 +31,7 @@ def get_img_for_everyclass(configer):
     img_lists = []
     lb_lists  = []
     for i in range(0, n_datasets):
-        print("cur dataset id： ", i)
+        # print("cur dataset id： ", i)
         this_img_lists = []
         this_lb_lists = []
         for label_id in range(0, num_classes[i]):
@@ -56,7 +57,7 @@ def get_img_for_everyclass(configer):
     
     return img_lists, lb_lists
 
-def get_img_for_everyclass_single(configer, dl_iters, dls):
+def get_img_for_everyclass_single(configer, dls):
     n_datasets = configer.get("n_datasets")
 
     num_classes = []
@@ -64,12 +65,12 @@ def get_img_for_everyclass_single(configer, dl_iters, dls):
         num_classes.append(configer.get("dataset" + str(i), "n_cats"))
 
     # dls = get_data_loader(configer, aux_mode='ret_path', distributed=False)
-
+    dl_iters = [iter(dl) for dl in dls]
 
     img_lists = []
     lb_lists  = []
     for i in range(0, n_datasets):
-        print("cur dataset id： ", i)
+        # print("cur dataset id： ", i)
         this_img_lists = []
         this_lb_lists = []
         for label_id in range(0, num_classes[i]):
@@ -83,26 +84,24 @@ def get_img_for_everyclass_single(configer, dl_iters, dls):
                 while torch.min(lb) == 255:
                     im, lb, lbpth = next(dl_iters[i])
 
-                # print(len(im))
-                if not len(im) == configer.get('dataset'+str(i+1), 'ims_per_gpu'):
+                if not len(im) == 1:
                     raise StopIteration
             except StopIteration:
-                dl_iters[i] = iter(dls[i])
-                im, lb, lbpth = next(dl_iters[i])
-                while torch.min(lb) == 255:
-                    im, lb, lbpth = next(dl_iters[i])
+                break
             
 
-                im = im[0]
-                lb = lb.squeeze()
-                for label_id in range(0, num_classes[i]):
-                    if len(this_img_lists[label_id]) == 0 and (lb == label_id).any():
-                        this_img_lists[label_id].append(im)
-                        this_lb_lists[label_id].append(lbpth)
-                        cur_num += 1
-                        
-                if cur_num == num_classes[i]:
-                    break
+            im = im[0]
+            lb = lb.squeeze()
+            for label_id in range(0, num_classes[i]):
+                if (lb == label_id).any():
+                    this_img_lists[label_id].append(im)
+                    this_lb_lists[label_id].append(lbpth)
+                    
+            # print('cur_num: ', cur_num)
+            # print('num_classes: ', num_classes[i])
+            # print(lbpth)
+            # if cur_num == num_classes[i]:
+            #     break
 
         for j, lb in enumerate(this_lb_lists):
             if len(lb) == 0:
@@ -231,9 +230,12 @@ def gen_image_features(configer):
     
     return out_features
 
-def gen_image_features_single(configer, dl_iters, dls):
-    img_lists, lb_lists = get_img_for_everyclass_single(configer, dl_iters, dls)
-    
+def gen_image_features_single(configer, dls, gen_feature=False):
+    if gen_feature is False:
+        img_lists, lb_lists = get_img_for_everyclass_single(configer, dls)
+    else:
+        img_lists, lb_lists = dls
+        
     n_datasets = configer.get('n_datasets')
     to_tensor = T.ToTensor(
                 mean=(0.48145466, 0.4578275, 0.40821073), # clip , rgb
@@ -251,30 +253,31 @@ def gen_image_features_single(configer, dl_iters, dls):
                     print("why dataset_id: ", dataset_id)
                     continue
                 image_features_list = []
-                for im_path, lb_path in zip(im_list, lb_list):
-                    image = cv2.imread(im_path)
-                    # print(lb_path[0])
-                    lb = cv2.imread(lb_path[0], 0)
-                    if image is None:
-                        print(im_path)
-                        continue
-                    # lb = lb.numpy()
-                    cropped_img = crop_image_by_label_value(image, lb, i)
-                        
-                    im_lb = dict(im=cropped_img, lb=lb)
-                    im_lb = to_tensor(im_lb)
-                    img = im_lb['im'].cuda()
-                    img = F.interpolate(img.unsqueeze(0), size=(224, 224))
-                    image_features = model.encode_image(img).type(torch.float32)
-                    image_features_list.append(image_features)
+                im_path, lb_path = random.choice(zip(im_list, lb_list))
+                image = cv2.imread(im_path)
+                # print(lb_path[0])
+                lb = cv2.imread(lb_path[0], 0)
+                if image is None:
+                    print(im_path)
+                    continue
+                # lb = lb.numpy()
+                cropped_img = crop_image_by_label_value(image, lb, i)
+                    
+                im_lb = dict(im=cropped_img, lb=lb)
+                im_lb = to_tensor(im_lb)
+                img = im_lb['im'].cuda()
+                img = F.interpolate(img.unsqueeze(0), size=(224, 224))
+                image_features = model.encode_image(img).type(torch.float32)
+                image_features_list.append(image_features)
 
                 # print("im_lb_list: ", im_lb_list)
                 img_feat = torch.cat(image_features_list, dim=0)
                 mean_feats = torch.mean(img_feat, dim=0, keepdim=True)
                 # print(mean_feats.shape)
                 out_features.append(mean_feats) 
+
     
-    return out_features, dl_iters
+    return out_features, [img_lists, lb_lists]
 
 def get_encode_lb_vec(configer):
     n_datasets = configer.get('n_datasets')
@@ -297,7 +300,8 @@ def gen_graph_node_feature(configer):
     for i in range(0, configer.get('n_datasets')):
         file_name += '_'+str(configer.get('dataset'+str(i+1), 'data_reader'))
     
-    file_name += '.pt'
+    file_name += '-2.pt'
+
     if osp.exists(file_name):
         graph_node_features = torch.load(file_name)
     else:
@@ -310,25 +314,28 @@ def gen_graph_node_feature(configer):
         img_feat_tensor = torch.cat(img_feature_vecs, dim=0)
         print(img_feat_tensor.shape)
         print("gen_img_features")
-        graph_node_features = torch.cat([text_feat_tensor, img_feat_tensor], dim=1)
-        # graph_node_features = (text_feat_tensor+img_feat_tensor)/2
+        # graph_node_features = torch.cat([text_feat_tensor, img_feat_tensor], dim=1)
+        graph_node_features = (text_feat_tensor+img_feat_tensor)/2
         print(graph_node_features.shape)
         torch.save(graph_node_features.clone(), file_name)
     
     return graph_node_features
 
-def gen_graph_node_feature_single(configer, dl_iters, dls):
+    
+
+def gen_graph_node_feature_single(configer, dls, gen_feature=False):
+
 
     text_feature_vecs = get_encode_lb_vec(configer)
     text_feat_tensor = torch.cat(text_feature_vecs, dim=0)
 
-    img_feature_vecs, dl_iters = gen_image_features_single(configer, dl_iters, dls)
+    img_feature_vecs, lbpth_list = gen_image_features_single(configer, dls, gen_feature)
     img_feat_tensor = torch.cat(img_feature_vecs, dim=0)
 
     # graph_node_features = torch.cat([text_feat_tensor, img_feat_tensor], dim=1)
     graph_node_features = (text_feat_tensor+img_feat_tensor)/2
 
-    return graph_node_features, dl_iters
+    return graph_node_features, lbpth_list
 
 
 

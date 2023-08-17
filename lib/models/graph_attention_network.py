@@ -1162,10 +1162,12 @@ class Learnable_Topology_BGNN(nn.Module):
                     # print(param.dim())
                     # print(param)
                     # print(name)
-
+        print("!")
         wd_params, nowd_params, lr_mul_wd_params, lr_mul_nowd_params = [], [], [], []
         for name, child in self.named_children():
+            print("out_name: ", name)
             if 'netD' in name:
+                print(name)
                 add_param_to_list(child, wd_params, nowd_params)
         return wd_params, nowd_params, lr_mul_wd_params, lr_mul_nowd_params
 

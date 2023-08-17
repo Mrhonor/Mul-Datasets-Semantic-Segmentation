@@ -617,6 +617,10 @@ class HRNet_W48_CLIP(nn.Module):
             logits = F.interpolate(logits, size=(x_.size(2), x_.size(3)), mode="bilinear", align_corners=True)
             pred = logits.argmax(dim=1)
             return pred
+        elif self.aux_mode == 'test':
+            logits = [torch.einsum('bchw, nc -> bnhw', emb, self.text_feature_vecs[i]) for i in range(0, self.n_datasets)] 
+            
+            return logits
         else:
             raise NotImplementedError
 

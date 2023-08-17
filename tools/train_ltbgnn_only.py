@@ -177,7 +177,7 @@ def set_optimizer(model, configer):
     
 def set_optimizerD(model, configer):
     if hasattr(model, 'get_discri_params'):
-        wd_params, nowd_params, lr_mul_wd_params, lr_mul_nowd_params = model.get_params()
+        wd_params, nowd_params, lr_mul_wd_params, lr_mul_nowd_params = model.get_discri_params()
         #  wd_val = cfg.weight_decay
         wd_val = 0
         params_list = [
@@ -187,7 +187,9 @@ def set_optimizerD(model, configer):
             {'params': lr_mul_nowd_params, 'weight_decay': wd_val, 'lr': configer.get('lr', 'lr_start')},
         ]
     else:
+        print("what!")
         return None
+
     
     if configer.get('optim') == 'SGD':
         optim = torch.optim.SGD(
@@ -503,6 +505,7 @@ def train():
                     seg_out = net(im)
                 
                 unify_prototype, bi_graphs, adv_out = graph_net(graph_node_features)
+                # print(torch.norm(unify_prototype[0][0], p=2))
             else:
                 is_adv = False
                 graph_net.eval()
@@ -545,33 +548,43 @@ def train():
         # print('before backward')
         # set_trace()
         # with torch.autograd.detect_anomaly():
-        
-        scaler.scale(backward_loss).backward()
+       
         if is_adv:
+            # print(adv_loss)
             scaler.scale(adv_loss).backward()
-        # print(backward_loss.item())
-            
-        # print('after backward')
 
-        # configer.plus_one('iters')
-        # self.configer.plus_one('iters')
+            # for name, param in graph_net.named_parameters():
+            #     # if 'netD' in name:
+            #     print(f"Parameter: {name}, Gradient: {param.grad}")
 
-        # for name, param in graph_net.named_parameters():
-        #     if torch.isnan(param.grad).any() or torch.isinf(param.grad).any():
-        #         print("Graph NaN or Inf value found in gradients")
-
-        # for param in net.parameters():
-        #     if torch.isnan(param.grad).any() or torch.isinf(param.grad).any():
-        #         print("seg NaN or Inf value found in gradients")
+            # print(graph_net.named_parameters)
+            # print(graph_net.netD1.main.0.weight.grad)
+            scaler.step(gnn_optimD)
+            scaler.update()
+            torch.cuda.synchronize()
+            gnn_optimD.zero_grad()
         
+
+        scaler.scale(backward_loss).backward()
         if train_seg_or_gnn == SEG: 
             scaler.step(optim)
         else:
             scaler.step(gnn_optim)
-            scaler.step(gnn_optimD)
-            
+        
         scaler.update()
         torch.cuda.synchronize()
+ 
+        # scaler.scale(backward_loss).backward()
+        # if is_adv:
+        #     scaler.scale(adv_loss).backward()
+        # if train_seg_or_gnn == SEG: 
+        #     scaler.step(optim)
+        # else:
+        #     scaler.step(gnn_optim)
+        #     scaler.step(gnn_optimD)
+            
+        # scaler.update()
+        # torch.cuda.synchronize()
         if use_ema:
             ema_net.EMAUpdate(net.module)
         # print('synchronize')

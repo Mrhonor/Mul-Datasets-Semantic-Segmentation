@@ -813,7 +813,7 @@ class CrossDatasetsCELoss_AdvGNN(nn.Module):
             self.MSE_loss = torch.nn.MSELoss()
 
     def forward(self, preds, target, dataset_ids, is_adv=True, init_gnn_stage=False):
-        if self.configer.get('iter') > 100000:
+        if self.configer.get('iter') > 50000:
             CELoss = self.OhemCELoss
         else:
             CELoss = self.CELoss
@@ -967,15 +967,16 @@ class CrossDatasetsCELoss_AdvGNN_Only(nn.Module):
         
         # print("logits_max : {}, logits_min : {}".format(torch.max(logits), torch.min(logits)))
         
-        needed_adj = adj_matrix[:self.total_cats][:self.total_cats].view(-1)
+        needed_adj = adj_matrix[:self.total_cats, :self.total_cats]
+        needed_adj = needed_adj.contiguous().view(-1)
         
-        loss = self.MSE_loss(needed_adj, target)
+        loss = self.MSE_loss(needed_adj, target.view(-1))
         
         for i in range(0, self.n_datasets):
 
             # print("logits shape:", )
-            if not (dataset_ids == i).any():
-                continue
+            # if not (dataset_ids == i).any():
+            #     continue
             # print("remap_logits_max : {}, remap_logits_min : {}".format(torch.max(remap_logits), torch.min(remap_logits)))
             # a = target[dataset_ids==i].clone()
             # a[a == 255] = 0

@@ -10,13 +10,13 @@
     },
     "GNN": {
       "model_name": "learnable_topology_BGNN",
-      "nfeat": 1024,
+      "nfeat": 512,
       "nfeat_out": 512,
       "nfeat_adj": 256,
       "nhid": 64,
       "nheads": 8,
       "att_out_dim": 512,
-      "output_feat_dim": 256,
+      "output_feat_dim": 512,
       "adj_feat_dim": 128,
       "dropout_rate": 0.5,
       "unify_ratio": 1,
@@ -33,7 +33,7 @@
       "im_root": "/cpfs01/projects-SSD/pujianxiangmuzu_SSD/pujian/mr/datasets",
       "train_im_anns":"datasets/Cityscapes/train.txt",
       "val_im_anns":"datasets/Cityscapes/val.txt", 
-      "ims_per_gpu": 2,
+      "ims_per_gpu": 4,
       "eval_ims_per_gpu": 2,
       "label_names": ["road", "sidewalk", "building", "wall", "fence", "pole", "traffic light", "traffic sign", "vegetation", "terrain", "sky", "person", "rider", "car", "truck", "bus", "train", "motorcycle", "bicycle"]
     },
@@ -43,7 +43,7 @@
       "im_root": "/cpfs01/projects-SSD/pujianxiangmuzu_SSD/pujian/mr/datasets/CamVid",
       "train_im_anns":"datasets/CamVid/train.txt",
       "val_im_anns":"datasets/CamVid/test.txt", 
-      "ims_per_gpu": 2,
+      "ims_per_gpu": 4,
       "eval_ims_per_gpu": 2,
       "label_names": ["Sky", "Building", "Column_Pole", "Road", "Sidewalk", "Tree", "SignSymbol", "Fence", "Car", "Pedestrian", "Bicyclist", "Wall"]
     },
@@ -53,7 +53,7 @@
       "im_root": "/cpfs01/projects-SSD/pujianxiangmuzu_SSD/pujian/mr/datasets/",
       "train_im_anns":"datasets/sunrgbd/train.txt",
       "val_im_anns":"datasets/sunrgbd/test.txt", 
-      "ims_per_gpu": 2,
+      "ims_per_gpu": 4,
       "eval_ims_per_gpu": 1,
       "label_names": [ "bag", "wall", "floor", "cabinet", "bed", "chair", "sofa", "table", "door", "window", "bookshelf", "picture", "counter", "blinds", "desk", "shelves", "curtain", "dresser", "pillow", "mirror", "floor mat", "clothes", "ceiling", "books", "refridgerator", "television", "paper", "towel", "shower curtain", "box", "whiteboard", "person", "night stand", "toilet", "sink", "lamp", "bathtub"]
     },
@@ -63,7 +63,7 @@
       "im_root": "/cpfs01/projects-SSD/pujianxiangmuzu_SSD/pujian/mr/datasets/bdd100k",
       "train_im_anns":"datasets/bdd100k/train.txt",
       "val_im_anns":"datasets/bdd100k/val.txt", 
-      "ims_per_gpu": 2,
+      "ims_per_gpu": 4,
       "eval_ims_per_gpu": 2,
       "label_names": ["road", "sidewalk", "building", "wall", "fence", "pole", "traffic light", "traffic sign", "vegetation", "terrain", "sky", "person", "rider", "car", "truck", "bus", "train", "motorcycle", "bicycle"]
     },
@@ -73,7 +73,7 @@
       "im_root": "/cpfs01/projects-SSD/pujianxiangmuzu_SSD/pujian/mr/datasets/idd",
       "train_im_anns":"datasets/IDD/train.txt",
       "val_im_anns":"datasets/IDD/val.txt", 
-      "ims_per_gpu": 2,
+      "ims_per_gpu": 4,
       "eval_ims_per_gpu": 1,
       "label_names": ["person", "truck", "fence", "billboard", "bus", "out of roi", "curb", "obs-str-bar-fallback", "tunnel", "non-drivable fallback", "bridge", "road", "wall", "traffic sign", "trailer", "animal", "building", "sky", "drivable fallback", "guard rail", "bicycle", "traffic light", "polegroup", "motorcycle", "car", "parking", "fallback background", "rectification border", "train", "rider", "rail track", "sidewalk", "caravan", "pole", "vegetation", "autorickshaw", "vehicle fallback"]
     },
@@ -98,21 +98,21 @@
     },
     "use_ema": false,
     "lr": {
-      "lr_start": 5e-4,
+      "lr_start": 1e-3,
       "weight_decay": 1e-5,
       "warmup_iters": 1000,
       "fix_param_iters": 0,
-      "max_iter": 50000
+      "max_iter": 150000
     },
     "train": {
       "scales": [0.5, 1.0, 2.0],
       "cropsize": [512, 1024],
       "finetune": true,
-      "finetune_from": "res/celoss/seg_model_final.pth",
-      "graph_finetune": true,
-      "graph_finetune_from": "res/celoss/gnn_model_final.pth",
-      "seg_iters": 100000,
-      "gnn_iters": 30000,
+      "finetune_from": "res/clip/clip_model_final.pth",
+      "graph_finetune": false,
+      "graph_finetune_from": "res/celoss/ltbgnn_5_datasets_gnn.pth",
+      "seg_iters": 10000,
+      "gnn_iters": 20000,
       "joint_train": true
     },
     "val": {
@@ -120,7 +120,7 @@
       "cropsize": [512, 512]
     },
     "use_fp16": false,
-    "use_sync_bn": false,
+    "use_sync_bn": true,
     "contrast": {
       "use_contrast": true,
       "proj_dim": 512,

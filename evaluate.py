@@ -185,6 +185,7 @@ class MscEvalV0_AutoLink(object):
 
             label = label.squeeze(1).cuda()
             size = label.size()[-2:]
+            # print(size)
 
             scale = self.scales[0]
             sH, sW = int(scale * H), int(scale * W)
@@ -193,19 +194,18 @@ class MscEvalV0_AutoLink(object):
                     mode='bilinear', align_corners=True)
 
             im_sc = im_sc.cuda()
-            
+            all_logits = net(im_sc)
             for index in range(0, self.n_datasets):
                 if index == dataset_id:
                     if len(datasets_remap) <= index:
-                        datasets_remap.append(torch.diag(n_classes, n_classes).cuda().detach())
+                        datasets_remap.append(torch.eye(n_classes).cuda().detach())
                      
                     continue
                 
                 n_cats = self.configer.get('dataset'+str(index+1), 'n_cats')
                 this_data_hist = torch.zeros(n_classes, n_cats).cuda().detach()
 
-                logits = net(im_sc, dataset=dataset_id)
-                logits = F.interpolate(logits, size=size,
+                logits = F.interpolate(all_logits[index], size=size,
                         mode='bilinear', align_corners=True)
                 probs = torch.softmax(logits, dim=1)
                 preds = torch.argmax(probs, dim=1)
@@ -932,6 +932,7 @@ def find_unuse_label(configer, net, dl, n_classes, dataset_id):
     total_cats = 0
     net.aux_mode = 'train'
     unify_prototype = net.unify_prototype
+    # print(unify_prototype.shape)
     bipart_graph = net.bipartite_graphs
     for i in range(0, n_datasets):
         total_cats += configer.get("dataset"+str(i+1), "n_cats")
@@ -954,7 +955,8 @@ def find_unuse_label(configer, net, dl, n_classes, dataset_id):
         
             
         emb = net(im_sc, dataset=dataset_id)
-        logits = torch.einsum('bchw, nc -> bnhw', emb, unify_prototype)
+        
+        logits = torch.einsum('bchw, nc -> bnhw', emb['seg'], unify_prototype)
 
         logits = F.interpolate(logits, size=size,
                 mode='bilinear', align_corners=True)
@@ -971,6 +973,9 @@ def find_unuse_label(configer, net, dl, n_classes, dataset_id):
     # print(max_value)
     n_cat = configer.get(f'dataset{dataset_id+1}', 'n_cats')
     
+    # torch.set_printoptions(profile="full")
+    # print(hist)
+
     buckets = {}
     for index, j in enumerate(max_index):
         
@@ -986,16 +991,14 @@ def find_unuse_label(configer, net, dl, n_classes, dataset_id):
     for index, val in buckets.items():
         total_num = 0
         for i in val:
-            total_cats += hist[index][val]
+            total_num += hist[index][i]
         
         
-        if total_num == 0:
-            print("no right cats")
-        else:
+        if total_num != 0:
             for i in val:
-                rate = hist[index][val] / total_num
-                if rate < 1e-3:
-                    buckets[index].remove(val)
+                rate = hist[index][i] / total_num
+                if rate < 1e-4:
+                    buckets[index].remove(i)
 
 
     return buckets 
