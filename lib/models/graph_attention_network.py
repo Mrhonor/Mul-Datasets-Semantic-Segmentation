@@ -912,6 +912,7 @@ class Learnable_Topology_BGNN(nn.Module):
             self.km_algorithms = Munkres()
         # else:
             
+        self.beta = [ot.unif(self.dataset_cats[i]) for i in range(0, self.n_datasets)]
         
         
     def forward(self, x, pretraining=False):
@@ -1075,7 +1076,8 @@ class Learnable_Topology_BGNN(nn.Module):
 
         if init:
             # return feat_out[self.total_cats:], self.sep_bipartite_graphs(non_norm_adj_mI)
-            return feat_out[self.total_cats:], self.sep_bipartite_graphs_by_km(non_norm_adj_mI)
+            return feat_out[self.total_cats:], self.sep_bipartite_graphs_by_uot(non_norm_adj_mI)
+            # return feat_out[self.total_cats:], self.sep_bipartite_graphs_by_km(non_norm_adj_mI)
         else:
             return feat_out[self.total_cats:], self.pretrain_bipartite_graphs(x.is_cuda)
 
@@ -1126,17 +1128,64 @@ class Learnable_Topology_BGNN(nn.Module):
         for i in range(0, self.n_datasets):
             this_bipartite_graph = adj[cur_cat:cur_cat+self.dataset_cats[i], self.total_cats:]
             this_bipartite_graph = this_bipartite_graph.detach()
-
-            if self.beta is None:
-                self.beta = ot.unif(self.dataset_cats[i])
+            out_bipartite_graphs = torch.zeros_like(this_bipartite_graph)
 
             alpha = ot.unif(self.total_cats)
                 
-            Q_st = ot.unbalanced.sinkhorn_knopp_unbalanced(alpha, self.beta, this_bipartite_graph.cpu().numpy(), 
+            Q_st = ot.unbalanced.sinkhorn_knopp_unbalanced(alpha, self.beta[i], this_bipartite_graph.T.cpu().numpy(), 
                                                             reg=0.01, reg_m=0.5, stopThr=1e-4) 
             Q_st = torch.from_numpy(Q_st).float().cuda()
 
+            # make sum equals to 1
+            sum_pi = torch.sum(Q_st)
+            Q_st_bar = Q_st/sum_pi
+            
+            # # highly confident target samples selected by statistics mean
+            # if mode == 'minibatch':
+            #     Q_anchor = Q_st_bar[fake_size+fill_size:, :]
+            # if mode == 'all':
+            #     Q_anchor = Q_st_bar
 
+            # # confidence score w^t_i
+            wt_i, pseudo_label = torch.max(Q_st_bar, 1)
+            for col, index in enumerate(pseudo_label):
+                out_bipartite_graphs[index, col] = 1
+
+            for row in range(0, self.dataset_cats[i]):
+                if torch.sum(out_bipartite_graphs[row]) == 0:
+                    print("find miss one in UOT")
+                    sorted_tensor, indices = torch.sort(Q_st_bar.T[row])
+                    flag = False
+                    for _, ori_index in indices:
+                        map_lb = pseudo_label[ori_index]
+
+                        if torch.sum(out_bipartite_graphs[map_lb]) > 1:
+                            out_bipartite_graphs[row, ori_index] = 1
+                            out_bipartite_graphs[map_lb, ori_index] = 0
+                            flag = True
+                            break
+                    if flag is False:
+                        print("error don't find correct one")
+                    
+
+            # # confidence score w^s_j
+            # ws_j = torch.sum(Q_st_bar, 0)
+
+            # # filter by statistics mean
+            # uniformed_index = Q_st_bar.size(1)
+            # conf_label = torch.where(wt_i > 1/Q_st_bar.size(0), pseudo_label, uniformed_index)
+            # high_conf_label = conf_label.clone()
+            # source_private_label = torch.nonzero(ws_j < 1/Q_st_bar.size(1))
+            # for i in source_private_label:
+            #     high_conf_label = torch.where(high_conf_label == i, uniformed_index, high_conf_label)
+            # high_conf_label_id = torch.nonzero(high_conf_label != uniformed_index).view(-1)
+            
+            # for adaptive update
+            new_beta = torch.sum(Q_st_bar,0).cpu().numpy()
+
+
+            mu = 0.7
+            self.beta[i] = mu*self.beta[i] + (1-mu)*new_beta
             self.bipartite_graphs.append(out_bipartite_graphs) 
                 
             cur_cat += self.dataset_cats[i]
@@ -1184,7 +1233,7 @@ class Learnable_Topology_BGNN(nn.Module):
                     # print(param.dim())
                     # print(param)
                     # print(name)
-        print("!")
+
         wd_params, nowd_params, lr_mul_wd_params, lr_mul_nowd_params = [], [], [], []
         for name, child in self.named_children():
             print("out_name: ", name)
