@@ -249,11 +249,12 @@ def gen_image_features_single(configer, dls, gen_feature=False):
             print("dataset_id: ", dataset_id)
             for i, im_lb_list in enumerate(zip(img_lists[dataset_id], lb_lists[dataset_id])):
                 im_list, lb_list = im_lb_list
+                im_lb_zip_list = list(zip(im_list, lb_list))
                 if len(im_list) == 0:
                     print("why dataset_id: ", dataset_id)
                     continue
                 image_features_list = []
-                im_path, lb_path = random.choice(zip(im_list, lb_list))
+                im_path, lb_path = random.choice(im_lb_zip_list)
                 image = cv2.imread(im_path)
                 # print(lb_path[0])
                 lb = cv2.imread(lb_path[0], 0)

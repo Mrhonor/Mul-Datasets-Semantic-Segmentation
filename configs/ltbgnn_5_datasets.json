@@ -102,7 +102,7 @@
       "weight_decay": 1e-5,
       "warmup_iters": 1000,
       "fix_param_iters": 0,
-      "max_iter": 150000
+      "max_iter": 100000
     },
     "train": {
       "scales": [0.5, 1.0, 2.0],

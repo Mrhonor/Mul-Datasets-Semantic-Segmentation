@@ -428,7 +428,7 @@ def train():
     init_stage = True
     init_gnn_stage = False
     fix_graph = False
-    train_seg_or_gnn = SEG
+    train_seg_or_gnn = GNN
     GNN_INIT = configer.get('train', 'graph_finetune')
 
     for i in range(starti, configer.get('lr','max_iter') + starti):
@@ -548,7 +548,7 @@ def train():
                         seg_out = net(im)
 
                 unify_prototype, bi_graphs, adv_out = graph_net(graph_node_features)
-                print(torch.norm(unify_prototype[0][0], p=2))
+                # print(torch.norm(unify_prototype[0][0], p=2))
                 seg_out['unify_prototype'] = unify_prototype
             else:
                 is_adv = False
@@ -622,11 +622,12 @@ def train():
         # print(backward_loss)
 
         if is_adv:
-            scaler.scale(adv_loss).backward()
-            scaler.step(gnn_optimD)
-            scaler.update()
-            torch.cuda.synchronize()
-            gnn_optimD.zero_grad()
+            backward_loss += adv_loss
+            # scaler.scale(adv_loss).backward()
+            # scaler.step(gnn_optimD)
+            # scaler.update()
+            # torch.cuda.synchronize()
+            # gnn_optimD.zero_grad()
         
 
         scaler.scale(backward_loss).backward()
@@ -634,6 +635,7 @@ def train():
             scaler.step(optim)
         else:
             scaler.step(gnn_optim)
+            scaler.step(gnn_optimD)
         
         scaler.update()
         torch.cuda.synchronize()

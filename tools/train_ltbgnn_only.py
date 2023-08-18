@@ -642,12 +642,12 @@ def train():
             gnn_optim.zero_grad()
             gnn_optimD.zero_grad()
             if is_distributed():
-                net.module.set_unify_prototype(unify_prototype)
-                net.module.set_bipartite_graphs(bi_graphs)
+                # net.module.set_unify_prototype(unify_prototype)
+                # net.module.set_bipartite_graphs(bi_graphs)
                 heads, mious = eval_model_func(configer, net.module)
             else:
-                net.set_unify_prototype(unify_prototype)
-                net.set_bipartite_graphs(bi_graphs)
+                # net.set_unify_prototype(unify_prototype)
+                # net.set_bipartite_graphs(bi_graphs)
                 heads, mious = eval_model_func(configer, net)
                 
             writer.add_scalars("mious",{"Cityscapes":mious[CITY_ID],"Camvid":mious[CAM_ID]},configer.get("iter")+1)
