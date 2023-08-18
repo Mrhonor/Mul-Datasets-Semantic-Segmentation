@@ -7,6 +7,7 @@ from lib.module.sinkhorn import solve_optimal_transport
 import numpy as np
 import scipy.sparse as sp
 from munkres import Munkres
+import ot
 
 class GCN(nn.Module):
     def __init__(self, infeat, outfeat):
@@ -1099,11 +1100,11 @@ class Learnable_Topology_BGNN(nn.Module):
                         max_index = torch.argmax(this_bipartite_graph[:,j])
                         out_bipartite_graphs[max_index, j] = 1
             else:
-                # print('datasets id : ', i)
+
                 res = solve_optimal_transport(this_bipartite_graph[None], 100, -10)
-                # print(res)
+
                 indexes = res['matches1']
-                # print(this_bipartite_graph)
+
                 out_bipartite_graphs = torch.zeros_like(this_bipartite_graph)
                 for j, idx in enumerate(indexes[0]):
                     if idx == -1:
@@ -1111,9 +1112,30 @@ class Learnable_Topology_BGNN(nn.Module):
                         out_bipartite_graphs[max_index, j] = 1
                     else:
                         out_bipartite_graphs[idx, j] = 1
-                # torch.set_printoptions(profile="full")
-                # print(out_bipartite_graphs)
-                # torch.set_printoptions(profile="default")
+
+
+            self.bipartite_graphs.append(out_bipartite_graphs) 
+                
+            cur_cat += self.dataset_cats[i]
+        
+        return self.bipartite_graphs 
+    
+    def sep_bipartite_graphs_by_uot(self, adj):
+        self.bipartite_graphs = []
+        cur_cat = 0
+        for i in range(0, self.n_datasets):
+            this_bipartite_graph = adj[cur_cat:cur_cat+self.dataset_cats[i], self.total_cats:]
+            this_bipartite_graph = this_bipartite_graph.detach()
+
+            if self.beta is None:
+                self.beta = ot.unif(self.dataset_cats[i])
+
+            alpha = ot.unif(self.total_cats)
+                
+            Q_st = ot.unbalanced.sinkhorn_knopp_unbalanced(alpha, self.beta, this_bipartite_graph.cpu().numpy(), 
+                                                            reg=0.01, reg_m=0.5, stopThr=1e-4) 
+            Q_st = torch.from_numpy(Q_st).float().cuda()
+
 
             self.bipartite_graphs.append(out_bipartite_graphs) 
                 
