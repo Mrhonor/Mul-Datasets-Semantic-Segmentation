@@ -301,7 +301,7 @@ def gen_graph_node_feature(configer):
     for i in range(0, configer.get('n_datasets')):
         file_name += '_'+str(configer.get('dataset'+str(i+1), 'data_reader'))
     
-    file_name += '-2.pt'
+    file_name += '.pt'
 
     if osp.exists(file_name):
         graph_node_features = torch.load(file_name)
@@ -315,8 +315,8 @@ def gen_graph_node_feature(configer):
         img_feat_tensor = torch.cat(img_feature_vecs, dim=0)
         print(img_feat_tensor.shape)
         print("gen_img_features")
-        # graph_node_features = torch.cat([text_feat_tensor, img_feat_tensor], dim=1)
-        graph_node_features = (text_feat_tensor+img_feat_tensor)/2
+        graph_node_features = torch.cat([text_feat_tensor, img_feat_tensor], dim=1)
+        # graph_node_features = (text_feat_tensor+img_feat_tensor)/2
         print(graph_node_features.shape)
         torch.save(graph_node_features.clone(), file_name)
     
@@ -338,6 +338,20 @@ def gen_graph_node_feature_single(configer, dls, gen_feature=False):
 
     return graph_node_features, lbpth_list
 
+def gen_graph_node_feature_storage_for_single(configer, dls, gen_feature=False):
+
+    
+
+    text_feature_vecs = get_encode_lb_vec(configer)
+    text_feat_tensor = torch.cat(text_feature_vecs, dim=0)
+
+    img_feature_vecs, lbpth_list = gen_image_features_single(configer, dls, gen_feature)
+    img_feat_tensor = torch.cat(img_feature_vecs, dim=0)
+
+    # graph_node_features = torch.cat([text_feat_tensor, img_feat_tensor], dim=1)
+    graph_node_features = (text_feat_tensor+img_feat_tensor)/2
+
+    return graph_node_features, lbpth_list
 
 
 if __name__ == "__main__":

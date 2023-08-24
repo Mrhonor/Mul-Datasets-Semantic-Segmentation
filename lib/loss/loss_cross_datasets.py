@@ -798,10 +798,13 @@ class CrossDatasetsCELoss_AdvGNN(nn.Module):
         self.max_iter = self.configer.get('lr', 'max_iter')
         # self.seg_gnn_alter_iters = self.configer.get('train', 'seg_gnn_alter_iters')
         self.gnn_iters = self.configer.get('train', 'gnn_iters')
-        
+        self.total_cats = 0
         self.n_cats = []
         for i in range(1, self.n_datasets+1):
-            self.n_cats.append(self.configer.get('dataset'+str(i), 'n_cats'))
+            this_cat = self.configer.get('dataset'+str(i), 'n_cats')
+            self.n_cats.append(this_cat)
+            self.total_cats += this_cat
+ 
 
         self.CELoss = nn.CrossEntropyLoss(ignore_index=255)
         self.OhemCELoss = OhemCELoss(0.7, ignore_lb=255)
@@ -821,6 +824,10 @@ class CrossDatasetsCELoss_AdvGNN(nn.Module):
         logits = preds['seg']
         unify_prototype = preds['unify_prototype']
         bi_graphs = preds['bi_graphs']
+        adj_matrix = None
+        if 'adj' in preds:
+            adj_matrix = preds['adj']
+            pretrain_bipart_graph = preds['pretrain_bipart_graph']
         
         if is_adv:
             adv_out = preds['adv_out']
@@ -875,6 +882,15 @@ class CrossDatasetsCELoss_AdvGNN(nn.Module):
                         loss = CELoss(remap_logits, target[dataset_ids==i])
                     else:
                         loss = loss + CELoss(remap_logits, target[dataset_ids==i])
+
+            if init_gnn_stage and adj_matrix is not None:
+                needed_adj = adj_matrix[:self.total_cats, :self.total_cats]
+                needed_adj = needed_adj.contiguous().view(-1)
+                if loss is None:
+                    loss = self.MSE_loss(needed_adj, pretrain_bipart_graph.view(-1))
+                else:
+                    loss += self.MSE_loss(needed_adj, pretrain_bipart_graph.view(-1))
+
 
             if is_adv and self.with_spa:
                 spa_loss = self.spa_loss_weight * torch.pow(torch.norm(bi_graphs[i], p='fro'), 2)

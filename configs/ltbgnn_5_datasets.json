@@ -10,7 +10,7 @@
     },
     "GNN": {
       "model_name": "learnable_topology_BGNN",
-      "nfeat": 512,
+      "nfeat": 1024,
       "nfeat_out": 512,
       "nfeat_adj": 256,
       "nhid": 64,
@@ -102,7 +102,7 @@
       "weight_decay": 1e-5,
       "warmup_iters": 1000,
       "fix_param_iters": 0,
-      "max_iter": 100000
+      "max_iter": 300000
     },
     "train": {
       "scales": [0.5, 1.0, 2.0],
@@ -111,8 +111,8 @@
       "finetune_from": "res/clip/clip_model_final.pth",
       "graph_finetune": false,
       "graph_finetune_from": "res/celoss/ltbgnn_5_datasets_gnn.pth",
-      "seg_iters": 10000,
-      "gnn_iters": 20000,
+      "seg_iters": 30000,
+      "gnn_iters": 30000,
       "joint_train": true
     },
     "val": {

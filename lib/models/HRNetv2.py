@@ -765,9 +765,9 @@ class HRNet_W48_GNN(nn.Module):
             return remap_logits
         else:
             logits = torch.einsum('bchw, nc -> bnhw', emb, self.unify_prototype)
-            # logits = torch.einsum('bchw, nc -> bnhw', logits, self.bipartite_graphs[dataset])
-            logits = F.interpolate(logits, size=(logits.size(2)*4, logits.size(3)*4), mode="bilinear", align_corners=True)
             logits = torch.einsum('bchw, nc -> bnhw', logits, self.bipartite_graphs[dataset])
+            logits = F.interpolate(logits, size=(logits.size(2)*4, logits.size(3)*4), mode="bilinear", align_corners=True)
+            
             pred = logits.argmax(dim=1)
             
             return pred

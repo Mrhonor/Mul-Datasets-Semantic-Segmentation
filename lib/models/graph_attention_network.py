@@ -1076,8 +1076,8 @@ class Learnable_Topology_BGNN(nn.Module):
 
         if init:
             # return feat_out[self.total_cats:], self.sep_bipartite_graphs(non_norm_adj_mI)
-            return feat_out[self.total_cats:], self.sep_bipartite_graphs_by_uot(non_norm_adj_mI)
-            # return feat_out[self.total_cats:], self.sep_bipartite_graphs_by_km(non_norm_adj_mI)
+            # return feat_out[self.total_cats:], self.sep_bipartite_graphs_by_uot(non_norm_adj_mI)
+            return feat_out[self.total_cats:], self.sep_bipartite_graphs_by_km(non_norm_adj_mI)
         else:
             return feat_out[self.total_cats:], self.pretrain_bipartite_graphs(x.is_cuda)
 
@@ -1134,11 +1134,14 @@ class Learnable_Topology_BGNN(nn.Module):
                 
             Q_st = ot.unbalanced.sinkhorn_knopp_unbalanced(alpha, self.beta[i], this_bipartite_graph.T.cpu().numpy(), 
                                                             reg=0.01, reg_m=0.5, stopThr=1e-4) 
+
             Q_st = torch.from_numpy(Q_st).float().cuda()
 
             # make sum equals to 1
             sum_pi = torch.sum(Q_st)
             Q_st_bar = Q_st/sum_pi
+            # print(Q_st_bar.shape)
+            # print(out_bipartite_graphs.shape)
             
             # # highly confident target samples selected by statistics mean
             # if mode == 'minibatch':
@@ -1148,15 +1151,17 @@ class Learnable_Topology_BGNN(nn.Module):
 
             # # confidence score w^t_i
             wt_i, pseudo_label = torch.max(Q_st_bar, 1)
+            # print(pseudo_label)
             for col, index in enumerate(pseudo_label):
                 out_bipartite_graphs[index, col] = 1
 
             for row in range(0, self.dataset_cats[i]):
                 if torch.sum(out_bipartite_graphs[row]) == 0:
-                    print("find miss one in UOT")
+                    # print(f'find miss one in UOT, datasets:{i}, row:{row}')
                     sorted_tensor, indices = torch.sort(Q_st_bar.T[row])
+                    # print(indices)
                     flag = False
-                    for _, ori_index in indices:
+                    for ori_index in indices:
                         map_lb = pseudo_label[ori_index]
 
                         if torch.sum(out_bipartite_graphs[map_lb]) > 1:

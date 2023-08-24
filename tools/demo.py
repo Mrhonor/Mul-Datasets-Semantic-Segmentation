@@ -22,10 +22,10 @@ np.random.seed(123)
 # args
 parse = argparse.ArgumentParser()
 
-parse.add_argument('--weight_path', type=str, default='res/celoss/ltbgnn_5_datasets_seg.pth',)
-parse.add_argument('--gnn_weight_path', type=str, default='res/celoss/ltbgnn_5_datasets_gnn.pth',)
+parse.add_argument('--weight_path', type=str, default='res/celoss/seg_model_final.pth',)
+parse.add_argument('--gnn_weight_path', type=str, default='res/celoss/gnn_model_final.pth',)
 parse.add_argument('--config', dest='config', type=str, default='configs/ltbgnn_5_datasets.json',)
-parse.add_argument('--img_path', dest='img_path', type=str, default='img/berlin_000011_000019_leftImg8bit.png',)
+parse.add_argument('--img_path', dest='img_path', type=str, default='img/berlin_000037_000019_leftImg8bit.png',)
 args = parse.parse_args()
 # cfg = set_cfg_from_file(args.config)
 configer = Configer(configs=args.config)
@@ -664,8 +664,9 @@ class E2EModel(torch.nn.Module):
         graph_net.eval()
         graph_node_features = gen_graph_node_feature(configer)
         unify_prototype, bi_graphs = graph_net.get_optimal_matching(graph_node_features, init=True) 
+        # unify_prototype, bi_graphs, adv_out = graph_net(graph_node_features)
 
-        print(bi_graphs[0])
+        # print(bi_graphs[0])
         # print(bi_graphs[0][18])
 
         self.net.set_unify_prototype(unify_prototype)

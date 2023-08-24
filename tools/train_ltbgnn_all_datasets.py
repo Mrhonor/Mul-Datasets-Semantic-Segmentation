@@ -434,6 +434,9 @@ def train():
     for i in range(starti, configer.get('lr','max_iter') + starti):
         configer.plus_one('iter')
         alter_iter += 1
+        if i > 10000:
+            init_gnn_stage = False
+
 
         # try:
         #     im_lb, dataset_lbs = next(dl_iter)
@@ -548,7 +551,8 @@ def train():
                         seg_out = net(im)
 
                 unify_prototype, bi_graphs, adv_out = graph_net(graph_node_features)
-                # print(torch.norm(unify_prototype[0][0], p=2))
+                # if i % 50 == 0:
+                #     print(torch.norm(unify_prototype[0][0], p=2))
                 seg_out['unify_prototype'] = unify_prototype
             else:
                 is_adv = False
@@ -726,12 +730,12 @@ def train():
                 torch.save(seg_state, seg_save_pth)
 
             # if fix_graph == False:
-            # with torch.no_grad():
-            #     # input_feats = torch.cat([graph_node_features, graph_net.unify_node_features], dim=0)
-            #     if is_distributed():
-            #         unify_prototype, bi_graphs = graph_net.module.get_optimal_matching(graph_node_features)
-            #     else:
-            #         unify_prototype, bi_graphs = graph_net.get_optimal_matching(graph_node_features) 
+            with torch.no_grad():
+                # input_feats = torch.cat([graph_node_features, graph_net.unify_node_features], dim=0)
+                if is_distributed():
+                    unify_prototype, bi_graphs = graph_net.module.get_optimal_matching(graph_node_features)
+                else:
+                    unify_prototype, bi_graphs = graph_net.get_optimal_matching(graph_node_features) 
                 
             if use_dataset_aux_head and i < aux_iter:
                 eval_model_func = eval_model_aux

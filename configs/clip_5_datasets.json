@@ -1,5 +1,5 @@
 {
-    "model_name": "hrnet_w48_clip",
+    "model_name": "hrnet_w48_gnn",
     "aux_mode": "train",
     "n_datasets": 5,
     "hrnet": {
@@ -10,7 +10,7 @@
     },
     "GNN": {
       "model_name": "learnable_topology_BGNN",
-      "nfeat": 512,
+      "nfeat": 1024,
       "nfeat_out": 512,
       "nfeat_adj": 256,
       "nhid": 64,
@@ -130,7 +130,7 @@
       "finetune": true,
       "finetune_from": "res/clip/clip_model_final.pth",
       "graph_finetune": false,
-      "graph_finetune_from": "res/celoss/pretrain_graph_model.pth",
+      "graph_finetune_from": "res/celoss/gnn_model_final.pth",
       "seg_iters": 20000,
       "gnn_iters": 30000,
       "joint_train": true

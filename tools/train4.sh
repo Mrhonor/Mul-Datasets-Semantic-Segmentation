@@ -1,2 +1,2 @@
 export CUDA_VISIBLE_DEVICES=1
-python  tools/train_ltbgnn_only_pretrain.py --config configs/clip_5_datasets_2.json
+python  tools/train_ltbgnn_all_datasets_segonly.py --config configs/ltbgnn_5_datasets_segonly.json
