@@ -82,7 +82,7 @@ def set_model(configer):
 
     if configer.get('train', 'finetune'):
         logger.info(f"load pretrained weights from {configer.get('train', 'finetune_from')}")
-        net.load_state_dict(torch.load("res/celoss/ltbgnn_5_datasets_seg.pth", map_location='cpu'), strict=False)
+        net.load_state_dict(torch.load("res/celoss/seg_model_final.pth", map_location='cpu'), strict=False)
 
         
     if configer.get('use_sync_bn'): 
@@ -101,7 +101,7 @@ def set_graph_model(configer):
     #     logger.info(f"load pretrained weights from {configer.get('train', 'graph_finetune_from')}")
     #     net.load_state_dict(torch.load(configer.get('train', 'graph_finetune_from'), map_location='cpu'), strict=True)
     # state = torch.load("res/celoss/ltbgnn_5_datasets_gnn.pth", map_location='cpu')
-    state = torch.load("res/celoss/ltbgnn_5_datasets_gnn.pth", map_location='cpu')
+    state = torch.load("res/celoss/gnn_model_final.pth", map_location='cpu')
     # print(state['adj_matrix'])
 
     net.load_state_dict(state, strict=True) 

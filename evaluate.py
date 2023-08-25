@@ -159,7 +159,10 @@ class MscEvalV0_Contrast(object):
             dist.all_reduce(hist, dist.ReduceOp.SUM)
         ious = hist.diag() / (hist.sum(dim=0) + hist.sum(dim=1) - hist.diag())
         print(ious)
-        miou = np.nanmean(ious.detach().cpu().numpy())
+        if self.configer.get('dataset'+str(dataset_id+1), 'data_reader') == 'Idd':
+            mIOU = np.nansum(ious.detach().cpu().numpy()) / 33
+        else:
+            miou = np.nanmean(ious.detach().cpu().numpy())
         return miou.item()
 
 class MscEvalV0_AutoLink(object):
@@ -176,10 +179,10 @@ class MscEvalV0_AutoLink(object):
         # hist = torch.zeros(n_classes, n_classes).cuda().detach()
         datasets_remap = []
         # hist = torch.zeros(n_classes, n_classes).cuda().detach()
-        if dist.is_initialized() and dist.get_rank() != 0:
-            diter = enumerate(dl)
-        else:
-            diter = enumerate(tqdm(dl))
+        # if dist.is_initialized() and dist.get_rank() != 0:
+        diter = enumerate(dl)
+        # else:
+        #     diter = enumerate(tqdm(dl))
         for i, (imgs, label) in diter:
             N, _, H, W = label.shape
 

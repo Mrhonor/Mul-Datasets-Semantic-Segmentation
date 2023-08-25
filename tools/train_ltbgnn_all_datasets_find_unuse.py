@@ -58,7 +58,7 @@ def parse_args():
     parse.add_argument('--local_rank', dest='local_rank', type=int, default=-1,)
     parse.add_argument('--port', dest='port', type=int, default=16853,)
     parse.add_argument('--finetune_from', type=str, default=None,)
-    parse.add_argument('--config', dest='config', type=str, default='configs/ltbgnn_5_datasets.json',)
+    parse.add_argument('--config', dest='config', type=str, default='configs/ltbgnn_5_datasets_segonly.json',)
     return parse.parse_args()
 
 # 使用绝对路径
@@ -387,7 +387,7 @@ def train():
         warmup_ratio=0.1, warmup='exp', last_epoch=-1,)
 
     lr_schdr = WarmupPolyLrScheduler(optim, power=0.9,
-        max_iter=configer.get('train','seg_iters'), warmup_iter=configer.get('lr','warmup_iters'),
+        max_iter=configer.get('lr','max_iter'), warmup_iter=configer.get('lr','warmup_iters'),
         warmup_ratio=0.1, warmup='exp', last_epoch=-1,)
 
     # 两个数据集分别处理
@@ -484,23 +484,23 @@ def train():
         lb = torch.squeeze(lb, 1)
 
 
-        if train_seg_or_gnn == SEG and alter_iter > configer.get('train', 'seg_iters'):
-            alter_iter = 0
-            train_seg_or_gnn = GNN
-            gnn_lr_schdr = WarmupPolyLrScheduler(gnn_optim, power=0.9,
-                max_iter=configer.get('train','gnn_iters'), warmup_iter=configer.get('lr','warmup_iters'),
-                warmup_ratio=0.1, warmup='exp', last_epoch=-1,)
+        # if train_seg_or_gnn == SEG and alter_iter > configer.get('train', 'seg_iters'):
+        #     alter_iter = 0
+        #     train_seg_or_gnn = GNN
+        #     gnn_lr_schdr = WarmupPolyLrScheduler(gnn_optim, power=0.9,
+        #         max_iter=configer.get('train','gnn_iters'), warmup_iter=configer.get('lr','warmup_iters'),
+        #         warmup_ratio=0.1, warmup='exp', last_epoch=-1,)
 
-            gnn_lr_schdrD = WarmupPolyLrScheduler(gnn_optimD, power=0.9,
-                max_iter=configer.get('train','gnn_iters'), warmup_iter=configer.get('lr','warmup_iters'),
-                warmup_ratio=0.1, warmup='exp', last_epoch=-1,)
+        #     gnn_lr_schdrD = WarmupPolyLrScheduler(gnn_optimD, power=0.9,
+        #         max_iter=configer.get('train','gnn_iters'), warmup_iter=configer.get('lr','warmup_iters'),
+        #         warmup_ratio=0.1, warmup='exp', last_epoch=-1,)
 
-        elif train_seg_or_gnn == GNN and alter_iter >  configer.get('train', 'gnn_iters'):
-            alter_iter = 0
-            train_seg_or_gnn = SEG
-            lr_schdr = WarmupPolyLrScheduler(optim, power=0.9,
-                max_iter=configer.get('train','seg_iters'), warmup_iter=configer.get('lr','warmup_iters'),
-                warmup_ratio=0.1, warmup='exp', last_epoch=-1,)
+        # elif train_seg_or_gnn == GNN and alter_iter >  configer.get('train', 'gnn_iters'):
+        #     alter_iter = 0
+        #     train_seg_or_gnn = SEG
+        #     lr_schdr = WarmupPolyLrScheduler(optim, power=0.9,
+        #         max_iter=configer.get('train','seg_iters'), warmup_iter=configer.get('lr','warmup_iters'),
+        #         warmup_ratio=0.1, warmup='exp', last_epoch=-1,)
 
         # net.eval()
         # with torch.no_grad():
@@ -592,19 +592,19 @@ def train():
                                 
                             bi_graphs.append(this_bi_graph.cuda())
 
-                        if not init_stage:
-                            init_gnn_stage = False
-                            if is_distributed():
-                                net.module.set_unify_prototype(unify_prototype)
-                                net.module.set_bipartite_graphs(bi_graphs)
-                            else:
-                                net.set_unify_prototype(unify_prototype)
-                                net.set_bipartite_graphs(bi_graphs)
+                        # if not init_stage:
+                        #     init_gnn_stage = False
+                        #     if is_distributed():
+                        #         net.module.set_unify_prototype(unify_prototype)
+                        #         net.module.set_bipartite_graphs(bi_graphs)
+                        #     else:
+                        #         net.set_unify_prototype(unify_prototype)
+                        #         net.set_bipartite_graphs(bi_graphs)
+                        # else:
+                        if is_distributed():
+                            net.module.set_bipartite_graphs(bi_graphs)
                         else:
-                            if is_distributed():
-                                net.module.set_bipartite_graphs(bi_graphs)
-                            else:
-                                net.set_bipartite_graphs(bi_graphs)                            
+                            net.set_bipartite_graphs(bi_graphs)                            
 
                 
                 seg_out = net(im)
@@ -748,13 +748,13 @@ def train():
             gnn_optim.zero_grad()
             gnn_optimD.zero_grad()
             if is_distributed():
-                net.module.set_unify_prototype(unify_prototype)
-                net.module.set_bipartite_graphs(bi_graphs)
+                # net.module.set_unify_prototype(unify_prototype)
+                # net.module.set_bipartite_graphs(bi_graphs)
                 torch.cuda.empty_cache()
                 heads, mious = eval_model_func(configer, net.module)
             else:
-                net.set_unify_prototype(unify_prototype)
-                net.set_bipartite_graphs(bi_graphs)
+                # net.set_unify_prototype(unify_prototype)
+                # net.set_bipartite_graphs(bi_graphs)
                 torch.cuda.empty_cache()
                 heads, mious = eval_model_func(configer, net)
                 

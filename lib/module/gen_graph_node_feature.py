@@ -42,7 +42,7 @@ def get_img_for_everyclass(configer):
             im = im[0]
             lb = lb.squeeze()
             for label_id in range(0, num_classes[i]):
-                if len(this_img_lists[label_id]) < 50 and (lb == label_id).any():
+                if len(this_img_lists[label_id]) < 100 and (lb == label_id).any():
                     this_img_lists[label_id].append(im)
                     this_lb_lists[label_id].append(lbpth)
                     
@@ -280,6 +280,52 @@ def gen_image_features_single(configer, dls, gen_feature=False):
     
     return out_features, [img_lists, lb_lists]
 
+def gen_image_features_storage(configer):
+    img_lists, lb_lists = get_img_for_everyclass(configer)
+    
+    n_datasets = configer.get('n_datasets')
+    to_tensor = T.ToTensor(
+                mean=(0.48145466, 0.4578275, 0.40821073), # clip , rgb
+                std=(0.26862954, 0.26130258, 0.27577711),
+            )
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+    model, _ = clip.load("ViT-B/32", device=device)
+    with torch.no_grad():
+        out_features = []
+        for dataset_id in range(0, n_datasets):
+            print("dataset_id: ", dataset_id)
+            for i, im_lb_list in enumerate(zip(img_lists[dataset_id], lb_lists[dataset_id])):
+                im_list, lb_list = im_lb_list
+                if len(im_list) == 0:
+                    print("why dataset_id: ", dataset_id)
+                    continue
+                image_features_list = []
+                for im_path, lb_path in zip(im_list, lb_list):
+                    image = cv2.imread(im_path)
+                    # print(lb_path[0])
+                    lb = cv2.imread(lb_path[0], 0)
+                    if image is None:
+                        print(im_path)
+                        continue
+                    # lb = lb.numpy()
+                    cropped_img = crop_image_by_label_value(image, lb, i)
+                        
+                    im_lb = dict(im=cropped_img, lb=lb)
+                    im_lb = to_tensor(im_lb)
+                    img = im_lb['im'].cuda()
+                    img = F.interpolate(img.unsqueeze(0), size=(224, 224))
+                    image_features = model.encode_image(img).type(torch.float32)
+                    image_features_list.append(image_features)
+
+                # print("im_lb_list: ", im_lb_list)
+                img_feat = torch.cat(image_features_list, dim=0)
+                # mean_feats = torch.mean(img_feat, dim=0, keepdim=True)
+                # print(mean_feats.shape)
+                out_features.append(img_feat) 
+    # out_features = torch.cat(out_features, dim=0)    
+    return out_features
+
+
 def get_encode_lb_vec(configer):
     n_datasets = configer.get('n_datasets')
     text_feature_vecs = []
@@ -338,31 +384,46 @@ def gen_graph_node_feature_single(configer, dls, gen_feature=False):
 
     return graph_node_features, lbpth_list
 
-def gen_graph_node_feature_storage_for_single(configer, dls, gen_feature=False):
+def gen_graph_node_feature_storage(configer):
 
+    # text_feature_vecs = get_encode_lb_vec(configer)
+    # text_feat_tensor = torch.cat(text_feature_vecs, dim=0)
+    n_datasets = configer.get("n_datasets")
+
+    if not osp.exists(configer.get('res_save_pth')): os.makedirs(configer.get('res_save_pth'))
     
-
-    text_feature_vecs = get_encode_lb_vec(configer)
-    text_feat_tensor = torch.cat(text_feature_vecs, dim=0)
-
-    img_feature_vecs, lbpth_list = gen_image_features_single(configer, dls, gen_feature)
-    img_feat_tensor = torch.cat(img_feature_vecs, dim=0)
-
-    # graph_node_features = torch.cat([text_feat_tensor, img_feat_tensor], dim=1)
-    graph_node_features = (text_feat_tensor+img_feat_tensor)/2
-
-    return graph_node_features, lbpth_list
+    file_name = configer.get('res_save_pth') + 'img_feature_vecs'+str(configer.get('n_datasets'))
+    for i in range(0, configer.get('n_datasets')):
+        file_name += '_'+str(configer.get('dataset'+str(i+1), 'data_reader'))
+    
+    # file_name += '.pt'
+    out_features = []
+    for i in range(0, n_datasets):
+        this_file_name = file_name + f'_dataset{i}.pt' 
+        if osp.exists(this_file_name):
+            img_feature_vecs = torch.load(this_file_name)
+            out_features.append(img_feature_vecs)
+        else:
+            print("gen_img_feature_vecs")
+            out_features = gen_image_features_storage(configer)
+            
+            _ = [torch.save(img_feature_vecs.clone(), this_file_name) for idx, img_feature_vecs in enumerate(out_features)]
+            break
+    
+    return out_features 
 
 
 if __name__ == "__main__":
-    configer = Configer(configs="configs/gnn_city_cam_a2d2.json")
-    graph_node_features = gen_graph_node_feature(configer) 
-    print(graph_node_features.shape)
-    norm_adj_feat = F.normalize(graph_node_features, p=2, dim=1)
-    similar_matrix = torch.einsum('nc, mc -> nm', norm_adj_feat, norm_adj_feat)
-    print("similar_matrix_max:", torch.max(similar_matrix))
-    print("similar_matrix_min:", torch.min(similar_matrix))
-    torch.set_printoptions(profile="full")
-    print(similar_matrix)
+    configer = Configer(configs="configs/ltbgnn_5_datasets.json")
+    img_feature_vecs = gen_graph_node_feature_storage(configer) 
+    print(img_feature_vecs)
+
+    # print(graph_node_features.shape)
+    # norm_adj_feat = F.normalize(graph_node_features, p=2, dim=1)
+    # similar_matrix = torch.einsum('nc, mc -> nm', norm_adj_feat, norm_adj_feat)
+    # print("similar_matrix_max:", torch.max(similar_matrix))
+    # print("similar_matrix_min:", torch.min(similar_matrix))
+    # torch.set_printoptions(profile="full")
+    # print(similar_matrix)
     
     
