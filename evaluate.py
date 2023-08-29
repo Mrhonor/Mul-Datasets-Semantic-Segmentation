@@ -160,7 +160,7 @@ class MscEvalV0_Contrast(object):
         ious = hist.diag() / (hist.sum(dim=0) + hist.sum(dim=1) - hist.diag())
         print(ious)
         if self.configer.get('dataset'+str(dataset_id+1), 'data_reader') == 'Idd':
-            mIOU = np.nansum(ious.detach().cpu().numpy()) / 33
+            miou = np.nansum(ious.detach().cpu().numpy()) / 33
         else:
             miou = np.nanmean(ious.detach().cpu().numpy())
         return miou.item()

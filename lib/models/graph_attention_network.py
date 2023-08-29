@@ -874,6 +874,10 @@ class Learnable_Topology_BGNN(nn.Module):
 
         self.linear_before = nn.Linear(self.nfeat, self.nfeat_out)
         self.linear_adj = nn.Linear(self.nfeat_out, self.nfeat_adj)
+        if self.calc_bipartite:
+            self.linear_adj2 = nn.Linear(self.adj_feat_dim, self.adj_feat_dim)
+            
+            
         self.relu = nn.ReLU()
 
         self.GCN_layer1 = GCN(self.nfeat_out, self.nfeat_out)
@@ -936,8 +940,8 @@ class Learnable_Topology_BGNN(nn.Module):
         g_out_fake_2 = self.netD2(feat_gcn2)
         
         feat3 = F.elu(feat_gcn2 + before_gcn2_x)
-        feat3_drop = F.dropout(feat3, self.dropout_rate, training=self.training)
-        feat_out = self.linear1(feat3_drop)
+        # feat3_drop = F.dropout(feat3, self.dropout_rate, training=self.training)
+        feat_out = self.linear1(feat3)
 
         adv_out = {}
         adv_out['ADV1'] = [out_real_1, out_fake_1, g_out_fake_1]
@@ -945,12 +949,13 @@ class Learnable_Topology_BGNN(nn.Module):
         if pretraining:
             return feat_out[self.total_cats:], self.sep_bipartite_graphs(non_norm_adj_mI), adv_out, non_norm_adj_mI
         elif self.calc_bipartite:
-            arch_x = self.relu(feat3_drop + feat_out)
+            arch_x = self.relu(feat3 + feat_out)
             arch_x = self.linear2(arch_x)
+            _, non_norm_adj_mI_after = self.calc_adjacency_matrix(arch_x)
             
-            return feat_out[self.total_cats:], self.calc_bipartite_graph(arch_x), adv_out
+            return feat_out[self.total_cats:], self.sep_bipartite_graphs(non_norm_adj_mI_after), adv_out, non_norm_adj_mI_after
         else:
-            return feat_out[self.total_cats:], self.sep_bipartite_graphs(non_norm_adj_mI), adv_out
+            return feat_out[self.total_cats:], self.sep_bipartite_graphs(non_norm_adj_mI), adv_out, non_norm_adj_mI
 
     def sep_bipartite_graphs(self, adj):
         self.bipartite_graphs = []
@@ -977,48 +982,6 @@ class Learnable_Topology_BGNN(nn.Module):
         
         return self.bipartite_graphs
 
-    def calc_bipartite_graph(self, x):
-        this_fix_arch = self.fix_arch
-        cur_iter = self.configer.get('iter')
-        if cur_iter < self.fix_architecture_alter_iter:
-            self.linear2.requires_grad = False
-            return self.pretrain_bipartite_graphs(is_cuda=x.is_cuda)
-        
-        if (cur_iter // self.fix_architecture_alter_iter) % 2 == 0:
-            self.linear2.requires_grad = False
-            self.fix_arch = False
-        else:
-            self.linear2.requires_grad = True
-            self.fix_arch = True    
-        
-        if this_fix_arch:    
-            return self.bipartite_graphs.detach()
-        
-        unify_feats = x[self.total_cats:]
-        
-        cur_cat = 0
-        self.bipartite_graphs = []
-        for i in range(0, self.n_datasets):
-            this_feats = x[cur_cat:cur_cat+self.dataset_cats[i]]
-            cur_cat += self.dataset_cats[i]
-            similar_matrix = torch.einsum('nc, mc -> nm', this_feats, unify_feats)
-            softmax_similar_matrix = F.softmax(similar_matrix / 0.05, dim=0)
-            # softmax_similar_matrix[softmax_similar_matrix < self.threshold_value] = 0
-            # max_value, max_index = torch.max(softmax_similar_matrix, dim=0)
-            # self.bipartite_graphs[i] = torch.zeros(self.dataset_cats[i], self.max_num_unify_class, requires_grad=True)
-            # if x.is_cuda:
-            #     bi_graph = bi_graph.cuda()
-
-            # self.bipartite_graphs[i][max_index] = 1
-            
-            # this_iter_thresh = 0.3 + (self.threshold_value - 0.3) * self.configer.get('iter') / self.configer.get('lr', 'max_iter')
-            # this_iter_thresh = self.threshold_value * self.configer.get('iter') / self.configer.get('lr', 'max_iter')
-            # bi_graph[:, max_value < this_iter_thresh] = 0
-            
-            
-            self.bipartite_graphs.append(softmax_similar_matrix)
-
-        return self.bipartite_graphs
        
     def pretrain_bipartite_graphs(self, is_cuda):
         self.bipartite_graphs = []
@@ -1036,8 +999,11 @@ class Learnable_Topology_BGNN(nn.Module):
         return self.bipartite_graphs     
         
     def calc_adjacency_matrix(self, x):    
-
-        adj_feat = self.linear_adj(x)
+        
+        if x.size(1) == self.nfeat_out:
+            adj_feat = self.linear_adj(x)
+        else:
+            adj_feat = self.linear_adj2(x)
         norm_adj_feat = F.normalize(adj_feat, p=2, dim=1)
         similar_matrix = torch.einsum('nc, mc -> nm', norm_adj_feat, norm_adj_feat)
         adj_mI = similar_matrix - torch.diag(torch.diag(similar_matrix))
@@ -1076,8 +1042,8 @@ class Learnable_Topology_BGNN(nn.Module):
 
         if init:
             # return feat_out[self.total_cats:], self.sep_bipartite_graphs(non_norm_adj_mI)
-            # return feat_out[self.total_cats:], self.sep_bipartite_graphs_by_uot(non_norm_adj_mI)
-            return feat_out[self.total_cats:], self.sep_bipartite_graphs_by_km(non_norm_adj_mI)
+            return feat_out[self.total_cats:], self.sep_bipartite_graphs_by_uot(non_norm_adj_mI)
+            # return feat_out[self.total_cats:], self.sep_bipartite_graphs_by_km(non_norm_adj_mI)
         else:
             return feat_out[self.total_cats:], self.pretrain_bipartite_graphs(x.is_cuda)
 
@@ -1127,7 +1093,7 @@ class Learnable_Topology_BGNN(nn.Module):
         cur_cat = 0
         for i in range(0, self.n_datasets):
             this_bipartite_graph = adj[cur_cat:cur_cat+self.dataset_cats[i], self.total_cats:]
-            this_bipartite_graph = this_bipartite_graph.detach()
+            this_bipartite_graph = (-this_bipartite_graph.detach().clone()+1 + 1e-8)/2
             out_bipartite_graphs = torch.zeros_like(this_bipartite_graph)
 
             alpha = ot.unif(self.total_cats)

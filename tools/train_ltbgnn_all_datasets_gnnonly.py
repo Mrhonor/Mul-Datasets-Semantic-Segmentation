@@ -32,7 +32,7 @@ from evaluate import eval_model_contrast, eval_model_aux, eval_model, eval_model
 
 from tensorboardX import SummaryWriter
 
-from lib.module.gen_graph_node_feature import gen_graph_node_feature
+from lib.module.gen_graph_node_feature import gen_graph_node_feature, gen_graph_node_feature_storage, gen_graph_node_feature_single
 import pickle
 import clip
 
@@ -58,7 +58,7 @@ def parse_args():
     parse.add_argument('--local_rank', dest='local_rank', type=int, default=-1,)
     parse.add_argument('--port', dest='port', type=int, default=16852,)
     parse.add_argument('--finetune_from', type=str, default=None,)
-    parse.add_argument('--config', dest='config', type=str, default='configs/ltbgnn_5_datasets.json',)
+    parse.add_argument('--config', dest='config', type=str, default='configs/ltbgnn_5_datasets_gnnonly.json',)
     return parse.parse_args()
 
 # 使用绝对路径
@@ -370,7 +370,7 @@ def train():
     ## mixed precision training
     scaler = amp.GradScaler()
 
-    ori_graph_node_features = gen_graph_node_feature(configer)
+    # ori_graph_node_features = gen_graph_node_feature(configer)
 
     ## meters
     time_meter, loss_meter, loss_pre_meter, loss_aux_meters, loss_contrast_meter, loss_domain_meter, kl_loss_meter = set_meters(configer)
@@ -397,8 +397,10 @@ def train():
             text_features = clip_model.encode_text(text).type(torch.float32)
             text_feature_vecs.append(text_features)
                 
-    text_feature_vecs = torch.cat(text_feature_vecs, dim=0).cuda()
+    text_feature_vecs = torch.cat(text_feature_vecs, dim=0)#.cuda()
     print(text_feature_vecs.shape)
+    
+    img_feats = gen_graph_node_feature_storage(configer)#.cuda()
 
     # 两个数据集分别处理
     # 使用迭代器读取数据
@@ -442,10 +444,10 @@ def train():
     init_gnn_stage = False
     fix_graph = False
     train_seg_or_gnn = GNN
-    with open('bipart_reshape.pkl', 'rb') as file:
-        pretrain_bipart_graph = pickle.load(file)  
+    # with open('bipart_reshape.pkl', 'rb') as file:
+    #     pretrain_bipart_graph = pickle.load(file)  
     # print(pretrain_bipart_graph.shape)
-    pretrain_bipart_graph = pretrain_bipart_graph.cuda()
+    # pretrain_bipart_graph = pretrain_bipart_graph.cuda()
     GNN_INIT = configer.get('train', 'graph_finetune')
 
     for i in range(starti, configer.get('lr','max_iter') + starti):
@@ -492,7 +494,8 @@ def train():
 
         im = im.cuda()
         lb = lb.cuda()
-        graph_node_features = ori_graph_node_features.cuda()
+        graph_node_features, _ = gen_graph_node_feature_single(configer, img_feats, text_feature_vecs)
+        graph_node_features = graph_node_features.cuda()
 
         dataset_lbs = torch.cat([i*torch.ones(this_lb.shape[0], dtype=torch.int) for i,this_lb in enumerate(lbs)], dim=0)
         dataset_lbs = dataset_lbs.cuda()
@@ -559,66 +562,68 @@ def train():
                     init_gnn_stage = True
                 
                 if init_gnn_stage:    
-                    seg_out['seg'] = text_feature_vecs
+                    # seg_out['seg'] = text_feature_vecs   
+                    if is_distributed():
+                        seg_out['seg'] = net.module.unify_prototype.detach()
+                    else:
+                        seg_out['seg'] = net.unify_prototype.detach()
                 else:
                     with torch.no_grad():
                         seg_out = net(im)
 
-                unify_prototype, bi_graphs, adv_out = graph_net(graph_node_features)
+                unify_prototype, bi_graphs, adv_out, _ = graph_net(graph_node_features)
                 # if i % 50 == 0:
                 #     print(torch.norm(unify_prototype[0][0], p=2))
                 seg_out['unify_prototype'] = unify_prototype
                 seg_out['adv_out'] = adv_out
                 # seg_out['adj'] = adj_matrix
-            else:
-                is_adv = False
-                graph_net.eval()
-                net.train()
+            # else:
+            #     is_adv = False
+            #     graph_net.eval()
+            #     net.train()
                 
-                if fix_graph == False:
-                    with torch.no_grad():
-                        if is_distributed():
-                            unify_prototype, ori_bi_graphs = graph_net.module.get_optimal_matching(graph_node_features, GNN_INIT)
-                            # unify_prototype, bi_graphs, adv_out = graph_net(graph_node_features)    
-                        else:
-                            unify_prototype, ori_bi_graphs = graph_net.get_optimal_matching(graph_node_features, GNN_INIT)     
-                            # unify_prototype, bi_graphs, adv_out = graph_net(graph_node_features)     
-                        # print(bi_graphs)
+            #     if fix_graph == False:
+            #         with torch.no_grad():
+            #             if is_distributed():
+            #                 unify_prototype, ori_bi_graphs = graph_net.module.get_optimal_matching(graph_node_features, GNN_INIT)
+            #                 # unify_prototype, bi_graphs, adv_out = graph_net(graph_node_features)    
+            #             else:
+            #                 unify_prototype, ori_bi_graphs = graph_net.get_optimal_matching(graph_node_features, GNN_INIT)     
+            #                 # unify_prototype, bi_graphs, adv_out = graph_net(graph_node_features)     
+            #             # print(bi_graphs)
 
-                        print(torch.norm(unify_prototype[0][0], p=2))
-                        unify_prototype = unify_prototype.detach()
-                        bi_graphs = []
-                        if len(ori_bi_graphs) == 2*n_datasets:
-                            for j in range(0, len(ori_bi_graphs), 2):
-                                bi_graphs.append(ori_bi_graphs[j+1].detach())
-                        else:
-                            bi_graphs = [bigh.detach() for bigh in ori_bi_graphs]
-                        fix_graph = True
-                        adv_out = None
+            #             print(torch.norm(unify_prototype[0][0], p=2))
+            #             unify_prototype = unify_prototype.detach()
+            #             bi_graphs = []
+            #             if len(ori_bi_graphs) == 2*n_datasets:
+            #                 for j in range(0, len(ori_bi_graphs), 2):
+            #                     bi_graphs.append(ori_bi_graphs[j+1].detach())
+            #             else:
+            #                 bi_graphs = [bigh.detach() for bigh in ori_bi_graphs]
+            #             fix_graph = True
+            #             adv_out = None
 
 
-                        if not init_stage:
-                            init_gnn_stage = False
-                            if is_distributed():
-                                net.module.set_unify_prototype(unify_prototype)
-                                net.module.set_bipartite_graphs(bi_graphs)
-                            else:
-                                net.set_unify_prototype(unify_prototype)
-                                net.set_bipartite_graphs(bi_graphs)
-                        else:
-                            if is_distributed():
-                                net.module.set_bipartite_graphs(bi_graphs)
-                            else:
-                                net.set_bipartite_graphs(bi_graphs)                            
-
+            #             if not init_stage:
+            #                 init_gnn_stage = False
+            #                 if is_distributed():
+            #                     net.module.set_unify_prototype(unify_prototype)
+            #                     net.module.set_bipartite_graphs(bi_graphs)
+            #                 else:
+            #                     net.set_unify_prototype(unify_prototype)
+            #                     net.set_bipartite_graphs(bi_graphs)
+            #             else:
+            #                 if is_distributed():
+            #                     net.module.set_bipartite_graphs(bi_graphs)
+            #                 else:
+            #                     net.set_bipartite_graphs(bi_graphs)                            
                 
-                seg_out = net(im)
-                seg_out['unify_prototype'] = None
+            #     seg_out = net(im)
+            #     seg_out['unify_prototype'] = None
             
-
                 
             # seg_out['seg'] = seg_out['seg']
-            seg_out['pretrain_bipart_graph'] = pretrain_bipart_graph
+            # seg_out['pretrain_bipart_graph'] = pretrain_bipart_graph
             seg_out['bi_graphs'] = bi_graphs
                 
             backward_loss, adv_loss = contrast_losses(seg_out, lb, dataset_lbs, is_adv, init_gnn_stage)
@@ -627,14 +632,12 @@ def train():
             loss_seg = backward_loss
             loss_aux = None
             loss_contrast = None
-
             
         # if with_memory and 'key' in out:
         #     dequeue_and_enqueue(configer, city_out['seg'], city_out['key'], lb_city.detach(),
         #                         city_out['segment_queue'], i, CITY_ID)
         #     dequeue_and_enqueue(configer, cam_out['seg'], cam_out['key'], lb_cam.detach(),
         #                         cam_out['segment_queue'], i, CAM_ID)
-
 
         # set_trace()
         # with torch.autograd.detect_anomaly():
@@ -648,7 +651,6 @@ def train():
             # torch.cuda.synchronize()
             # gnn_optimD.zero_grad()
         
-
         scaler.scale(backward_loss).backward()
         if train_seg_or_gnn == SEG: 
             scaler.step(optim)
@@ -658,7 +660,6 @@ def train():
         
         scaler.update()
         torch.cuda.synchronize()
-
 
         # print(net.backbone.conv1.weight.grad)
         # print(backward_loss.item())
@@ -688,8 +689,6 @@ def train():
         #     print("find NaN or Inf value found in loss")
         #     print(im)
         #     print(lb)
-
-
             
 
         if use_ema:
@@ -713,7 +712,6 @@ def train():
             
         # if i >= configer.get('lr', 'warmup_iters') and use_contrast:
         #     loss_contrast_meter.update(loss_contrast.item())
-
     
         ## print training log message
         if (i + 1) % 100 == 0:

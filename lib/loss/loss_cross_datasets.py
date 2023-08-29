@@ -798,6 +798,7 @@ class CrossDatasetsCELoss_AdvGNN(nn.Module):
         self.max_iter = self.configer.get('lr', 'max_iter')
         # self.seg_gnn_alter_iters = self.configer.get('train', 'seg_gnn_alter_iters')
         self.gnn_iters = self.configer.get('train', 'gnn_iters')
+        self.seg_iters = self.configer.get('train', 'seg_iters')
         self.total_cats = 0
         self.n_cats = []
         for i in range(1, self.n_datasets+1):
@@ -816,7 +817,7 @@ class CrossDatasetsCELoss_AdvGNN(nn.Module):
             self.MSE_loss = torch.nn.MSELoss()
 
     def forward(self, preds, target, dataset_ids, is_adv=True, init_gnn_stage=False):
-        if self.configer.get('iter') > 50000:
+        if not is_adv:
             CELoss = self.OhemCELoss
         else:
             CELoss = self.CELoss
@@ -871,7 +872,7 @@ class CrossDatasetsCELoss_AdvGNN(nn.Module):
             if not init_gnn_stage:
                 if is_adv and self.with_softmax_and_max and self.with_max_adj:
                     cur_iter = self.configer.get('iter')
-                    max_rate = (cur_iter % self.gnn_iters) / self.gnn_iters
+                    max_rate = (cur_iter % self.gnn_iters+self.seg_iters) / self.gnn_iters
                     if loss is None:
                         loss = max_rate * CELoss(max_remap_logits, target[dataset_ids==i]) + (1 - max_rate) * CELoss(softmax_remap_logits, target[dataset_ids==i]) 
                     else:
@@ -983,10 +984,10 @@ class CrossDatasetsCELoss_AdvGNN_Only(nn.Module):
         
         # print("logits_max : {}, logits_min : {}".format(torch.max(logits), torch.min(logits)))
         
-        needed_adj = adj_matrix[:self.total_cats, :self.total_cats]
-        needed_adj = needed_adj.contiguous().view(-1)
+        # needed_adj = adj_matrix[:self.total_cats, :self.total_cats]
+        # needed_adj = needed_adj.contiguous().view(-1)
         
-        loss = self.MSE_loss(needed_adj, target.view(-1))
+        # loss = self.MSE_loss(needed_adj, target.view(-1))
         
         for i in range(0, self.n_datasets):
 

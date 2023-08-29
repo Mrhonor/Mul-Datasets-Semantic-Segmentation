@@ -56,7 +56,7 @@ def is_distributed():
 def parse_args():
     parse = argparse.ArgumentParser()
     parse.add_argument('--local_rank', dest='local_rank', type=int, default=-1,)
-    parse.add_argument('--port', dest='port', type=int, default=16853,)
+    parse.add_argument('--port', dest='port', type=int, default=16854,)
     parse.add_argument('--finetune_from', type=str, default=None,)
     parse.add_argument('--config', dest='config', type=str, default='configs/ltbgnn_5_datasets.json',)
     return parse.parse_args()
@@ -730,12 +730,12 @@ def train():
                 torch.save(seg_state, seg_save_pth)
 
             # if fix_graph == False:
-            with torch.no_grad():
-                # input_feats = torch.cat([graph_node_features, graph_net.unify_node_features], dim=0)
-                if is_distributed():
-                    unify_prototype, bi_graphs = graph_net.module.get_optimal_matching(graph_node_features)
-                else:
-                    unify_prototype, bi_graphs = graph_net.get_optimal_matching(graph_node_features) 
+            # with torch.no_grad():
+            #     # input_feats = torch.cat([graph_node_features, graph_net.unify_node_features], dim=0)
+            #     if is_distributed():
+            #         unify_prototype, bi_graphs = graph_net.module.get_optimal_matching(graph_node_features)
+            #     else:
+            #         unify_prototype, bi_graphs = graph_net.get_optimal_matching(graph_node_features) 
                 
             if use_dataset_aux_head and i < aux_iter:
                 eval_model_func = eval_model_aux
@@ -761,6 +761,11 @@ def train():
             # writer.export_scalars_to_json(osp.join(configer.get('res_save_pth'), str(time())+'_writer.json'))
             logger.info(tabulate([mious, ], headers=heads, tablefmt='orgtbl'))
             net.train()
+            
+            if is_distributed():
+                net.module.aux_mode = 'train'
+            else:
+                net.aux_mode = 'train'
         
                 
         if train_seg_or_gnn == SEG:

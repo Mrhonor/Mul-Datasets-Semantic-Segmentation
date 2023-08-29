@@ -10,6 +10,7 @@ from torch.utils.data import Dataset, DataLoader
 import torch.distributed as dist
 import cv2
 import numpy as np
+from PIL import Image
 
 import lib.transform_cv2 as T
 from lib.base_dataset import BaseDataset, BaseDatasetIm
@@ -145,34 +146,99 @@ labels_info = [
 ## CityScapes -> {unify class1, unify class2, ...}
 # Wall -> {Wall, fence}
 
-class Mapi(BaseDataset):
+class Mapi(Dataset):
     '''
     '''
     def __init__(self, dataroot, annpath, trans_func=None, mode='train'):
-        super(Mapi, self).__init__(
-                dataroot, annpath, trans_func, mode)
+        super(Mapi, self).__init__()
+                
     
-        
+        self.mode = mode
+        self.trans_func = trans_func
+        # self.n_cats = 38
         self.n_cats = 88
-        
-        self.lb_ignore = -1
-        # self.lb_ignore = 255
         self.lb_map = np.arange(256).astype(np.uint8)
-        
-        self.labels_info = labels_info
-            
-        for el in self.labels_info:
+
+        for el in labels_info:
             self.lb_map[el['id']] = el['trainId']
+
+        self.ignore_lb = -1
+
+        with open(annpath, 'r') as fr:
+            pairs = fr.read().splitlines()
+
+        self.img_paths, self.lb_paths = [], []
+        for pair in pairs:
+            imgpth, lbpth = pair.split(',')
+            self.img_paths.append(osp.join(dataroot, imgpth))
+            self.lb_paths.append(osp.join(dataroot, lbpth))
+
+        assert len(self.img_paths) == len(self.lb_paths)
+        self.len = len(self.img_paths)
 
         self.to_tensor = T.ToTensor(
             mean=(0.3038, 0.3383, 0.3034), # city, rgb
             std=(0.2071, 0.2088, 0.2090),
         )
         
-        # self.to_tensor = T.ToTensor(
-        #     mean=(0.3257, 0.3690, 0.3223), # city, rgb
-        #     std=(0.2112, 0.2148, 0.2115),
-        # )
+        self.colors = []
+
+        for el in labels_info:
+            (r, g, b) = el['color']
+            self.colors.append((r, g, b))
+            
+        self.color2id = dict(zip(self.colors, range(len(self.colors))))
+
+    def __getitem__(self, idx):
+        impth = self.img_paths[idx]
+        lbpth = self.lb_paths[idx]
+        label = np.array(Image.open(lbpth).convert('RGB'))
+        if self.mode == 'ret_path':
+            return impth, label, lbpth
+        # start = time.time()
+        img = cv2.imread(impth)[:, :, ::-1]
+
+        # img = cv2.resize(img, (1920, 1280))
+        
+        # end = time.time()
+        # print("idx: {}, cv2.imread time: {}".format(idx, end - start))
+        # label = np.array(Image.open(lbpth).convert('RGB').resize((1920, 1280),Image.ANTIALIAS))
+        
+        # start = time.time()
+        label = self.convert_labels(label, impth)
+        label = Image.fromarray(label)
+        # end = time.time()
+        # print("idx: {}, convert_labels time: {}".format(idx, end - start))
+
+        if not self.lb_map is None:
+            label = self.lb_map[label]
+        im_lb = dict(im=img, lb=label)
+        if not self.trans_func is None:
+            # start = time.time()
+            im_lb = self.trans_func(im_lb)
+            # end = time.time()  
+            # print("idx: {}, trans time: {}".format(idx, end - start))
+        im_lb = self.to_tensor(im_lb)
+        img, label = im_lb['im'], im_lb['lb']
+        
+        return img.detach(), label.unsqueeze(0).detach()
+        # return img.detach()
+
+    def __len__(self):
+        return self.len
+
+    def convert_labels(self, label, impth):
+        mask = np.full(label.shape[:2], 2, dtype=np.uint8)
+        # mask = np.zeros(label.shape[:2])
+        for k, v in self.color2id.items():
+            mask[cv2.inRange(label, np.array(k), np.array(k)) == 255] = v
+            
+            
+            # if v == 30 and cv2.inRange(label, np.array(k) - 1, np.array(k) + 1).any() == True:
+            #     label[cv2.inRange(label, np.array(k) - 1, np.array(k) + 1) == 255] = [0, 0, 0]
+            #     cv2.imshow(impth, label)
+            #     cv2.waitKey(0)
+        return mask
 
 ## Only return img without label
 class MapiIm(BaseDatasetIm):
