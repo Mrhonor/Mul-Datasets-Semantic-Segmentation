@@ -32,6 +32,7 @@ from lib.city_to_cam import Cityid_to_Camid
 from lib.a2d2_to_cam import a2d2_to_Camid
 from lib.class_remap import ClassRemap
 from tools.configer import Configer
+from lib.module.gen_graph_node_feature import gen_graph_node_feature
 
 CITY_ID = 0
 CAM_ID = 1
@@ -862,7 +863,7 @@ def parse_args():
     parse.add_argument('--local_rank', dest='local_rank', type=int, default=-1,)
     parse.add_argument('--port', dest='port', type=int, default=16745,)
     parse.add_argument('--finetune_from', type=str, default=None,)
-    parse.add_argument('--config', dest='config', type=str, default='configs/test/test_ltbgnn.json',)
+    parse.add_argument('--config', dest='config', type=str, default='configs/ltbgnn_5_datasets.json',)
     return parse.parse_args()
 
 
@@ -884,12 +885,37 @@ def main():
     
     logger = logging.getLogger()
     net = model_factory[configer.get('model_name')](configer)
-    state = torch.load(configer.get("train", "finetune_from"), map_location='cpu')
+    state = torch.load('res/celoss/seg_model_300000.pth', map_location='cpu')
     net.load_state_dict(state, strict=False)
     
     net.cuda()
     net.aux_mode = 'eval'
-    # net.eval()
+    net.eval()
+    
+    graph_net = model_factory[configer.get('GNN','model_name')](configer)
+    torch.set_printoptions(profile="full")
+    graph_net.load_state_dict(torch.load('res/celoss/graph_model_270000.pth', map_location='cpu'), strict=False)
+    graph_net.cuda()
+    graph_net.eval()
+    # graph_node_features = gen_graph_node_feature(configer)
+    graph_node_features = torch.load('res/celoss/graph_node_features5_CityScapes_CamVid_Sunrgbd_Bdd100k_Idd.pt')
+    # unify_prototype, ori_bi_graphs = graph_net.get_optimal_matching(graph_node_features, init=True) 
+    # unify_prototype, ori_bi_graphs,_,_ = graph_net(graph_node_features)
+    unify_prototype, ori_bi_graphs = graph_net.get_optimal_matching(graph_node_features, init=True) 
+    bi_graphs = []
+    if len(ori_bi_graphs) == 10:
+        for j in range(0, len(ori_bi_graphs), 2):
+            bi_graphs.append(ori_bi_graphs[j+1].detach())
+    else:
+        bi_graphs = [bigh.detach() for bigh in ori_bi_graphs]
+    # unify_prototype, bi_graphs, adv_out, _ = graph_net(graph_node_features)
+
+    # print(bi_graphs[0])
+    # print(bi_graphs[0][18])
+    print(torch.norm(net.unify_prototype[0][0], p=2))
+    print(torch.norm(unify_prototype[0][0], p=2))
+    net.set_unify_prototype(unify_prototype)
+    net.set_bipartite_graphs(bi_graphs) 
     
     heads, mious = eval_model_contrast(configer, net)
     
@@ -1008,18 +1034,18 @@ def find_unuse_label(configer, net, dl, n_classes, dataset_id):
 
 
 if __name__ == "__main__":
-    # main()
-    args = parse_args()
-    configer = Configer(configs=args.config)
-    datasets_remaps = []
-    set0 = []
-    set0.append([])
-    set0.append([2,0])
-    datasets_remaps.append(set0)
+    main()
+    # args = parse_args()
+    # configer = Configer(configs=args.config)
+    # datasets_remaps = []
+    # set0 = []
+    # set0.append([])
+    # set0.append([2,0])
+    # datasets_remaps.append(set0)
 
-    set1 = []
-    set1.append([0,1,0])
-    set1.append([])
-    datasets_remaps.append(set1)
-    print(Find_label_relation(configer, datasets_remaps))
+    # set1 = []
+    # set1.append([0,1,0])
+    # set1.append([])
+    # datasets_remaps.append(set1)
+    # print(Find_label_relation(configer, datasets_remaps))
 

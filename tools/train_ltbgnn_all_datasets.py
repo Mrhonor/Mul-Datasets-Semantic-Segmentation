@@ -428,13 +428,13 @@ def train():
     init_stage = True
     init_gnn_stage = False
     fix_graph = False
-    train_seg_or_gnn = GNN
+    train_seg_or_gnn = SEG
     GNN_INIT = configer.get('train', 'graph_finetune')
 
     for i in range(starti, configer.get('lr','max_iter') + starti):
         configer.plus_one('iter')
         alter_iter += 1
-        if i > 10000:
+        if i > 40000:
             init_gnn_stage = False
 
 
@@ -550,7 +550,7 @@ def train():
                     with torch.no_grad():
                         seg_out = net(im)
 
-                unify_prototype, bi_graphs, adv_out = graph_net(graph_node_features)
+                unify_prototype, bi_graphs, adv_out, _ = graph_net(graph_node_features)
                 # if i % 50 == 0:
                 #     print(torch.norm(unify_prototype[0][0], p=2))
                 seg_out['unify_prototype'] = unify_prototype

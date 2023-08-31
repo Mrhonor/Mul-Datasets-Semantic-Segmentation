@@ -123,7 +123,7 @@ def get_img_for_everyclass_single(configer, dls):
 
 def crop_image_by_label_value(img, label, label_value):
     # 将标签二值化
-    binary = np.zeros_like(label)
+    binary = np.zeros_like(label, dtype=np.uint8)
     binary[label == label_value] = 255
 
     binary = cv2.convertScaleAbs(binary)
@@ -356,7 +356,7 @@ def gen_graph_node_feature(configer):
 
     if not osp.exists(configer.get('res_save_pth')): os.makedirs(configer.get('res_save_pth'))
     
-    file_name = configer.get('res_save_pth') + 'graph_node_features'+str(configer.get('n_datasets'))
+    file_name = configer.get('res_save_pth') + 'graph_node_features'
     dataset_names = []
     for i in range(0, configer.get('n_datasets')):
         # file_name += '_'+str(configer.get('dataset'+str(i+1), 'data_reader'))

@@ -1041,9 +1041,16 @@ class Learnable_Topology_BGNN(nn.Module):
         feat_out = self.linear1(feat3)
 
         if init:
-            # return feat_out[self.total_cats:], self.sep_bipartite_graphs(non_norm_adj_mI)
-            return feat_out[self.total_cats:], self.sep_bipartite_graphs_by_uot(non_norm_adj_mI)
-            # return feat_out[self.total_cats:], self.sep_bipartite_graphs_by_km(non_norm_adj_mI)
+            if self.calc_bipartite:
+                arch_x = self.relu(feat3 + feat_out)
+                arch_x = self.linear2(arch_x)
+                _, non_norm_adj_mI_after = self.calc_adjacency_matrix(arch_x)
+                
+                return feat_out[self.total_cats:], self.sep_bipartite_graphs_by_km(non_norm_adj_mI_after)
+            else:
+                # return feat_out[self.total_cats:], self.sep_bipartite_graphs(non_norm_adj_mI)
+                return feat_out[self.total_cats:], self.sep_bipartite_graphs_by_uot(non_norm_adj_mI)
+                # return feat_out[self.total_cats:], self.sep_bipartite_graphs_by_km(non_norm_adj_mI)
         else:
             return feat_out[self.total_cats:], self.pretrain_bipartite_graphs(x.is_cuda)
 
@@ -1114,6 +1121,9 @@ class Learnable_Topology_BGNN(nn.Module):
             #     Q_anchor = Q_st_bar[fake_size+fill_size:, :]
             # if mode == 'all':
             #     Q_anchor = Q_st_bar
+            print("--")
+            print(Q_st_bar.shape)
+            print(out_bipartite_graphs.shape)
 
             # # confidence score w^t_i
             wt_i, pseudo_label = torch.max(Q_st_bar, 1)
@@ -1123,40 +1133,30 @@ class Learnable_Topology_BGNN(nn.Module):
 
             for row in range(0, self.dataset_cats[i]):
                 if torch.sum(out_bipartite_graphs[row]) == 0:
-                    # print(f'find miss one in UOT, datasets:{i}, row:{row}')
+                    print(f'find miss one in UOT, datasets:{i}, row:{row}')
                     sorted_tensor, indices = torch.sort(Q_st_bar.T[row])
                     # print(indices)
                     flag = False
                     for ori_index in indices:
                         map_lb = pseudo_label[ori_index]
-
                         if torch.sum(out_bipartite_graphs[map_lb]) > 1:
+                            print('enter')
                             out_bipartite_graphs[row, ori_index] = 1
                             out_bipartite_graphs[map_lb, ori_index] = 0
+                            print(out_bipartite_graphs[row, ori_index])
+                            print(out_bipartite_graphs[map_lb, ori_index])
                             flag = True
                             break
                     if flag is False:
                         print("error don't find correct one")
                     
-
-            # # confidence score w^s_j
-            # ws_j = torch.sum(Q_st_bar, 0)
-
-            # # filter by statistics mean
-            # uniformed_index = Q_st_bar.size(1)
-            # conf_label = torch.where(wt_i > 1/Q_st_bar.size(0), pseudo_label, uniformed_index)
-            # high_conf_label = conf_label.clone()
-            # source_private_label = torch.nonzero(ws_j < 1/Q_st_bar.size(1))
-            # for i in source_private_label:
-            #     high_conf_label = torch.where(high_conf_label == i, uniformed_index, high_conf_label)
-            # high_conf_label_id = torch.nonzero(high_conf_label != uniformed_index).view(-1)
-            
-            # for adaptive update
             new_beta = torch.sum(Q_st_bar,0).cpu().numpy()
 
 
             mu = 0.7
             self.beta[i] = mu*self.beta[i] + (1-mu)*new_beta
+            print(out_bipartite_graphs)
+            print(torch.max(out_bipartite_graphs, dim=0))
             self.bipartite_graphs.append(out_bipartite_graphs) 
                 
             cur_cat += self.dataset_cats[i]

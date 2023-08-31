@@ -776,5 +776,6 @@ if __name__ == "__main__":
     #     im, lb = next(dl_iters[j])
     #     sleep(10)
                 
-    
-    main()
+    state = torch.load('res/celoss/best_5_gnn_model_final.pth', map_location='cpu')
+    print(torch.sum(state['adj_matrix']))
+    # main()

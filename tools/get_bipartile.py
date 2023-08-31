@@ -82,7 +82,7 @@ def set_model(configer):
 
     if configer.get('train', 'finetune'):
         logger.info(f"load pretrained weights from {configer.get('train', 'finetune_from')}")
-        net.load_state_dict(torch.load("res/celoss/seg_model_final.pth", map_location='cpu'), strict=False)
+        net.load_state_dict(torch.load("res/celoss/seg_model_300000.pth", map_location='cpu'), strict=False)
 
         
     if configer.get('use_sync_bn'): 
@@ -101,7 +101,7 @@ def set_graph_model(configer):
     #     logger.info(f"load pretrained weights from {configer.get('train', 'graph_finetune_from')}")
     #     net.load_state_dict(torch.load(configer.get('train', 'graph_finetune_from'), map_location='cpu'), strict=True)
     # state = torch.load("res/celoss/ltbgnn_5_datasets_gnn.pth", map_location='cpu')
-    state = torch.load("res/celoss/gnn_model_final.pth", map_location='cpu')
+    state = torch.load("res/celoss/graph_model_300000.pth", map_location='cpu')
     # print(state['adj_matrix'])
 
     net.load_state_dict(state, strict=True) 
@@ -111,7 +111,55 @@ def set_graph_model(configer):
     net.train()
     return net
 
-def train():
+def get_bipartite():
+    
+    n_datasets = configer.get('n_datasets')
+    logger = logging.getLogger()
+    is_dist = dist.is_initialized()
+    graph_net = set_graph_model(configer=configer)
+    graph_node_features = gen_graph_node_feature(configer)
+    graph_node_features = graph_node_features.cuda()
+    net = set_model(configer)
+
+    net.eval()
+    graph_net.eval()
+    # unify_prototype, bi_graphs,_ = graph_net(graph_node_features) 
+    unify_prototype, bi_graphs = graph_net.get_optimal_matching(graph_node_features, True)
+    print(len(bi_graphs))
+    # net.set_bipartite_graphs(bi_graphs)
+    net.set_unify_prototype(unify_prototype)
+    # print(unify_prototype)
+
+    # if configer.get('GNN', 'output_max_adj') and configer.get('GNN', 'output_softmax_and_max_adj'):
+    #     bi_graphs = [bi_graph for i, bi_graph in filter(lambda x : x[0] % 2 == 0, enumerate(bi_graphs))]
+    # print(bi_graphs)
+    for i in range(0, 5):
+        
+        max_value, max_index = torch.max(bi_graphs[i], dim=0)
+        if i == 4:
+            print(max_value)
+            print(max_index)
+        n_cat = configer.get(f'dataset{i+1}', 'n_cats')
+        
+        buckets = {}
+        for index, j in enumerate(max_index):
+            
+            if int(j) not in buckets:
+                buckets[int(j)] = [index]
+            else:
+                buckets[int(j)].append(index)
+            
+        print("dataset {}:".format(i+1))    
+    
+        for index in range(0, n_cat):
+            if index not in buckets:
+                buckets[index] = []
+            print("\"{}\": {}".format(index, buckets[index]))    
+        
+    
+    return 
+
+def find_unuse():
     # torch.autograd.set_detect_anomaly(True)
     n_datasets = configer.get('n_datasets')
     logger = logging.getLogger()
@@ -168,7 +216,7 @@ def train():
 
 
 def main():
-    train()
+    get_bipartite()
 
 
 if __name__ == "__main__":
