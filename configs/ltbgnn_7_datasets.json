@@ -44,7 +44,7 @@
       "train_im_anns":"datasets/mapi/training.txt",
       "val_im_anns":"datasets/mapi/validation.txt", 
       "ims_per_gpu": 2,
-      "eval_ims_per_gpu": 2,
+      "eval_ims_per_gpu": 1,
       "label_names": ["Bird", "Ground Animal", "Curb", "Fence", "Guard Rail", "Barrier", "Road Median", "Road Side", "Temporary Barrier", "Wall", "Bike Lane", "Crosswalk - Plain", "Driveway", "Parking", "Parking Aisle", "Pedestrian Area", "Rail Track", "Road", "Service Lane", "Sidewalk", "Traffic Island", "Bridge", "Building", "Garage", "Tunnel", "Person Group", "Bicyclist", "Motorcyclist", "Other Rider", "Lane Marking - Ambiguous", "Lane Marking - Arrow (Other)", "Lane Marking - Arrow (Right)", "Lane Marking - Arrow (Split Right or Straight)", "Lane Marking - Arrow (Straight)", "Lane Marking - Give Way (Row)", "Lane Marking - Give Way (Single)", "Lane Marking - Hatched (Diagonal)", "Lane Marking - Text", "Lane Marking (only) - Test", "Mountain", "Sand", "Sky", "Snow", "Terrain", "Vegetation", "Water", "Banner", "Bench", "Bike Rack", "Catch Basin", "CCTV Camera", "Fire Hydrant", "Junction Box", "Manhole", "Parking Meter", "Phone Booth", "Pothole", "Signage - Back", "Signage - Information", "Signage - Other", "Signage - Store", "Street Light", "Pole Group", "Traffic Sign Frame", "Utility Pole", "Traffic Cone", "Traffic Light - Other", "Traffic Sign - Parking", "Traffic Sign - Temporary (Back)", "Traffic Sign - Temporary (Front)", "Trash Can", "Bicycle", "Boat", "Bus", "Caravan", "Motorcycle", "On Rails", "Other Vehicle", "Trailer", "Truck", "Vehicle Group", "Wheeled Slow", "Water Valve", "Car Mount", "Dynamic", "Ego Vehicle", "Ground", "Static"]
     },
     "dataset3": {
@@ -133,6 +133,8 @@
       "graph_finetune_from": "res/celoss/graph_model_60000.pth",
       "seg_iters": 30000,
       "gnn_iters": 30000,
+      "finetune_stage1_iters": 50000,
+      "finetune_stage2_iters": 80000,
       "joint_train": true
     },
     "val": {

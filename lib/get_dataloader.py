@@ -78,10 +78,7 @@ def get_data_loader(configer, aux_mode='eval', distributed=True):
         batchsize = [1 for i in range(1, n_datasets+1)]
         annpath = []
         for i in range(1, n_datasets+1):
-            if configer.get('dataset'+str(i), 'data_reader') != 'Idd':
-                annpath.append(configer.get('dataset'+str(i), 'train_im_anns'))
-            else:
-                annpath.append(configer.get('dataset'+str(i), 'train_im_anns'))
+            annpath.append(configer.get('dataset'+str(i), 'train_im_anns'))
             
         imroot = [configer.get('dataset'+str(i), 'im_root') for i in range(1, n_datasets+1)]
         data_reader = [configer.get('dataset'+str(i), 'data_reader') for i in range(1, n_datasets+1)]

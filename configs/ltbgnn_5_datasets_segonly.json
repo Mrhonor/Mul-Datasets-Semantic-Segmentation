@@ -102,7 +102,7 @@
       "weight_decay": 1e-5,
       "warmup_iters": 1000,
       "fix_param_iters": 0,
-      "max_iter": 50000
+      "max_iter": 80000
     },
     "train": {
       "scales": [0.5, 1.0, 2.0],
@@ -111,7 +111,7 @@
       "finetune_from": "res/celoss/seg_model_final.pth",
       "graph_finetune": true,
       "graph_finetune_from": "res/celoss/gnn_model_final.pth",
-      "seg_iters": 50000,
+      "seg_iters": 80000,
       "gnn_iters": 20000,
       "joint_train": true
     },

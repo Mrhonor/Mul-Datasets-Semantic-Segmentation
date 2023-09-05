@@ -22,8 +22,8 @@ np.random.seed(123)
 # args
 parse = argparse.ArgumentParser()
 
-parse.add_argument('--weight_path', type=str, default='res/celoss/best_5_seg_model_final.pth',)
-parse.add_argument('--gnn_weight_path', type=str, default='res/celoss/best_5_gnn_model_final.pth',)
+parse.add_argument('--weight_path', type=str, default='res/celoss/seg_model_final.pth',)
+parse.add_argument('--gnn_weight_path', type=str, default='res/celoss/gnn_model_final.pth',)
 parse.add_argument('--config', dest='config', type=str, default='configs/ltbgnn_5_datasets.json',)
 parse.add_argument('--img_path', dest='img_path', type=str, default='img/berlin_000011_000019_leftImg8bit.png',)
 args = parse.parse_args()
@@ -659,26 +659,26 @@ class E2EModel(torch.nn.Module):
         # self.net.train()
         self.net.cuda()
 
-        graph_net = model_factory[configer.get('GNN','model_name')](configer)
-        torch.set_printoptions(profile="full")
-        graph_net.load_state_dict(torch.load(args.gnn_weight_path, map_location='cpu'), strict=False)
-        graph_net.cuda()
-        graph_net.eval()
+        # graph_net = model_factory[configer.get('GNN','model_name')](configer)
+        # torch.set_printoptions(profile="full")
+        # graph_net.load_state_dict(torch.load(args.gnn_weight_path, map_location='cpu'), strict=False)
+        # graph_net.cuda()
+        # graph_net.eval()
         # graph_net.train()
-        graph_node_features = gen_graph_node_feature(configer)
-        unify_prototype, ori_bi_graphs = graph_net.get_optimal_matching(graph_node_features, init=True) 
-        if len(ori_bi_graphs) == 10:
-            for j in range(0, len(ori_bi_graphs), 2):
-                bi_graphs.append(ori_bi_graphs[j+1].detach())
-        else:
-            bi_graphs = [bigh.detach() for bigh in ori_bi_graphs]
+        # graph_node_features = gen_graph_node_feature(configer)
+        # unify_prototype, ori_bi_graphs = graph_net.get_optimal_matching(graph_node_features, init=True) 
+        # if len(ori_bi_graphs) == 10:
+        #     for j in range(0, len(ori_bi_graphs), 2):
+        #         bi_graphs.append(ori_bi_graphs[j+1].detach())
+        # else:
+        #     bi_graphs = [bigh.detach() for bigh in ori_bi_graphs]
         # unify_prototype, bi_graphs, adv_out, _ = graph_net(graph_node_features)
 
         # print(bi_graphs[0])
         # print(bi_graphs[0][18])
 
         # self.net.set_unify_prototype(unify_prototype)
-        self.net.set_bipartite_graphs(bi_graphs)
+        # self.net.set_bipartite_graphs(bi_graphs)
                 
         
     def forward(self, x):
@@ -740,11 +740,11 @@ for i in range(1):
     # # print(out.shape)
     # # pred1 = palette[out1]
     # # print(out2.shape)
-    # pred2 = palette[out2]
+    pred2 = palette[out2]
     # pred1 = palette[maxV]
     # print(pred2.shape)
     # print((time() - t0) * 1000)
 
 # cv2.imwrite('./res1.jpg', pred1)
-cv2.imwrite('./res.bmp', out2)
+cv2.imwrite('./res.bmp', pred2)
 # cv2.imwrite('./test.jpg', pred1)

@@ -31,9 +31,11 @@ def get_img_for_everyclass(configer, dataset_id=None):
 
     img_lists = []
     lb_lists  = []
+    lb_info_list = []
     for i in range(0, n_datasets):
         this_img_lists = []
         this_lb_lists = []
+        lb_info_list(dls[i].dataset.labels_info)
         
         if dataset_id != None and i != dataset_id:
             img_lists.append(this_img_lists)
@@ -63,7 +65,7 @@ def get_img_for_everyclass(configer, dataset_id=None):
         lb_lists.append(this_lb_lists)
         
     
-    return img_lists, lb_lists
+    return img_lists, lb_lists, lb_info_list
 
 def get_img_for_everyclass_single(configer, dls):
     n_datasets = configer.get("n_datasets")
@@ -194,7 +196,7 @@ def crop_image_by_label_value(img, label, label_value):
 
 
 def gen_image_features(configer, dataset_id=None):
-    img_lists, lb_lists = get_img_for_everyclass(configer, dataset_id)
+    img_lists, lb_lists, lb_info_list = get_img_for_everyclass(configer, dataset_id)
     
     n_datasets = configer.get('n_datasets')
     to_tensor = T.ToTensor(
@@ -206,6 +208,7 @@ def gen_image_features(configer, dataset_id=None):
     with torch.no_grad():
         out_features = []
         for idx in range(0, n_datasets):
+            this_label_info = lb_info_list[idx]
             if dataset_id != None and idx != dataset_id:
                 continue
             print("dataset_id: ", idx)
@@ -219,6 +222,7 @@ def gen_image_features(configer, dataset_id=None):
                     image = cv2.imread(im_path)
                     # print(lb_path[0])
                     lb = cv2.imread(lb_path[0], 0)
+                    lb = this_label_info[lb]
                     if image is None:
                         print(im_path)
                         continue

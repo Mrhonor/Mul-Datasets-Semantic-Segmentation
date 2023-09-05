@@ -1121,9 +1121,6 @@ class Learnable_Topology_BGNN(nn.Module):
             #     Q_anchor = Q_st_bar[fake_size+fill_size:, :]
             # if mode == 'all':
             #     Q_anchor = Q_st_bar
-            print("--")
-            print(Q_st_bar.shape)
-            print(out_bipartite_graphs.shape)
 
             # # confidence score w^t_i
             wt_i, pseudo_label = torch.max(Q_st_bar, 1)
@@ -1133,18 +1130,27 @@ class Learnable_Topology_BGNN(nn.Module):
 
             for row in range(0, self.dataset_cats[i]):
                 if torch.sum(out_bipartite_graphs[row]) == 0:
-                    print(f'find miss one in UOT, datasets:{i}, row:{row}')
+                    # print(f'find miss one in UOT, datasets:{i}, row:{row}')
                     sorted_tensor, indices = torch.sort(Q_st_bar.T[row])
-                    # print(indices)
+
                     flag = False
                     for ori_index in indices:
-                        map_lb = pseudo_label[ori_index]
-                        if torch.sum(out_bipartite_graphs[map_lb]) > 1:
-                            print('enter')
+                        # map_lb = pseudo_label[ori_index]
+                        map_lb = [i for i, x in enumerate(out_bipartite_graphs[:, ori_index]) if x == 1]
+                        if len(map_lb) != 1:
+                            print("!")
+                        map_lb = map_lb[0]
+                        if torch.sum(out_bipartite_graphs[map_lb, :]) > 1:
+
+                            # print(ori_index)
+                            # print(row)
+                            # print(map_lb)
+                            # print(out_bipartite_graphs[:,ori_index])
                             out_bipartite_graphs[row, ori_index] = 1
                             out_bipartite_graphs[map_lb, ori_index] = 0
-                            print(out_bipartite_graphs[row, ori_index])
-                            print(out_bipartite_graphs[map_lb, ori_index])
+                            # print(out_bipartite_graphs[:,ori_index])
+                            # print(out_bipartite_graphs[row, ori_index])
+                            # print(out_bipartite_graphs[map_lb, ori_index])
                             flag = True
                             break
                     if flag is False:
@@ -1155,8 +1161,8 @@ class Learnable_Topology_BGNN(nn.Module):
 
             mu = 0.7
             self.beta[i] = mu*self.beta[i] + (1-mu)*new_beta
-            print(out_bipartite_graphs)
-            print(torch.max(out_bipartite_graphs, dim=0))
+            # print(out_bipartite_graphs)
+            # print(torch.max(out_bipartite_graphs, dim=0))
             self.bipartite_graphs.append(out_bipartite_graphs) 
                 
             cur_cat += self.dataset_cats[i]
