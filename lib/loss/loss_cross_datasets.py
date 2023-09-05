@@ -794,6 +794,7 @@ class CrossDatasetsCELoss_AdvGNN(nn.Module):
         self.with_max_enc = self.configer.get('loss', 'with_max_enc')
         self.max_enc_weight = self.configer.get('loss', 'max_enc_weight')
         self.with_softmax_and_max = self.configer.get('GNN', 'output_softmax_and_max_adj')
+        self.with_orth = self.configer.get('GNN', 'with_orth')
         self.with_max_adj = self.configer.get('GNN', 'output_max_adj')
         self.max_iter = self.configer.get('lr', 'max_iter')
         # self.seg_gnn_alter_iters = self.configer.get('train', 'seg_gnn_alter_iters')
@@ -815,6 +816,22 @@ class CrossDatasetsCELoss_AdvGNN(nn.Module):
         
         if self.with_max_enc:
             self.MSE_loss = torch.nn.MSELoss()
+    
+    def similarity_dsb(self, proto_vecs):
+        """
+        Compute EM loss with the probability-based distribution of each feature
+        :param feat_domain: source, target or both
+        :param temperature: softmax temperature
+        """
+
+
+        # dot similarity between features and centroids
+        z = torch.mm(proto_vecs, proto_vecs.t())  # size N x C_seen
+
+        # entropy loss to push each feature to be similar to only one class prototype (no supervision)
+        loss = -1 * torch.mean(F.softmax(z / self.temperature, dim=1) * F.log_softmax(z / self.temperature, dim=1))
+
+        return loss
 
     def forward(self, preds, target, dataset_ids, is_adv=True, init_gnn_stage=False):
         if not is_adv:
@@ -846,6 +863,8 @@ class CrossDatasetsCELoss_AdvGNN(nn.Module):
             logits = torch.einsum('bchw, nc -> bnhw', logits, unify_prototype)
         # print("logits_max : {}, logits_min : {}".format(torch.max(logits), torch.min(logits)))
         
+        if is_adv and self.with_orth:
+            loss = self.similarity_dsb(unify_prototype)
         
         for i in range(0, self.n_datasets):
 
