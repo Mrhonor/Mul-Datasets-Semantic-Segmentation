@@ -123,7 +123,7 @@ def get_img_for_everyclass_single(configer, dls):
 
 def crop_image_by_label_value(img, label, label_value):
     # 将标签二值化
-    binary = np.zeros_like(label)
+    binary = np.zeros_like(label, dtype=np.uint8)
     binary[label == label_value] = 255
 
     binary = cv2.convertScaleAbs(binary)
@@ -388,32 +388,32 @@ def gen_graph_node_feature(configer):
     return out_features 
     
     
-    if not osp.exists(configer.get('res_save_pth')): os.makedirs(configer.get('res_save_pth'))
+    # if not osp.exists(configer.get('res_save_pth')): os.makedirs(configer.get('res_save_pth'))
     
-    file_name = configer.get('res_save_pth') + 'graph_node_features'+str(configer.get('n_datasets'))
-    for i in range(0, configer.get('n_datasets')):
-        file_name += '_'+str(configer.get('dataset'+str(i+1), 'data_reader'))
+    # file_name = configer.get('res_save_pth') + 'graph_node_features'+str(configer.get('n_datasets'))
+    # for i in range(0, configer.get('n_datasets')):
+    #     file_name += '_'+str(configer.get('dataset'+str(i+1), 'data_reader'))
     
-    file_name += '.pt'
+    # file_name += '.pt'
 
-    if osp.exists(file_name):
-        graph_node_features = torch.load(file_name)
-    else:
-        print("gen_graph_node_feature")
-        text_feature_vecs = get_encode_lb_vec(configer)
-        text_feat_tensor = torch.cat(text_feature_vecs, dim=0)
-        print(text_feat_tensor.shape)
-        print("gen_text_feature_vecs")
-        img_feature_vecs = gen_image_features(configer)
-        img_feat_tensor = torch.cat(img_feature_vecs, dim=0)
-        print(img_feat_tensor.shape)
-        print("gen_img_features")
-        graph_node_features = torch.cat([text_feat_tensor, img_feat_tensor], dim=1)
-        # graph_node_features = (text_feat_tensor+img_feat_tensor)/2
-        print(graph_node_features.shape)
-        torch.save(graph_node_features.clone(), file_name)
+    # if osp.exists(file_name):
+    #     graph_node_features = torch.load(file_name)
+    # else:
+    #     print("gen_graph_node_feature")
+    #     text_feature_vecs = get_encode_lb_vec(configer)
+    #     text_feat_tensor = torch.cat(text_feature_vecs, dim=0)
+    #     print(text_feat_tensor.shape)
+    #     print("gen_text_feature_vecs")
+    #     img_feature_vecs = gen_image_features(configer)
+    #     img_feat_tensor = torch.cat(img_feature_vecs, dim=0)
+    #     print(img_feat_tensor.shape)
+    #     print("gen_img_features")
+    #     graph_node_features = torch.cat([text_feat_tensor, img_feat_tensor], dim=1)
+    #     # graph_node_features = (text_feat_tensor+img_feat_tensor)/2
+    #     print(graph_node_features.shape)
+    #     torch.save(graph_node_features.clone(), file_name)
     
-    return graph_node_features
+    # return graph_node_features
 
     
 def gen_graph_node_feature_single(configer, img_feature_vecs, text_feat_tensor=None):
