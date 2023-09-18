@@ -119,7 +119,7 @@
     },
     "use_ema": false,
     "lr": {
-      "lr_start": 1e-3,
+      "lr_start": 5e-4,
       "weight_decay": 1e-5,
       "warmup_iters": 1000,
       "fix_param_iters": 0,
@@ -130,13 +130,13 @@
       "scales": [0.5, 1.0, 2.0],
       "cropsize": [512, 1024],
       "finetune": true,
-      "finetune_from": "res/celoss/pretrain_seg_model_30000.pth",
-      "graph_finetune": false,
-      "graph_finetune_from": "res/celoss/graph_model_60000.pth",
+      "finetune_from": "res/clip/seg_model_420000.pth",
+      "graph_finetune": true,
+      "graph_finetune_from": "res/clip/gnn_model_joint_stage.pth",
       "seg_iters": 60000,
       "gnn_iters": 30000,
-      "finetune_stage1_iters": 50000,
-      "finetune_stage2_iters": 80000,
+      "finetune_stage1_iters": 0,
+      "finetune_stage2_iters": 90000,
       "joint_train": true
     },
     "val": {
@@ -144,7 +144,7 @@
       "cropsize": [512, 512]
     },
     "use_fp16": false,
-    "use_sync_bn": true,
+    "use_sync_bn": false,
     "contrast": {
       "use_contrast": true,
       "proj_dim": 512,

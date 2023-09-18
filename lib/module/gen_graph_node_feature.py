@@ -35,7 +35,7 @@ def get_img_for_everyclass(configer, dataset_id=None):
     for i in range(0, n_datasets):
         this_img_lists = []
         this_lb_lists = []
-        lb_info_list(dls[i].dataset.labels_info)
+        lb_info_list.append(dls[i].dataset.lb_map)
         
         if dataset_id != None and i != dataset_id:
             img_lists.append(this_img_lists)
@@ -371,7 +371,7 @@ def gen_graph_node_feature(configer):
     for i in range(0, n_datasets):
         this_file_name = file_name + f'_{dataset_names[i]}.pt' 
         if osp.exists(this_file_name):
-            this_graph_node_features = torch.load(this_file_name)
+            this_graph_node_features = torch.load(this_file_name, map_location='cpu')
 
             out_features.append(this_graph_node_features)
         else:

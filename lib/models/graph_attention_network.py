@@ -1103,7 +1103,7 @@ class Learnable_Topology_BGNN(nn.Module):
             this_bipartite_graph = (-this_bipartite_graph.detach().clone()+1 + 1e-8)/2
             out_bipartite_graphs = torch.zeros_like(this_bipartite_graph)
 
-            alpha = ot.unif(self.total_cats)
+            alpha = ot.unif(self.max_num_unify_class)
                 
             Q_st = ot.unbalanced.sinkhorn_knopp_unbalanced(alpha, self.beta[i], this_bipartite_graph.T.cpu().numpy(), 
                                                             reg=0.01, reg_m=0.5, stopThr=1e-4) 

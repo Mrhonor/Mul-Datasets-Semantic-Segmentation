@@ -33,6 +33,7 @@ from evaluate import eval_model_contrast, eval_model_aux, eval_model, eval_model
 from tensorboardX import SummaryWriter
 
 from lib.module.gen_graph_node_feature import gen_graph_node_feature
+from tools.get_bipartile import print_bipartite, find_unuse
 
 
 
@@ -58,7 +59,7 @@ def parse_args():
     parse.add_argument('--local_rank', dest='local_rank', type=int, default=-1,)
     parse.add_argument('--port', dest='port', type=int, default=16853,)
     parse.add_argument('--finetune_from', type=str, default=None,)
-    parse.add_argument('--config', dest='config', type=str, default='configs/ltbgnn_5_datasets_segonly.json',)
+    parse.add_argument('--config', dest='config', type=str, default='configs/ltbgnn_7_datasets_segonly.json',)
     return parse.parse_args()
 
 # 使用绝对路径
@@ -363,9 +364,7 @@ def train():
     contrast_losses = set_contrast_loss(configer)
 
     ## optimizer
-    optim = set_optimizer(net, configer)
-    gnn_optim = set_optimizer(graph_net, configer)
-    gnn_optimD = set_optimizerD(graph_net, configer)
+
 
     ## mixed precision training
     scaler = amp.GradScaler()
@@ -390,20 +389,24 @@ def train():
         net.set_unify_prototype(unify_prototype, True)
         net.set_bipartite_graphs(bi_graphs)
 
+    optim = set_optimizer(net, configer)
+    gnn_optim = set_optimizer(graph_net, configer)
+    gnn_optimD = set_optimizerD(graph_net, configer)
+
     ## meters
     time_meter, loss_meter, loss_pre_meter, loss_aux_meters, loss_contrast_meter, loss_domain_meter, kl_loss_meter = set_meters(configer)
     ## lr scheduler
-    gnn_lr_schdr = WarmupPolyLrScheduler(gnn_optim, power=0.9,
-        max_iter=configer.get('train','gnn_iters'), warmup_iter=configer.get('lr','warmup_iters'),
-        warmup_ratio=0.1, warmup='exp', last_epoch=-1,)
+    # gnn_lr_schdr = WarmupPolyLrScheduler(gnn_optim, power=0.9,
+    #     max_iter=configer.get('train','gnn_iters'), warmup_iter=configer.get('lr','warmup_iters'),
+    #     warmup_ratio=0.1, warmup='exp', last_epoch=-1,)
 
-    gnn_lr_schdrD = WarmupPolyLrScheduler(gnn_optimD, power=0.9,
-        max_iter=configer.get('train','gnn_iters'), warmup_iter=configer.get('lr','warmup_iters'),
-        warmup_ratio=0.1, warmup='exp', last_epoch=-1,)
+    # gnn_lr_schdrD = WarmupPolyLrScheduler(gnn_optimD, power=0.9,
+    #     max_iter=configer.get('train','gnn_iters'), warmup_iter=configer.get('lr','warmup_iters'),
+    #     warmup_ratio=0.1, warmup='exp', last_epoch=-1,)
 
-    lr_schdr = WarmupPolyLrScheduler(optim, power=0.9,
-        max_iter=configer.get('lr','max_iter'), warmup_iter=configer.get('lr','warmup_iters'),
-        warmup_ratio=0.1, warmup='exp', last_epoch=-1,)
+    # lr_schdr = WarmupPolyLrScheduler(optim, power=0.9,
+    #     max_iter=configer.get('lr','max_iter'), warmup_iter=configer.get('lr','warmup_iters'),
+    #     warmup_ratio=0.1, warmup='exp', last_epoch=-1,)
 
     # 两个数据集分别处理
     # 使用迭代器读取数据
@@ -449,257 +452,288 @@ def train():
     train_seg_or_gnn = SEG
     GNN_INIT = configer.get('train', 'graph_finetune')
 
-    for i in range(starti, configer.get('lr','max_iter') + starti):
-        configer.plus_one('iter')
-        alter_iter += 1
-        if i > 10000:
-            init_gnn_stage = False
 
-
-        # try:
-        #     im_lb, dataset_lbs = next(dl_iter)
-        #     im, lb = im_lb
-        #     if not im.size()[0] == (configer.get('dataset1', 'ims_per_gpu') + configer.get('dataset2', 'ims_per_gpu')):
-        #         raise StopIteration
-        # except StopIteration:
-        #     city_iter = iter(dl_iter)
-        #     im_lb, dataset_lbs = next(dl_iter)
-        #     im, lb = im_lb
-        # epoch = i * (configer.get('dataset1', 'ims_per_gpu') + configer.get('dataset2', 'ims_per_gpu')) / 2976
-
-
-        ims = []
-        lbs = []    
-        for j in range(0,len(dl_iters)):
-            try:
-                im, lb = next(dl_iters[j])
-                while torch.min(lb) == 255:
-                    im, lb = next(dl_iters[j])
-
-                if not im.size()[0] == configer.get('dataset'+str(j+1), 'ims_per_gpu'):
-                    raise StopIteration
-            except StopIteration:
-                dl_iters[j] = iter(dls[j])
-                im, lb = next(dl_iters[j])
-                while torch.min(lb) == 255:
-                    im, lb = next(dl_iters[j])
-            
-            ims.append(im)
-            lbs.append(lb)
-                
-
-        im = torch.cat(ims, dim=0)
-        lb = torch.cat(lbs, dim=0)
-
-        im = im.cuda()
-        lb = lb.cuda()
         
 
-        dataset_lbs = torch.cat([i*torch.ones(this_lb.shape[0], dtype=torch.int) for i,this_lb in enumerate(lbs)], dim=0)
-        dataset_lbs = dataset_lbs.cuda()
-        # print(dataset_lbs)
+    total_cats = 0
+    for i in range(1, n_datasets+1):
+        total_cats += configer.get('dataset'+str(i), 'n_cats')
 
-        lb = torch.squeeze(lb, 1)
+    total_cats = int(total_cats * configer.get('GNN', 'unify_ratio'))
 
+    for stage in ['stage1', 'stage2']:    
+        print(stage)
 
-        # net.eval()
-        # with torch.no_grad():
-        #     seg_out = net(im)
+        if stage == 'stage2':
+            if is_distributed():
+                loaded_map = find_unuse(configer, net.module)
+            else:
+                loaded_map = find_unuse(configer, net)
+            bi_graphs = []
+            for dataset_id in range(1, n_datasets+1):
+                n_cats = configer.get('dataset'+str(dataset_id), 'n_cats')
+                this_bi_graph = torch.zeros(n_cats, total_cats)
+                for key, val in loaded_map['dataset'+str(dataset_id)].items():
+                    this_bi_graph[int(key)][val] = 1
+                    
+                bi_graphs.append(this_bi_graph.cuda())
 
-        optim.zero_grad()
-        gnn_optim.zero_grad()
-        gnn_optimD.zero_grad()
-        with amp.autocast(enabled=configer.get('use_fp16')):
-            # if finetune and i >= fix_param_iters + aux_iter:
-            #     finetune = False
-            #     if is_distributed():
-            #         net.module.switch_require_grad_state(True)
-            #     else:
-            #         net.switch_require_grad_state(True)
-                
-            
-            ## 修改为多数据集模式
-            
-            if train_aux:
-                train_aux = False
-                if is_distributed():
-                    net.module.set_train_dataset_aux(False)
-                else:
-                    net.set_train_dataset_aux(False)    
-            
-                
+            if is_distributed():
+                net.module.set_bipartite_graphs(bi_graphs)
+            else:
+                net.set_bipartite_graphs(bi_graphs) 
+                          
+            optim = set_optimizer(net, configer)
                         
-            seg_out = {}
-
-            is_adv = False
-            
-            net.train()
-            
-                   
-
-                
-            seg_out = net(im)
-            seg_out['unify_prototype'] = None
-            
-
-                
-            # seg_out['seg'] = seg_out['seg']
-            
-            seg_out['bi_graphs'] = bi_graphs
-            seg_out['adv_out'] = adv_out
-                
-            backward_loss, adv_loss = contrast_losses(seg_out, lb, dataset_lbs, is_adv, init_gnn_stage)
-            # print(backward_loss)
-            kl_loss = None
-            loss_seg = backward_loss
-            loss_aux = None
-            loss_contrast = None
-
-            
-        # if with_memory and 'key' in out:
-        #     dequeue_and_enqueue(configer, city_out['seg'], city_out['key'], lb_city.detach(),
-        #                         city_out['segment_queue'], i, CITY_ID)
-        #     dequeue_and_enqueue(configer, cam_out['seg'], cam_out['key'], lb_cam.detach(),
-        #                         cam_out['segment_queue'], i, CAM_ID)
-
-
-        # set_trace()
-        # with torch.autograd.detect_anomaly():
-        # print(backward_loss)
-
-        if is_adv:
-            backward_loss += adv_loss
-            # scaler.scale(adv_loss).backward()
-            # scaler.step(gnn_optimD)
-            # scaler.update()
-            # torch.cuda.synchronize()
-            # gnn_optimD.zero_grad()
-        
-
-        scaler.scale(backward_loss).backward()
-        if train_seg_or_gnn == SEG: 
-            scaler.step(optim)
-        else:
-            scaler.step(gnn_optim)
-            scaler.step(gnn_optimD)
-        
-        scaler.update()
-        torch.cuda.synchronize()
-
-
-        # print(net.backbone.conv1.weight.grad)
-        # print(backward_loss.item())
-            
-        # configer.plus_one('iters')
-        # self.configer.plus_one('iters')
-
-        # for name, param in graph_net.named_parameters():
-        #     if torch.isnan(param.grad).any() or torch.isinf(param.grad).any():
-        #         print("Graph NaN or Inf value found in gradients")
-
-        # for param in net.parameters():
-        #     if torch.isnan(param.grad).any() or torch.isinf(param.grad).any():
-        #         print("seg NaN or Inf value found in gradients")
-        
-        # if torch.isnan(seg_out['seg']).any() or torch.isinf(seg_out['seg']).any():
-        #     print("seg NaN or Inf value found in output")
-        #     print(backward_loss)
-        
-        # if torch.isnan(im).any() or torch.isinf(im).any():
-        #     print("find NaN or Inf value found in im")        
-
-        # if torch.isnan(lb).any() or torch.isinf(lb).any():
-        #     print("find NaN or Inf value found in lb")
-
-        # if torch.isnan(backward_loss).any() or torch.isinf(backward_loss).any():
-        #     print("find NaN or Inf value found in loss")
-        #     print(im)
-        #     print(lb)
-
-
-            
-
-        if use_ema:
-            ema_net.EMAUpdate(net.module)
-        # print('synchronize')
-        time_meter.update()
-        loss_meter.update(backward_loss.item())
-        if kl_loss:
-            kl_loss_meter.update(kl_loss.item())
-        
-        if is_adv:
-            loss_domain_meter.update(adv_loss.item())
-        # loss_pre_meter.update(loss_pre.item())
-        
-        if not use_dataset_aux_head or i > aux_iter:
-            loss_pre_meter.update(loss_seg.item()) 
-            # if with_domain_adversarial:
-            #     loss_domain_meter.update(loss_domain)
-            if with_aux:
-                _ = [mter.update(lss.item()) for mter, lss in zip(loss_aux_meters, loss_aux)]
-            
-        # if i >= configer.get('lr', 'warmup_iters') and use_contrast:
-        #     loss_contrast_meter.update(loss_contrast.item())
-
+        lr_schdr = WarmupPolyLrScheduler(optim, power=0.9,
+            max_iter=configer.get('train',f'finetune_{stage}_iters'), warmup_iter=configer.get('lr','warmup_iters'),
+            warmup_ratio=0.1, warmup='exp', last_epoch=-1,) 
     
-        ## print training log message
-        if (i + 1) % 100 == 0:
-            writer.add_scalars("loss",{"seg":loss_pre_meter.getWoErase(),"contrast":loss_contrast_meter.getWoErase(), "domain":loss_domain_meter.getWoErase()},configer.get("iter")+1)
-            if train_seg_or_gnn == SEG:
-                lr = lr_schdr.get_lr()
-            else:
-                lr = gnn_lr_schdr.get_lr()
-            lr = sum(lr) / len(lr)
-            print_log_msg(
-                i, 0, 0, configer.get('lr', 'max_iter')+starti, lr, time_meter, loss_meter,
-                loss_pre_meter, loss_aux_meters, loss_contrast_meter, loss_domain_meter, kl_loss_meter)
+        configer.update(['iter'], 0)
+        for i in range(starti, configer.get('train',f'finetune_{stage}_iters') + starti):
+            configer.plus_one('iter')
+            alter_iter += 1
+            if i > 10000:
+                init_gnn_stage = False
+
+
+            # try:
+            #     im_lb, dataset_lbs = next(dl_iter)
+            #     im, lb = im_lb
+            #     if not im.size()[0] == (configer.get('dataset1', 'ims_per_gpu') + configer.get('dataset2', 'ims_per_gpu')):
+            #         raise StopIteration
+            # except StopIteration:
+            #     city_iter = iter(dl_iter)
+            #     im_lb, dataset_lbs = next(dl_iter)
+            #     im, lb = im_lb
+            # epoch = i * (configer.get('dataset1', 'ims_per_gpu') + configer.get('dataset2', 'ims_per_gpu')) / 2976
+
+
+            ims = []
+            lbs = []    
+            for j in range(0,len(dl_iters)):
+                try:
+                    im, lb = next(dl_iters[j])
+                    while torch.min(lb) == 255:
+                        im, lb = next(dl_iters[j])
+
+                    if not im.size()[0] == configer.get('dataset'+str(j+1), 'ims_per_gpu'):
+                        raise StopIteration
+                except StopIteration:
+                    dl_iters[j] = iter(dls[j])
+                    im, lb = next(dl_iters[j])
+                    while torch.min(lb) == 255:
+                        im, lb = next(dl_iters[j])
+                
+                ims.append(im)
+                lbs.append(lb)
+                    
+
+            im = torch.cat(ims, dim=0)
+            lb = torch.cat(lbs, dim=0)
+
+            im = im.cuda()
+            lb = lb.cuda()
             
 
-        if (i + 1) % 10000 == 0:
-            seg_save_pth = osp.join(configer.get('res_save_pth'), 'seg_model_{}.pth'.format(i+1))
-            gnn_save_pth = osp.join(configer.get('res_save_pth'), 'graph_model_{}.pth'.format(i+1))
-            logger.info('\nsave seg_models to {}, gnn_models to {}'.format(seg_save_pth, gnn_save_pth))
-            if is_distributed():
-                gnn_state = graph_net.module.state_dict()
-                seg_state = net.module.state_dict()
-                if dist.get_rank() == 0: 
-                    torch.save(gnn_state, gnn_save_pth)
-                    torch.save(seg_state, seg_save_pth)
-            else:
-                gnn_state = graph_net.state_dict()
-                seg_state = net.state_dict()
-                torch.save(gnn_state, gnn_save_pth)
-                torch.save(seg_state, seg_save_pth)
+            dataset_lbs = torch.cat([i*torch.ones(this_lb.shape[0], dtype=torch.int) for i,this_lb in enumerate(lbs)], dim=0)
+            dataset_lbs = dataset_lbs.cuda()
+            # print(dataset_lbs)
 
-            # if fix_graph == False:
+            lb = torch.squeeze(lb, 1)
+
+
+            # net.eval()
             # with torch.no_grad():
-            #     # input_feats = torch.cat([graph_node_features, graph_net.unify_node_features], dim=0)
-            #     if is_distributed():
-            #         unify_prototype, bi_graphs = graph_net.module.get_optimal_matching(graph_node_features)
-            #     else:
-            #         unify_prototype, bi_graphs = graph_net.get_optimal_matching(graph_node_features) 
-                
-            eval_model_func = eval_model_contrast
-            optim.zero_grad()
-            if is_distributed():
+            #     seg_out = net(im)
 
-                torch.cuda.empty_cache()
-                heads, mious = eval_model_func(configer, net.module)
-            else:
-                torch.cuda.empty_cache()
-                heads, mious = eval_model_func(configer, net)
+            optim.zero_grad()
+            gnn_optim.zero_grad()
+            gnn_optimD.zero_grad()
+            with amp.autocast(enabled=configer.get('use_fp16')):
+                # if finetune and i >= fix_param_iters + aux_iter:
+                #     finetune = False
+                #     if is_distributed():
+                #         net.module.switch_require_grad_state(True)
+                #     else:
+                #         net.switch_require_grad_state(True)
+                    
                 
-            writer.add_scalars("mious",{"Cityscapes":mious[CITY_ID],"Camvid":mious[CAM_ID]},configer.get("iter")+1)
-            # writer.export_scalars_to_json(osp.join(configer.get('res_save_pth'), str(time())+'_writer.json'))
-            logger.info(tabulate([mious, ], headers=heads, tablefmt='orgtbl'))
-            net.train()
+                ## 修改为多数据集模式
+                
+                if train_aux:
+                    train_aux = False
+                    if is_distributed():
+                        net.module.set_train_dataset_aux(False)
+                    else:
+                        net.set_train_dataset_aux(False)    
+                
+                    
+                            
+                seg_out = {}
+
+                is_adv = False
+                
+                net.train()
+                
+                    
+
+                    
+                seg_out = net(im)
+                seg_out['unify_prototype'] = None
+                
+
+                    
+                # seg_out['seg'] = seg_out['seg']
+                
+                if is_distributed():
+                    seg_out['bi_graphs'] = net.module.bipartite_graphs
+                else:
+                    seg_out['bi_graphs'] = net.bipartite_graphs
+                seg_out['adv_out'] = None
+                    
+                backward_loss, adv_loss = contrast_losses(seg_out, lb, dataset_lbs, is_adv, init_gnn_stage)
+                # print(backward_loss)
+                kl_loss = None
+                loss_seg = backward_loss
+                loss_aux = None
+                loss_contrast = None
+
+                
+            # if with_memory and 'key' in out:
+            #     dequeue_and_enqueue(configer, city_out['seg'], city_out['key'], lb_city.detach(),
+            #                         city_out['segment_queue'], i, CITY_ID)
+            #     dequeue_and_enqueue(configer, cam_out['seg'], cam_out['key'], lb_cam.detach(),
+            #                         cam_out['segment_queue'], i, CAM_ID)
+
+
+            # set_trace()
+            # with torch.autograd.detect_anomaly():
+            # print(backward_loss)
+
+            if is_adv:
+                backward_loss += adv_loss
+                # scaler.scale(adv_loss).backward()
+                # scaler.step(gnn_optimD)
+                # scaler.update()
+                # torch.cuda.synchronize()
+                # gnn_optimD.zero_grad()
+            
+
+            scaler.scale(backward_loss).backward()
+            
+            scaler.step(optim)
+
+            
+            scaler.update()
+            torch.cuda.synchronize()
+
+
+            # print(net.backbone.conv1.weight.grad)
+            # print(backward_loss.item())
+                
+            # configer.plus_one('iters')
+            # self.configer.plus_one('iters')
+
+            # for name, param in graph_net.named_parameters():
+            #     if torch.isnan(param.grad).any() or torch.isinf(param.grad).any():
+            #         print("Graph NaN or Inf value found in gradients")
+
+            # for param in net.parameters():
+            #     if torch.isnan(param.grad).any() or torch.isinf(param.grad).any():
+            #         print("seg NaN or Inf value found in gradients")
+            
+            # if torch.isnan(seg_out['seg']).any() or torch.isinf(seg_out['seg']).any():
+            #     print("seg NaN or Inf value found in output")
+            #     print(backward_loss)
+            
+            # if torch.isnan(im).any() or torch.isinf(im).any():
+            #     print("find NaN or Inf value found in im")        
+
+            # if torch.isnan(lb).any() or torch.isinf(lb).any():
+            #     print("find NaN or Inf value found in lb")
+
+            # if torch.isnan(backward_loss).any() or torch.isinf(backward_loss).any():
+            #     print("find NaN or Inf value found in loss")
+            #     print(im)
+            #     print(lb)
+
+
+                
+
+            if use_ema:
+                ema_net.EMAUpdate(net.module)
+            # print('synchronize')
+            time_meter.update()
+            loss_meter.update(backward_loss.item())
+            if kl_loss:
+                kl_loss_meter.update(kl_loss.item())
+            
+            if is_adv:
+                loss_domain_meter.update(adv_loss.item())
+            # loss_pre_meter.update(loss_pre.item())
+            
+            if not use_dataset_aux_head or i > aux_iter:
+                loss_pre_meter.update(loss_seg.item()) 
+                # if with_domain_adversarial:
+                #     loss_domain_meter.update(loss_domain)
+                if with_aux:
+                    _ = [mter.update(lss.item()) for mter, lss in zip(loss_aux_meters, loss_aux)]
+                
+            # if i >= configer.get('lr', 'warmup_iters') and use_contrast:
+            #     loss_contrast_meter.update(loss_contrast.item())
+
         
+            ## print training log message
+            if (i + 1) % 100 == 0:
+                writer.add_scalars("loss",{"seg":loss_pre_meter.getWoErase(),"contrast":loss_contrast_meter.getWoErase(), "domain":loss_domain_meter.getWoErase()},configer.get("iter")+1)
+                if train_seg_or_gnn == SEG:
+                    lr = lr_schdr.get_lr()
+
+                lr = sum(lr) / len(lr)
+                print_log_msg(
+                    i, 0, 0, configer.get('lr', 'max_iter')+starti, lr, time_meter, loss_meter,
+                    loss_pre_meter, loss_aux_meters, loss_contrast_meter, loss_domain_meter, kl_loss_meter)
                 
-        if train_seg_or_gnn == SEG:
+
+            if (i + 1) % 30000 == 0:
+                stage_iter = 0 if stage == 'stage1' else configer.get('train', 'finetune_stage1_iters')
+                seg_save_pth = osp.join(configer.get('res_save_pth'), 'seg_model_{}.pth'.format(i+1+configer.get('lr','max_iter')))
+                logger.info('\nsave seg_models to {}'.format(seg_save_pth))
+                if is_distributed():
+                    seg_state = net.module.state_dict()
+                    if dist.get_rank() == 0: 
+                        torch.save(seg_state, seg_save_pth)
+                else:
+                    seg_state = net.state_dict()
+                    torch.save(seg_state, seg_save_pth)
+
+                # if fix_graph == False:
+                # with torch.no_grad():
+                #     # input_feats = torch.cat([graph_node_features, graph_net.unify_node_features], dim=0)
+                #     if is_distributed():
+                #         unify_prototype, bi_graphs = graph_net.module.get_optimal_matching(graph_node_features)
+                #     else:
+                #         unify_prototype, bi_graphs = graph_net.get_optimal_matching(graph_node_features) 
+                    
+                eval_model_func = eval_model_contrast
+                optim.zero_grad()
+                if is_distributed():
+
+                    torch.cuda.empty_cache()
+                    heads, mious = eval_model_func(configer, net.module)
+                else:
+                    torch.cuda.empty_cache()
+                    heads, mious = eval_model_func(configer, net)
+                    
+                writer.add_scalars("mious",{"Cityscapes":mious[CITY_ID],"Camvid":mious[CAM_ID]},configer.get("iter")+1)
+                # writer.export_scalars_to_json(osp.join(configer.get('res_save_pth'), str(time())+'_writer.json'))
+                logger.info(tabulate([mious, ], headers=heads, tablefmt='orgtbl'))
+                net.train()
+            
+                    
             lr_schdr.step()
-        else:
-            gnn_lr_schdr.step()
-            gnn_lr_schdrD.step()
+
         
 
     ## dump the final model and evaluate the result

@@ -6,7 +6,7 @@ from .bisenetv1_swin import BiSeNetV1_Swin
 from .bisenetv2_contrast import BiSeNetV2_Contrast, BiSeNetV2_Contrast_Teacher
 from .bisenetv2_contrast_wn import BiSeNetV2_Contrast_WN
 from .bisenetv2_contrast_bn import BiSeNetV2_Contrast_BN
-from .HRNetv2 import HRNet_W48_CONTRAST, HRNet_W48, HRNet_W48_CLIP, HRNet_W48_GNN, HRNet_W48_GNN_MulHead
+from .HRNetv2 import HRNet_W48_CONTRAST, HRNet_W48, HRNet_W48_CLIP, HRNet_W48_GNN
 from .graph_attention_network import GAT, Learnable_Topology_GAT, Learnable_Topology_BGNN, Self_Attention_GNN
 
 model_factory = {
@@ -22,7 +22,6 @@ model_factory = {
     'hrnet_w48_clip': HRNet_W48_CLIP, 
     'graph_attention_network': GAT,
     'hrnet_w48_gnn': HRNet_W48_GNN,
-    'hrnet_w48_gnn_mulhead': HRNet_W48_GNN_MulHead,
     'learnable_topology_GAT': Learnable_Topology_GAT,
     'learnable_topology_BGNN': Learnable_Topology_BGNN,
     # 'learnable_topology_BGNN_2': Learnable_Topology_BGNN_2,

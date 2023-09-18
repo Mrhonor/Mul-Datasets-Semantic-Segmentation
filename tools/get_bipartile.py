@@ -111,7 +111,7 @@ def set_graph_model(configer):
     net.train()
     return net
 
-def print_bipartite(n_datasets, bi_graphs):
+def print_bipartite(configer, n_datasets, bi_graphs):
     
     # logger = logging.getLogger()
     # is_dist = dist.is_initialized()
@@ -155,6 +155,7 @@ def print_bipartite(n_datasets, bi_graphs):
     
     return 
 
+@torch.no_grad()
 def find_unuse(configer, net):
     n_datasets = configer.get('n_datasets')
     is_dist = dist.is_initialized()
