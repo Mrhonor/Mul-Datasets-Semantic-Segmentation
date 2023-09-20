@@ -23,14 +23,15 @@
       "threshold_value": 0.95,
       "alpha": 0.2,
       "fix_architecture_alter_iter": 2000,
-      "calc_bipartite": true,
+      "calc_bipartite": false,
       "output_max_adj": false,
-      "output_softmax_and_max_adj": true
+      "output_softmax_and_max_adj": true,
+      "with_orth": false
     },
     "dataset1": {
       "n_cats": 19,
       "data_reader": "CityScapes",
-      "im_root": "/cpfs01/projects-SSD/pujianxiangmuzu_SSD/pujian/mr/datasets",
+      "im_root": "D:\\Study\\code",
       "train_im_anns":"datasets/Cityscapes/train.txt",
       "val_im_anns":"datasets/Cityscapes/val.txt", 
       "ims_per_gpu": 1,
@@ -40,7 +41,7 @@
     "dataset2": {
       "n_cats": 12, 
       "data_reader": "CamVid",
-      "im_root": "/cpfs01/projects-SSD/pujianxiangmuzu_SSD/pujian/mr/datasets/CamVid",
+      "im_root": "D:\\Study\\code/CamVid",
       "train_im_anns":"datasets/CamVid/train.txt",
       "val_im_anns":"datasets/CamVid/test.txt", 
       "ims_per_gpu": 1,
@@ -50,7 +51,7 @@
     "dataset3": {
       "n_cats": 37, 
       "data_reader": "Sunrgbd",
-      "im_root": "/cpfs01/projects-SSD/pujianxiangmuzu_SSD/pujian/mr/datasets/",
+      "im_root": "D:\\Study\\code/",
       "train_im_anns":"datasets/sunrgbd/train.txt",
       "val_im_anns":"datasets/sunrgbd/test.txt", 
       "ims_per_gpu": 1,
@@ -60,7 +61,7 @@
     "dataset4": {
       "n_cats": 19, 
       "data_reader": "Bdd100k",
-      "im_root": "/cpfs01/projects-SSD/pujianxiangmuzu_SSD/pujian/mr/datasets/bdd100k",
+      "im_root": "D:\\Study\\code/bdd100k",
       "train_im_anns":"datasets/bdd100k/train.txt",
       "val_im_anns":"datasets/bdd100k/val.txt", 
       "ims_per_gpu": 1,
@@ -70,7 +71,7 @@
     "dataset5": {
       "n_cats": 37, 
       "data_reader": "Idd",
-      "im_root": "/cpfs01/projects-SSD/pujianxiangmuzu_SSD/pujian/mr/datasets/idd",
+      "im_root": "D:\\Study\\code/idd",
       "train_im_anns":"datasets/IDD/train.txt",
       "val_im_anns":"datasets/IDD/val.txt", 
       "ims_per_gpu": 1,
@@ -122,17 +123,17 @@
       "weight_decay": 1e-5,
       "warmup_iters": 1000,
       "fix_param_iters": 0,
-      "max_iter": 50000
+      "max_iter": 100000
     },
     "train": {
       "scales": [0.5, 1.0, 2.0],
       "cropsize": [512, 1024],
       "finetune": true,
-      "finetune_from": "res/clip/clip_model_final.pth",
+      "finetune_from": "res/celoss/clip_model_final.pth",
       "graph_finetune": false,
-      "graph_finetune_from": "res/celoss/graph_model_60000.pth",
+      "graph_finetune_from": "res/celoss/graph_model_50000.pth",
       "seg_iters": 30000,
-      "gnn_iters": 50000,
+      "gnn_iters": 100000,
       "joint_train": true
     },
     "val": {
