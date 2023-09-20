@@ -1,7 +1,7 @@
 import json
 
 from PIL import Image, ImageDraw
-lb_file = '../datasets/IDD/val.txt'
+lb_file = 'datasets/IDD/val.txt'
 
 labels = set()
 labels_info = [
@@ -52,7 +52,7 @@ for lb_if in labels_info:
 with open(lb_file, 'r') as f:
     for line in f:
         # im_path = line.split(',')[0]
-        lb_path = '/cpfs01/projects-SSD/pujianxiangmuzu_SSD/pujian/mr/datasets/idd/' + line.split(',')[1].replace('png', 'json').replace('\n', '')
+        lb_path = 'D:/Study/code/idd/' + line.split(',')[1].replace('png', 'json').replace('\n', '')
         with open(lb_path, 'r') as json_f:
             data = json.load(json_f)
             imH = data['imgHeight']

@@ -557,9 +557,9 @@ def train():
                 graph_net.train()
                 net.eval()
                 
-                if init_stage:
-                    init_stage = False
-                    init_gnn_stage = True
+                # if init_stage:
+                #     init_stage = False
+                #     init_gnn_stage = True
                 
                 if init_gnn_stage:    
                     # seg_out['seg'] = text_feature_vecs   
@@ -742,13 +742,13 @@ def train():
                 torch.save(gnn_state, gnn_save_pth)
                 torch.save(seg_state, seg_save_pth)
 
-            # if fix_graph == False:
+            # # if fix_graph == False:
             # with torch.no_grad():
             #     # input_feats = torch.cat([graph_node_features, graph_net.unify_node_features], dim=0)
             #     if is_distributed():
-            #         unify_prototype, bi_graphs = graph_net.module.get_optimal_matching(graph_node_features)
+            #         unify_prototype, _ = graph_net.module.get_optimal_matching(graph_node_features)
             #     else:
-            #         unify_prototype, bi_graphs = graph_net.get_optimal_matching(graph_node_features) 
+            #         unify_prototype, _ = graph_net.get_optimal_matching(graph_node_features) 
                 
             if use_dataset_aux_head and i < aux_iter:
                 eval_model_func = eval_model_aux
