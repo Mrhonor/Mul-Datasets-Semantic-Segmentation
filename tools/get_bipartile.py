@@ -19,17 +19,20 @@ import torch.cuda.amp as amp
 
 from lib.models import model_factory
 from lib.get_dataloader import get_data_loader, get_single_data_loader
-from lib.ohem_ce_loss import OhemCELoss
+from lib.loss.ohem_ce_loss import OhemCELoss
 from lib.lr_scheduler import WarmupPolyLrScheduler
 from lib.meters import TimeMeter, AvgMeter
 from lib.logger import setup_logger, print_log_msg
 from lib.loss.loss_cross_datasets import CrossDatasetsLoss, CrossDatasetsCELoss, CrossDatasetsCELoss_KMeans, CrossDatasetsCELoss_CLIP, CrossDatasetsCELoss_GNN
 from lib.class_remap import ClassRemap
 
+from evaluate import find_unuse_label
+
 from tools.configer import Configer
 
 
 from lib.module.gen_graph_node_feature import gen_graph_node_feature
+import pickle
 
 torch.set_printoptions(profile="full")
 
@@ -55,7 +58,7 @@ def parse_args():
     parse.add_argument('--local_rank', dest='local_rank', type=int, default=-1,)
     parse.add_argument('--port', dest='port', type=int, default=16855,)
     parse.add_argument('--finetune_from', type=str, default=None,)
-    parse.add_argument('--config', dest='config', type=str, default='configs/ltbgnn_city_cam_a2d2.json',)
+    parse.add_argument('--config', dest='config', type=str, default='configs/ltbgnn_5_datasets.json',)
     return parse.parse_args()
 
 # 使用绝对路径
@@ -72,7 +75,21 @@ A2D2_ID = 2
 
 # ClassRemaper = ClassRemap(configer=configer)
 
+def set_model(configer):
+    logger = logging.getLogger()
 
+    net = model_factory[configer.get('model_name')](configer)
+
+    if configer.get('train', 'finetune'):
+        logger.info(f"load pretrained weights from {configer.get('train', 'finetune_from')}")
+        net.load_state_dict(torch.load("res/celoss/seg_model_final.pth", map_location='cpu'), strict=False)
+
+        
+    if configer.get('use_sync_bn'): 
+        net = nn.SyncBatchNorm.convert_sync_batchnorm(net)
+    net.cuda()
+    net.train()
+    return net
 
 def set_graph_model(configer):
     logger = logging.getLogger()
@@ -83,6 +100,7 @@ def set_graph_model(configer):
     #     print("!")
     #     logger.info(f"load pretrained weights from {configer.get('train', 'graph_finetune_from')}")
     #     net.load_state_dict(torch.load(configer.get('train', 'graph_finetune_from'), map_location='cpu'), strict=True)
+    # state = torch.load("res/celoss/ltbgnn_5_datasets_gnn.pth", map_location='cpu')
     state = torch.load("res/celoss/gnn_model_final.pth", map_location='cpu')
     # print(state['adj_matrix'])
 
@@ -93,22 +111,30 @@ def set_graph_model(configer):
     net.train()
     return net
 
-def train():
-    # torch.autograd.set_detect_anomaly(True)
-    n_datasets = configer.get('n_datasets')
-    logger = logging.getLogger()
-    is_dist = dist.is_initialized()
-    graph_net = set_graph_model(configer=configer)
-    graph_node_features = gen_graph_node_feature(configer)
-    graph_node_features = graph_node_features.cuda()
+def print_bipartite(configer, n_datasets, bi_graphs):
+    
+    # logger = logging.getLogger()
+    # is_dist = dist.is_initialized()
+    # graph_net = set_graph_model(configer=configer)
+    # graph_node_features = gen_graph_node_feature(configer)
+    # graph_node_features = graph_node_features.cuda()
+    # net = set_model(configer)
 
-    graph_net.eval()
-    unify_prototype, bi_graphs,_ = graph_net(graph_node_features) 
+    # net.eval()
+    # graph_net.eval()
+    # unify_prototype, bi_graphs,_ = graph_net(graph_node_features) 
+    # unify_prototype, bi_graphs = graph_net.get_optimal_matching(graph_node_features, True)
+    # print(len(bi_graphs))
+    # net.set_bipartite_graphs(bi_graphs)
+    # net.set_unify_prototype(unify_prototype)
+    # print(unify_prototype)
+
+    # if configer.get('GNN', 'output_max_adj') and configer.get('GNN', 'output_softmax_and_max_adj'):
+    #     bi_graphs = [bi_graph for i, bi_graph in filter(lambda x : x[0] % 2 == 0, enumerate(bi_graphs))]
     # print(bi_graphs)
     for i in range(0, n_datasets):
         
         max_value, max_index = torch.max(bi_graphs[i], dim=0)
-        print(max_value)
         n_cat = configer.get(f'dataset{i+1}', 'n_cats')
         
         buckets = {}
@@ -127,11 +153,89 @@ def train():
             print("\"{}\": {}".format(index, buckets[index]))    
         
     
+    return 
+
+@torch.no_grad()
+def find_unuse(configer, net):
+    n_datasets = configer.get('n_datasets')
+    is_dist = dist.is_initialized()
+    net.eval()
+    dls = get_data_loader(configer, aux_mode='eval', distributed=is_dist)
+
+    out_buckets = {}
+    for i in range(0, n_datasets): 
+        print("dataset {}:".format(i+1))    
+        n_cat = configer.get(f'dataset{i+1}', 'n_cats')
+        buckets = find_unuse_label(configer, net, dls[i], n_cat, i)
+        for index in range(0, n_cat):
+            if index not in buckets:
+                buckets[index] = []
+            print("\"{}\": {}".format(index, buckets[index]))    
+        
+        out_buckets[f'dataset{i+1}'] = buckets
+        
+    return out_buckets
+
+def find_unuse_self():
+    # torch.autograd.set_detect_anomaly(True)
+    n_datasets = configer.get('n_datasets')
+    logger = logging.getLogger()
+    is_dist = dist.is_initialized()
+    graph_net = set_graph_model(configer=configer)
+    graph_node_features = gen_graph_node_feature(configer)
+    graph_node_features = graph_node_features.cuda()
+    net = set_model(configer)
+
+    net.eval()
+    graph_net.eval()
+    # unify_prototype, bi_graphs,_ = graph_net(graph_node_features) 
+    unify_prototype, bi_graphs = graph_net.get_optimal_matching(graph_node_features, True)
+    # print_bipartite(n_datasets, bi_graphs)
+    # return
+    net.set_bipartite_graphs(bi_graphs)
+    net.set_unify_prototype(unify_prototype)
+    # print(unify_prototype)
+
+    # if configer.get('GNN', 'output_max_adj') and configer.get('GNN', 'output_softmax_and_max_adj'):
+    #     bi_graphs = [bi_graph for i, bi_graph in filter(lambda x : x[0] % 2 == 0, enumerate(bi_graphs))]
+    # # print(bi_graphs)
+    # for i in range(0, n_datasets):
+        
+    #     max_value, max_index = torch.max(bi_graphs[i], dim=0)
+    #     # print(max_value)
+        
+    #     buckets = {}
+    #     for index, j in enumerate(max_index):
+            
+    #         if int(j) not in buckets:
+    #             buckets[int(j)] = [index]
+    #         else:
+    #             buckets[int(j)].append(index)
+            
+    #     print("dataset {}:".format(i+1))    
+    dls = get_data_loader(configer, aux_mode='eval', distributed=is_dist)
+
+
+    out_buckets = {}
+    for i in range(0, n_datasets): 
+        print("dataset {}:".format(i+1))    
+        n_cat = configer.get(f'dataset{i+1}', 'n_cats')
+        buckets = find_unuse_label(configer, net, dls[i], n_cat, i)
+        for index in range(0, n_cat):
+            if index not in buckets:
+                buckets[index] = []
+            print("\"{}\": {}".format(index, buckets[index]))    
+        
+        out_buckets[f'dataset{i+1}'] = buckets
+        
+    with open('bipart.pkl', 'wb') as file:
+        pickle.dump(out_buckets, file)
+
     return
 
 
 def main():
-    train()
+    find_unuse()
 
 
 if __name__ == "__main__":

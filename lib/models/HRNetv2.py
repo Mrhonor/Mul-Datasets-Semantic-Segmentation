@@ -425,6 +425,10 @@ class HRNet_W48(nn.Module):
         self.prototypes = nn.Parameter(F.normalize(new_proto, p=2, dim=-1),
                                         requires_grad=False)
 
+
+        
+
+
 class HRNet_W48_CLIP(nn.Module):
     """
     deep high-resolution representation learning for human pose estimation, CVPR2019
@@ -435,7 +439,7 @@ class HRNet_W48_CLIP(nn.Module):
         self.configer = configer
         self.aux_mode = self.configer.get('aux_mode')
         self.n_bn = self.configer.get('n_bn')
-        self.num_unify_classes = self.configer.get('num_unify_classes')
+        # self.num_unify_classes = self.configer.get('num_unify_classes')
         self.n_datasets = self.configer.get('n_datasets')
         self.backbone = HRNetBackbone_ori(configer)
         self.proj_dim = self.configer.get('contrast', 'proj_dim')
@@ -453,7 +457,7 @@ class HRNet_W48_CLIP(nn.Module):
 
         self.proj_head = ProjectionHeadOri(dim_in=in_channels, proj_dim=512, bn_type=self.configer.get('network', 'bn_type'))
             
-        # self.init_weights()    
+        self.init_weights()    
        
 
     def forward(self, x_, dataset=0):
@@ -470,16 +474,20 @@ class HRNet_W48_CLIP(nn.Module):
         if self.aux_mode == 'train':
             return {'seg':emb}
         elif self.aux_mode == 'eval':
-            # logits = torch.einsum('bchw, nc -> bnhw', emb, self.text_feature_vecs[dataset])
-            logits = torch.einsum('bchw, nc -> bnhw', emb, self.text_feature_vecs[self.n_datasets])
+            logits = torch.einsum('bchw, nc -> bnhw', emb, self.text_feature_vecs[dataset])
+            # logits = torch.einsum('bchw, nc -> bnhw', emb, self.text_feature_vecs[self.n_datasets])
             
             return logits
         elif self.aux_mode == 'pred':
-            logits = torch.einsum('bchw, nc -> bnhw', emb, self.text_feature_vecs[self.n_datasets])
-            #logits = torch.einsum('bchw, nc -> bnhw', emb, self.text_feature_vecs[dataset])
+            # logits = torch.einsum('bchw, nc -> bnhw', emb, self.text_feature_vecs[self.n_datasets])
+            logits = torch.einsum('bchw, nc -> bnhw', emb, self.text_feature_vecs[dataset])
             logits = F.interpolate(logits, size=(x_.size(2), x_.size(3)), mode="bilinear", align_corners=True)
             pred = logits.argmax(dim=1)
             return pred
+        elif self.aux_mode == 'test':
+            logits = [torch.einsum('bchw, nc -> bnhw', emb, self.text_feature_vecs[i]) for i in range(0, self.n_datasets)] 
+            
+            return logits
         else:
             raise NotImplementedError
 
@@ -516,6 +524,7 @@ class HRNet_W48_CLIP(nn.Module):
                 text = clip.tokenize(lb_name).cuda()
                 text_features = clip_model.encode_text(text).type(torch.float32)
                 self.text_feature_vecs.append(text_features)
+                
                 
             if self.with_unify_lb:
                 lb_name = self.configer.get("unify_classes_name")
@@ -554,6 +563,7 @@ class HRNet_W48_CLIP(nn.Module):
                 add_param_to_list(child, wd_params, nowd_params)
         return wd_params, nowd_params, lr_mul_wd_params, lr_mul_nowd_params
 
+
 class HRNet_W48_GNN(nn.Module):
     """
     deep high-resolution representation learning for human pose estimation, CVPR2019
@@ -582,9 +592,28 @@ class HRNet_W48_GNN(nn.Module):
         in_channels = 720  # 48 + 96 + 192 + 384
 
         self.proj_head = ProjectionHeadOri(dim_in=in_channels, proj_dim=self.output_feat_dim, bn_type=self.configer.get('network', 'bn_type'))
+
+        self.total_cats = 0
+        
+        for i in range(0, self.n_datasets):
+            self.total_cats += self.configer.get('dataset'+str(i+1), 'n_cats')
+        print("self.total_cats:", self.total_cats)
+        
+        self.max_num_unify_class = int(self.configer.get('GNN', 'unify_ratio') * self.total_cats)
+        self.bipartite_graphs = nn.ParameterList([])
+        for i in range(0, self.n_datasets):
+            self.bipartite_graphs.append(nn.Parameter(
+                torch.zeros(self.configer.get('dataset'+str(i+1), 'n_cats'), self.max_num_unify_class), requires_grad=False
+                ))
+            
+
+        self.unify_prototype = nn.Parameter(torch.zeros(self.max_num_unify_class, self.output_feat_dim),
+                                requires_grad=True)
+        trunc_normal_(self.unify_prototype, std=0.02)
             
         self.init_weights()    
-       
+        # self.get_encode_lb_vec()
+
 
     def forward(self, x_, dataset=0):
         x = self.backbone(x_)
@@ -597,13 +626,34 @@ class HRNet_W48_GNN(nn.Module):
 
         feats = torch.cat([feat1, feat2, feat3, feat4], 1)
         emb = self.proj_head(feats)
+
         if self.aux_mode == 'train':
-            return {'seg':emb}
+            if self.training:
+                logits = torch.einsum('bchw, nc -> bnhw', emb, self.unify_prototype)
+                return {'seg':logits}
+            else:
+                return {'seg':emb}
         elif self.aux_mode == 'eval':
             logits = torch.einsum('bchw, nc -> bnhw', emb, self.unify_prototype)
             remap_logits = torch.einsum('bchw, nc -> bnhw', logits, self.bipartite_graphs[dataset])
             # remap_logits = F.interpolate(remap_logits, size=(target.size(1), target.size(2)), mode="bilinear", align_corners=True)
             return remap_logits
+        elif self.aux_mode == 'pred':
+            logits = torch.einsum('bchw, nc -> bnhw', emb, self.unify_prototype)
+            logits = torch.einsum('bchw, nc -> bnhw', logits, self.bipartite_graphs[dataset])
+            logits = F.interpolate(logits, size=(logits.size(2)*4, logits.size(3)*4), mode="bilinear", align_corners=True)
+            
+            pred = logits.argmax(dim=1)
+            
+            return pred
+        else:
+            logits = torch.einsum('bchw, nc -> bnhw', emb, self.unify_prototype)
+            # logits = torch.einsum('bchw, nc -> bnhw', logits, self.bipartite_graphs[dataset])
+            logits = F.interpolate(logits, size=(logits.size(2)*4, logits.size(3)*4), mode="bilinear", align_corners=True)
+            
+            pred = logits.argmax(dim=1)
+            
+            return pred
 
     def init_weights(self):
         for name, module in self.named_modules():
@@ -657,8 +707,27 @@ class HRNet_W48_GNN(nn.Module):
         return wd_params, nowd_params, lr_mul_wd_params, lr_mul_nowd_params
     
     def set_bipartite_graphs(self, bi_graphs):
-        self.bipartite_graphs = bi_graphs
+        for i in range(0, self.n_datasets):
+            self.bipartite_graphs[i] = nn.Parameter(
+                bi_graphs[i], requires_grad=False
+                )
         
-    def set_unify_prototype(self, unify_prototype):
-        self.unify_prototype = unify_prototype
+    def set_unify_prototype(self, unify_prototype, grad=False):
+        self.unify_prototype = nn.Parameter(unify_prototype,
+                                requires_grad=grad)
         
+    def get_encode_lb_vec(self):
+        text_feature_vecs = []
+        with torch.no_grad():
+            clip_model, _ = clip.load("ViT-B/32", device="cuda")
+            for i in range(0, self.n_datasets):
+                lb_name = self.configer.get("dataset"+str(i+1), "label_names")
+                lb_name = [f'a photo of {name} from dataset {i+1}.' for name in lb_name]
+                text = clip.tokenize(lb_name).cuda()
+                text_features = clip_model.encode_text(text).type(torch.float32)
+                text_feature_vecs.append(text_features)
+                
+        text_feature_vecs = torch.cat(text_feature_vecs, dim=0)
+        self.unify_prototype = nn.Parameter(text_feature_vecs,
+                        requires_grad=False)
+                

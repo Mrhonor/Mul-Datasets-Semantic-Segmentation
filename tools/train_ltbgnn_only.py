@@ -19,7 +19,7 @@ import torch.cuda.amp as amp
 
 from lib.models import model_factory
 from lib.get_dataloader import get_data_loader, get_single_data_loader
-from lib.ohem_ce_loss import OhemCELoss
+from lib.loss.ohem_ce_loss import OhemCELoss
 from lib.lr_scheduler import WarmupPolyLrScheduler
 from lib.meters import TimeMeter, AvgMeter
 from lib.logger import setup_logger, print_log_msg
@@ -55,9 +55,9 @@ def is_distributed():
 def parse_args():
     parse = argparse.ArgumentParser()
     parse.add_argument('--local_rank', dest='local_rank', type=int, default=-1,)
-    parse.add_argument('--port', dest='port', type=int, default=16853,)
+    parse.add_argument('--port', dest='port', type=int, default=16852,)
     parse.add_argument('--finetune_from', type=str, default=None,)
-    parse.add_argument('--config', dest='config', type=str, default='configs/ltbgnn_city_cam_a2d2.json',)
+    parse.add_argument('--config', dest='config', type=str, default='configs/clip_5_datasets.json',)
     return parse.parse_args()
 
 # 使用绝对路径
@@ -177,7 +177,7 @@ def set_optimizer(model, configer):
     
 def set_optimizerD(model, configer):
     if hasattr(model, 'get_discri_params'):
-        wd_params, nowd_params, lr_mul_wd_params, lr_mul_nowd_params = model.get_params()
+        wd_params, nowd_params, lr_mul_wd_params, lr_mul_nowd_params = model.get_discri_params()
         #  wd_val = cfg.weight_decay
         wd_val = 0
         params_list = [
@@ -187,7 +187,9 @@ def set_optimizerD(model, configer):
             {'params': lr_mul_nowd_params, 'weight_decay': wd_val, 'lr': configer.get('lr', 'lr_start')},
         ]
     else:
+        print("what!")
         return None
+
     
     if configer.get('optim') == 'SGD':
         optim = torch.optim.SGD(
@@ -339,6 +341,7 @@ def train():
     writer = SummaryWriter(configer.get('res_save_pth'))
     use_ema = configer.get('use_ema')
     use_contrast = configer.get('contrast', 'use_contrast')
+    joint_train = configer.get('train', 'joint_train')
     ## dataset
 
     # dl = get_single_data_loader(configer, aux_mode='train', distributed=is_dist)
@@ -432,12 +435,17 @@ def train():
         for j in range(0,len(dl_iters)):
             try:
                 im, lb = next(dl_iters[j])
+                while torch.min(lb) == 255:
+                    im, lb = next(dl_iters[j])
+
                 if not im.size()[0] == configer.get('dataset'+str(j+1), 'ims_per_gpu'):
                     raise StopIteration
             except StopIteration:
                 dl_iters[j] = iter(dls[j])
                 im, lb = next(dl_iters[j])
-                
+                while torch.min(lb) == 255:
+                    im, lb = next(dl_iters[j])
+            
             ims.append(im)
             lbs.append(lb)
                 
@@ -458,7 +466,7 @@ def train():
 
         SEG = 0
         GNN = 1
-        # if configer.get('iter') // configer.get('train', 'seg_gnn_alter_iters') % 2 == 0:
+        # if joint_train and configer.get('iter') // configer.get('train', 'seg_gnn_alter_iters') % 2 == 0:
         #     train_seg_or_gnn = SEG
         # else:
         train_seg_or_gnn = GNN
@@ -467,6 +475,8 @@ def train():
         #     seg_out = net(im)
 
         optim.zero_grad()
+        gnn_optim.zero_grad()
+        gnn_optimD.zero_grad()
         with amp.autocast(enabled=configer.get('use_fp16')):
             # if finetune and i >= fix_param_iters + aux_iter:
             #     finetune = False
@@ -495,6 +505,7 @@ def train():
                     seg_out = net(im)
                 
                 unify_prototype, bi_graphs, adv_out = graph_net(graph_node_features)
+                # print(torch.norm(unify_prototype[0][0], p=2))
             else:
                 is_adv = False
                 graph_net.eval()
@@ -503,10 +514,15 @@ def train():
                 
                 if fix_graph == False:
                     with torch.no_grad():
-                        unify_prototype, bi_graphs, adv_out = graph_net(graph_node_features)
+                        if is_distributed():
+                            unify_prototype, bi_graphs = graph_net.module.get_optimal_matching(graph_node_features)    
+                        else:
+                            unify_prototype, bi_graphs = graph_net.get_optimal_matching(graph_node_features)     
+
                         unify_prototype = unify_prototype.detach()
                         bi_graphs = [bigh.detach() for bigh in bi_graphs]
                         fix_graph = True
+                        adv_out = None
                 
             
             seg_out['seg'] = seg_out['seg']
@@ -532,32 +548,43 @@ def train():
         # print('before backward')
         # set_trace()
         # with torch.autograd.detect_anomaly():
+       
+        if is_adv:
+            # print(adv_loss)
+            scaler.scale(adv_loss).backward()
+
+            # for name, param in graph_net.named_parameters():
+            #     # if 'netD' in name:
+            #     print(f"Parameter: {name}, Gradient: {param.grad}")
+
+            # print(graph_net.named_parameters)
+            # print(graph_net.netD1.main.0.weight.grad)
+            scaler.step(gnn_optimD)
+            scaler.update()
+            torch.cuda.synchronize()
+            gnn_optimD.zero_grad()
         
+
         scaler.scale(backward_loss).backward()
-        scaler.scale(adv_loss).backward()
-        # print(backward_loss.item())
-            
-        # print('after backward')
-
-        # configer.plus_one('iters')
-        # self.configer.plus_one('iters')
-
-        # for name, param in graph_net.named_parameters():
-        #     if torch.isnan(param.grad).any() or torch.isinf(param.grad).any():
-        #         print("Graph NaN or Inf value found in gradients")
-
-        # for param in net.parameters():
-        #     if torch.isnan(param.grad).any() or torch.isinf(param.grad).any():
-        #         print("seg NaN or Inf value found in gradients")
-        
         if train_seg_or_gnn == SEG: 
             scaler.step(optim)
         else:
             scaler.step(gnn_optim)
-            scaler.step(gnn_optimD)
-            
+        
         scaler.update()
         torch.cuda.synchronize()
+ 
+        # scaler.scale(backward_loss).backward()
+        # if is_adv:
+        #     scaler.scale(adv_loss).backward()
+        # if train_seg_or_gnn == SEG: 
+        #     scaler.step(optim)
+        # else:
+        #     scaler.step(gnn_optim)
+        #     scaler.step(gnn_optimD)
+            
+        # scaler.update()
+        # torch.cuda.synchronize()
         if use_ema:
             ema_net.EMAUpdate(net.module)
         # print('synchronize')
@@ -566,7 +593,8 @@ def train():
         if kl_loss:
             kl_loss_meter.update(kl_loss.item())
         
-        loss_domain_meter.update(adv_loss.item())
+        if is_adv:
+            loss_domain_meter.update(adv_loss.item())
         # loss_pre_meter.update(loss_pre.item())
         
         if not use_dataset_aux_head or i > aux_iter:
@@ -591,7 +619,7 @@ def train():
                 loss_pre_meter, loss_aux_meters, loss_contrast_meter, loss_domain_meter, kl_loss_meter)
             
 
-        if (i + 1) % 5000 == 0:
+        if (i + 1) % 10000 == 0:
             seg_save_pth = osp.join(configer.get('res_save_pth'), 'seg_model_{}.pth'.format(i+1))
             gnn_save_pth = osp.join(configer.get('res_save_pth'), 'graph_model_{}.pth'.format(i+1))
             logger.info('\nsave seg_models to {}, gnn_models to {}'.format(seg_save_pth, gnn_save_pth))
@@ -599,10 +627,11 @@ def train():
             # if fix_graph == False:
             with torch.no_grad():
                 # input_feats = torch.cat([graph_node_features, graph_net.unify_node_features], dim=0)
-                unify_prototype, bi_graphs, _ = graph_net(graph_node_features)
-                if configer.get('GNN', 'output_max_adj') and configer.get('GNN', 'output_softmax_and_max_adj'):
-                    bi_graphs = [bi_graph for i, bi_graph in filter(lambda x : x[0] % 2 == 0, enumerate(bi_graphs))]
-
+                if is_distributed():
+                    unify_prototype, bi_graphs = graph_net.module.get_optimal_matching(graph_node_features)
+                else:
+                    unify_prototype, bi_graphs = graph_net.get_optimal_matching(graph_node_features) 
+                
             if use_dataset_aux_head and i < aux_iter:
                 eval_model_func = eval_model_aux
             else:
@@ -610,6 +639,8 @@ def train():
                 eval_model_func = eval_model_contrast
 
             optim.zero_grad()
+            gnn_optim.zero_grad()
+            gnn_optimD.zero_grad()
             if is_distributed():
                 net.module.set_unify_prototype(unify_prototype)
                 net.module.set_bipartite_graphs(bi_graphs)

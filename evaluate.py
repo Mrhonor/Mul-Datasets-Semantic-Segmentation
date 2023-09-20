@@ -32,6 +32,7 @@ from lib.city_to_cam import Cityid_to_Camid
 from lib.a2d2_to_cam import a2d2_to_Camid
 from lib.class_remap import ClassRemap
 from tools.configer import Configer
+from lib.module.gen_graph_node_feature import gen_graph_node_feature
 
 CITY_ID = 0
 CAM_ID = 1
@@ -161,6 +162,73 @@ class MscEvalV0_Contrast(object):
         print(ious)
         miou = np.nanmean(ious.detach().cpu().numpy())
         return miou.item()
+
+class MscEvalV0_AutoLink(object):
+
+    def __init__(self, configer, scales=(0.5, ), flip=False, ignore_label=255):
+        self.configer = configer
+        self.n_datasets = self.configer.get('n_datasets')
+        self.scales = scales
+        self.flip = flip
+        self.ignore_label = ignore_label
+
+    def __call__(self, net, dl, n_classes, dataset_id):
+        ## evaluate
+        # hist = torch.zeros(n_classes, n_classes).cuda().detach()
+        datasets_remap = []
+        # hist = torch.zeros(n_classes, n_classes).cuda().detach()
+        # if dist.is_initialized() and dist.get_rank() != 0:
+        diter = enumerate(dl)
+        # else:
+        #     diter = enumerate(tqdm(dl))
+        for i, (imgs, label) in diter:
+            N, _, H, W = label.shape
+
+            label = label.squeeze(1).cuda()
+            size = label.size()[-2:]
+            # print(size)
+
+            scale = self.scales[0]
+            sH, sW = int(scale * H), int(scale * W)
+            sH, sW = get_round_size((sH, sW))
+            im_sc = F.interpolate(imgs, size=(sH, sW),
+                    mode='bilinear', align_corners=True)
+
+            im_sc = im_sc.cuda()
+            all_logits = net(im_sc)
+            for index in range(0, self.n_datasets):
+                if index == dataset_id:
+                    if len(datasets_remap) <= index:
+                        datasets_remap.append(torch.eye(n_classes).cuda().detach())
+                     
+                    continue
+                
+                n_cats = self.configer.get('dataset'+str(index+1), 'n_cats')
+                this_data_hist = torch.zeros(n_classes, n_cats).cuda().detach()
+
+                logits = F.interpolate(all_logits[index], size=size,
+                        mode='bilinear', align_corners=True)
+                probs = torch.softmax(logits, dim=1)
+                preds = torch.argmax(probs, dim=1)
+                keep = label != self.ignore_label
+        
+                this_data_hist = torch.tensor(np.bincount(
+                    label.cpu().numpy()[keep.cpu().numpy()] * n_cats + preds.cpu().numpy()[keep.cpu().numpy()],
+                    minlength=n_classes * n_cats
+                )).cuda().view(n_classes, n_cats)
+                if len(datasets_remap) <= index:
+                    datasets_remap.append(this_data_hist)
+                else:
+                    datasets_remap[index] += this_data_hist
+                         
+        return [torch.argmax(hist, dim=1) for hist in datasets_remap]
+        # if dist.is_initialized():
+        #     dist.all_reduce(hist, dist.ReduceOp.SUM)
+            
+        # ious = hist.diag() / (hist.sum(dim=0) + hist.sum(dim=1) - hist.diag())
+        # print(ious)
+        # miou = np.nanmean(ious.detach().cpu().numpy())
+        # return miou.item()
 
 
 class MscEvalCrop(object):
@@ -542,7 +610,7 @@ def evaluate(cfg, weight_pth):
 
     ## evaluator
     heads, mious = eval_model(cfg, net.module)
-    logger.info(tabulate([mious, ], headers=heads, tablefmt='orgtbl'))
+    # logger.info(tabulate([mious, ], headers=heads, tablefmt='orgtbl'))
 
 def evaluate_cdcl(cfg_a2d2, cfg_city, cfg_cam, weight_pth):
     # 修改后用于多数据集
@@ -632,7 +700,7 @@ def eval_model_contrast(configer, net):
     n_datasets = configer.get("n_datasets")
 
     # dl_cam = get_data_loader(cfg_cam, mode='val', distributed=is_dist)
-    dl_city, dl_cam, dl_a2d2 = get_data_loader(configer, aux_mode='eval', distributed=is_dist)
+    dls = get_data_loader(configer, aux_mode='eval', distributed=is_dist)
     # dl_city = get_data_loader(configer, aux_mode='eval', distributed=is_dist)[0]
     net.eval()
     # net.train()
@@ -642,15 +710,48 @@ def eval_model_contrast(configer, net):
 
     single_scale = MscEvalV0_Contrast(configer, (1., ), False)
     
-    mIOU_city = single_scale(net, dl_city, 19, CITY_ID)
-    mIOU_cam = single_scale(net, dl_cam, 12, CAM_ID)
-    mIOU_a2d2 = single_scale(net, dl_a2d2, configer.get('dataset3', 'n_cats'), A2D2_ID)
+    for i in range(0, configer.get('n_datasets')):
+        mIOU = single_scale(net, dls[i], configer.get('dataset'+str(i+1),"n_cats"), i)
+        mious.append(mIOU)
+    
 
     heads.append('single_scale')
-    mious.append(mIOU_cam)
-    mious.append(mIOU_city)
-    mious.append(mIOU_a2d2)
-    logger.info('Cam single mIOU is: %s\nCityScapes single mIOU is: %s\n A2D2 single mIOU is: %s\n', mIOU_cam, mIOU_city, mIOU_a2d2)
+    # mious.append(mIOU_cam)
+    # mious.append(mIOU_city)
+    # mious.append(mIOU_a2d2)
+    # logger.info('Cam single mIOU is: %s\nCityScapes single mIOU is: %s\n A2D2 single mIOU is: %s\n', mIOU_cam, mIOU_city, mIOU_a2d2)
+    # logger.info('Cam single mIOU is: %s\nCityScapes single mIOU is: %s\n', mIOU_cam, mIOU_city)
+
+    net.aux_mode = org_aux
+    return heads, mious
+
+@torch.no_grad()
+def eval_model_label_link(configer, net):
+    org_aux = net.aux_mode
+    net.aux_mode = 'eval'
+
+    is_dist = dist.is_initialized()
+
+    n_datasets = configer.get("n_datasets")
+
+    dls = get_data_loader(configer, aux_mode='eval', distributed=is_dist)
+
+    net.eval()
+
+    heads, mious = [], []
+    logger = logging.getLogger()
+
+    single_scale = MscEvalV0_Contrast(configer, (1., ), False)
+    
+    for i in range(0, configer.get('n_datasets')):
+        mIOU = single_scale(net, dls[i], configer.get('dataset'+str(i+1),"n_cats"), i)
+        mious.append(mIOU)
+    
+    heads.append('single_scale')
+    # mious.append(mIOU_cam)
+    # mious.append(mIOU_city)
+    # mious.append(mIOU_a2d2)
+    # logger.info('Cam single mIOU is: %s\nCityScapes single mIOU is: %s\n A2D2 single mIOU is: %s\n', mIOU_cam, mIOU_city, mIOU_a2d2)
     # logger.info('Cam single mIOU is: %s\nCityScapes single mIOU is: %s\n', mIOU_cam, mIOU_city)
 
     net.aux_mode = org_aux
@@ -759,7 +860,7 @@ def parse_args():
     parse.add_argument('--local_rank', dest='local_rank', type=int, default=-1,)
     parse.add_argument('--port', dest='port', type=int, default=16745,)
     parse.add_argument('--finetune_from', type=str, default=None,)
-    parse.add_argument('--config', dest='config', type=str, default='configs/clip_city_cam_a2d2.json',)
+    parse.add_argument('--config', dest='config', type=str, default='configs/ltbgnn_5_datasets.json',)
     return parse.parse_args()
 
 
@@ -781,12 +882,37 @@ def main():
     
     logger = logging.getLogger()
     net = model_factory[configer.get('model_name')](configer)
-    state = torch.load(configer.get("train", "finetune_from"), map_location='cpu')
+    state = torch.load('res/celoss/seg_model_300000.pth', map_location='cpu')
     net.load_state_dict(state, strict=False)
     
     net.cuda()
     net.aux_mode = 'eval'
-    # net.eval()
+    net.eval()
+    
+    graph_net = model_factory[configer.get('GNN','model_name')](configer)
+    torch.set_printoptions(profile="full")
+    graph_net.load_state_dict(torch.load('res/celoss/graph_model_270000.pth', map_location='cpu'), strict=False)
+    graph_net.cuda()
+    graph_net.eval()
+    # graph_node_features = gen_graph_node_feature(configer)
+    graph_node_features = torch.load('res/celoss/graph_node_features5_CityScapes_CamVid_Sunrgbd_Bdd100k_Idd.pt')
+    # unify_prototype, ori_bi_graphs = graph_net.get_optimal_matching(graph_node_features, init=True) 
+    # unify_prototype, ori_bi_graphs,_,_ = graph_net(graph_node_features)
+    unify_prototype, ori_bi_graphs = graph_net.get_optimal_matching(graph_node_features, init=True) 
+    bi_graphs = []
+    if len(ori_bi_graphs) == 10:
+        for j in range(0, len(ori_bi_graphs), 2):
+            bi_graphs.append(ori_bi_graphs[j+1].detach())
+    else:
+        bi_graphs = [bigh.detach() for bigh in ori_bi_graphs]
+    # unify_prototype, bi_graphs, adv_out, _ = graph_net(graph_node_features)
+
+    # print(bi_graphs[0])
+    # print(bi_graphs[0][18])
+    print(torch.norm(net.unify_prototype[0][0], p=2))
+    print(torch.norm(unify_prototype[0][0], p=2))
+    net.set_unify_prototype(unify_prototype)
+    net.set_bipartite_graphs(bi_graphs) 
     
     heads, mious = eval_model_contrast(configer, net)
     
@@ -794,6 +920,137 @@ def main():
     logger.info(tabulate([mious, ], headers=heads, tablefmt='orgtbl'))
     
     
+def Find_label_relation(configer, datasets_remaps):
+    n_datasets = configer.get('n_datasets')
+    out_label_relation = []
+    total_cats = 0
+    dataset_cats = []
+    for i in range(0, n_datasets):
+        dataset_cats.append(configer.get('dataset'+str(i+1), 'n_cats'))
+        total_cats += configer.get('dataset'+str(i+1), 'n_cats')
+        
+    bipart_graph =torch.zeros((total_cats, total_cats), dtype=torch.float) 
+    for i in range(0, n_datasets):
+        this_datasets_sets = datasets_remaps[i]
+        for j in range(i+1, n_datasets):
+
+            this_datasets_map = datasets_remaps[i][j]
+            other_datasets_map = datasets_remaps[j][i]
+            this_size = len(this_datasets_map)+len(other_datasets_map)
+            this_label_relation = torch.zeros((this_size, this_size), dtype=torch.bool)
+            
+            for index, val in enumerate(this_datasets_map):
+                this_label_relation[index][len(this_datasets_map)+val] = True
+            
+            for index, val in enumerate(other_datasets_map):
+                this_label_relation[len(this_datasets_map)+index][val] = True
+            out_label_relation.append(this_label_relation)
+        
+    return out_label_relation
+    # conflict = []
+    
+@torch.no_grad()
+def find_unuse_label(configer, net, dl, n_classes, dataset_id):
+        ## evaluate
+    # hist = torch.zeros(n_classes, n_classes).cuda().detach()
+    # datasets_remap = []
+    ignore_label = 255
+    n_datasets = configer.get("n_datasets")
+    total_cats = 0
+    net.aux_mode = 'train'
+    unify_prototype = net.unify_prototype
+    # print(unify_prototype.shape)
+    bipart_graph = net.bipartite_graphs
+    for i in range(0, n_datasets):
+        total_cats += configer.get("dataset"+str(i+1), "n_cats")
+    total_cats = int(total_cats * configer.get('GNN', 'unify_ratio'))
+
+    hist = torch.zeros(n_classes, total_cats).cuda().detach()
+    if dist.is_initialized() and dist.get_rank() != 0:
+        diter = enumerate(dl)
+    else:
+        diter = enumerate(tqdm(dl))
+        
+    
+    with torch.no_grad():
+        for i, (imgs, label) in diter:
+            N, _, H, W = label.shape
+            if H > 2048 or W > 2048:
+                H = 2048
+                W = 2048
+                
+
+            label = label.squeeze(1).cuda()
+            size = label.shape[-2:]
+
+            im_sc = F.interpolate(imgs, size=(H, W),
+                    mode='bilinear', align_corners=True)
+
+            im_sc = im_sc.cuda()
+            
+            emb = net(im_sc, dataset=dataset_id)
+        
+            logits = torch.einsum('bchw, nc -> bnhw', emb['seg'], unify_prototype)
+
+            logits = F.interpolate(logits, size=size,
+                    mode='bilinear', align_corners=True)
+            probs = torch.softmax(logits, dim=1)
+            preds = torch.argmax(probs, dim=1)
+            keep = label != ignore_label
+
+            hist += torch.tensor(np.bincount(
+                label.cpu().numpy()[keep.cpu().numpy()] * total_cats + preds.cpu().numpy()[keep.cpu().numpy()],
+                minlength=n_classes * total_cats
+            )).cuda().view(n_classes, total_cats)
+
+    max_value, max_index = torch.max(bipart_graph[dataset_id], dim=0)
+    # print(max_value)
+    n_cat = configer.get(f'dataset{dataset_id+1}', 'n_cats')
+    
+    # torch.set_printoptions(profile="full")
+    # print(hist)
+
+    buckets = {}
+    for index, j in enumerate(max_index):
+        
+        if int(j) not in buckets:
+            buckets[int(j)] = [index]
+        else:
+            buckets[int(j)].append(index)
+
+    for index in range(0, n_cat):
+        if index not in buckets:
+            buckets[index] = []
+
+    for index, val in buckets.items():
+        total_num = 0
+        for i in val:
+            total_num += hist[index][i]
+        
+        
+        if total_num != 0:
+            for i in val:
+                rate = hist[index][i] / total_num
+                if rate < 1e-4:
+                    buckets[index].remove(i)
+
+
+    return buckets 
+
 
 if __name__ == "__main__":
     main()
+    # args = parse_args()
+    # configer = Configer(configs=args.config)
+    # datasets_remaps = []
+    # set0 = []
+    # set0.append([])
+    # set0.append([2,0])
+    # datasets_remaps.append(set0)
+
+    # set1 = []
+    # set1.append([0,1,0])
+    # set1.append([])
+    # datasets_remaps.append(set1)
+    # print(Find_label_relation(configer, datasets_remaps))
+

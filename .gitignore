@@ -115,8 +115,6 @@ preprocess_data.py
 res/
 adj.md
 tensorrt/build/*
-datasets/coco/train.txt
-datasets/coco/val.txt
 pretrained/*
 dist_train.sh
 openvino/build/*
@@ -130,3 +128,4 @@ tvm/
 ## Caffe
 *.bin
 *.caffemodel
+*.log

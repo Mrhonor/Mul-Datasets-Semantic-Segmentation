@@ -200,7 +200,7 @@ class CamVid(Dataset):
         img, label = im_lb['im'], im_lb['lb']
 
         if self.mode == 'ret_path':
-            return impth, label
+            return impth, label, lbpth
         
         return img.detach(), label.unsqueeze(0).detach()
         # return img.detach()

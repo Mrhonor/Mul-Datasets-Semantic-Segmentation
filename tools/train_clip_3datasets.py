@@ -26,7 +26,7 @@ import torch.cuda.amp as amp
 from lib.models import model_factory
 from configs import set_cfg_from_file
 from lib.get_dataloader import get_data_loader, get_single_data_loader
-from lib.ohem_ce_loss import OhemCELoss
+from lib.loss.ohem_ce_loss import OhemCELoss
 from lib.lr_scheduler import WarmupPolyLrScheduler
 from lib.meters import TimeMeter, AvgMeter
 from lib.logger import setup_logger, print_log_msg
@@ -63,7 +63,7 @@ def parse_args():
     parse.add_argument('--local_rank', dest='local_rank', type=int, default=-1,)
     parse.add_argument('--port', dest='port', type=int, default=16853,)
     parse.add_argument('--finetune_from', type=str, default=None,)
-    parse.add_argument('--config', dest='config', type=str, default='configs/clip_city_cam_a2d2.json',)
+    parse.add_argument('--config', dest='config', type=str, default='configs/clip_3_datasets.json',)
     return parse.parse_args()
 
 # 使用绝对路径
@@ -498,8 +498,7 @@ def train():
         
         if not use_dataset_aux_head or i > aux_iter:
             loss_pre_meter.update(loss_seg.item()) 
-            if with_domain_adversarial:
-                loss_domain_meter.update(loss_domain)
+
             if with_aux:
                 _ = [mter.update(lss.item()) for mter, lss in zip(loss_aux_meters, loss_aux)]
                 
@@ -518,7 +517,7 @@ def train():
                 loss_pre_meter, loss_aux_meters, loss_contrast_meter, loss_domain_meter, kl_loss_meter)
             
 
-        if (i + 1) % 5000 == 0:
+        if (i + 1) % 10000 == 0:
             save_pth = osp.join(configer.get('res_save_pth'), 'model_{}.pth'.format(i+1))
             logger.info('\nsave models to {}'.format(save_pth))
 
@@ -572,7 +571,7 @@ def train():
 
 
 def main():
-    if True:
+    if configer.get('use_sync_bn'):
         local_rank = int(os.environ["LOCAL_RANK"])
         # torch.cuda.set_device(args.local_rank)
         # dist.init_process_group(

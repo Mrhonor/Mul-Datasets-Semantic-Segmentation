@@ -27,7 +27,7 @@ import torch.cuda.amp as amp
 from lib.models import model_factory
 from configs import set_cfg_from_file
 from lib.get_dataloader import get_data_loader, get_single_data_loader
-from lib.ohem_ce_loss import OhemCELoss
+from lib.loss.ohem_ce_loss import OhemCELoss
 from lib.lr_scheduler import WarmupPolyLrScheduler
 from lib.meters import TimeMeter, AvgMeter
 from lib.logger import setup_logger, print_log_msg
@@ -65,7 +65,7 @@ def parse_args():
     parse.add_argument('--local_rank', dest='local_rank', type=int, default=-1,)
     parse.add_argument('--port', dest='port', type=int, default=16853,)
     parse.add_argument('--finetune_from', type=str, default=None,)
-    parse.add_argument('--config', dest='config', type=str, default='configs/bisenetv2_city_cam.json',)
+    parse.add_argument('--config', dest='config', type=str, default='configs/ltbgnn_5_datasets.json',)
     return parse.parse_args()
 
 # 使用绝对路径
@@ -302,17 +302,16 @@ def train():
     n_datasets = configer.get('n_datasets')
     logger = logging.getLogger()
     is_dist = dist.is_initialized()
-    writer = SummaryWriter(configer.get('res_save_pth'))
     use_ema = configer.get('use_ema')
     with_mulbn = configer.get('contrast', 'with_mulbn')
     ## dataset
-    dl_city, dl_cam, dl_a2d2 = get_data_loader(configer, aux_mode='train', distributed=is_dist)
+    dls = get_data_loader(configer, aux_mode='train', distributed=is_dist)
     ## model
     net = set_model(configer=configer)
     if use_ema:
         ema_net = set_ema_model(configer=configer)
     
-    contrast_losses = set_contrast_loss(configer)
+    criteria = OhemCELoss(0.7)
 
     ## optimizer
     optim = set_optimizer(net, configer)
@@ -328,10 +327,7 @@ def train():
         warmup_ratio=0.1, warmup='exp', last_epoch=-1,)
     # 两个数据集分别处理
     # 使用迭代器读取数据
-    city_iter = iter(dl_city)
-    cam_iter = iter(dl_cam)
-    a2d2_iter = iter(dl_a2d2)
-    
+    dl_iters = [iter(dl) for dl in dls]
     ## train loop
     # for it, (im, lb) in enumerate(dl):
     starti = 0
@@ -361,222 +357,75 @@ def train():
 
     for i in range(starti, configer.get('lr','max_iter') + starti):
         configer.plus_one('iter')
-        try:
-            im_cam, lb_cam = next(cam_iter)
-            if not im_cam.size()[0] == configer.get('dataset2', 'ims_per_gpu'):
-                raise StopIteration
-        except StopIteration:
-            cam_iter = iter(dl_cam)
-            im_cam, lb_cam = next(cam_iter)
-        cam_epoch = i * configer.get('dataset2', 'ims_per_gpu') / 469
-        try:
-            im_city, lb_city = next(city_iter)
-            if not im_city.size()[0] == configer.get('dataset1', 'ims_per_gpu'):
-                raise StopIteration
-        except StopIteration:
-            city_iter = iter(dl_city)
-            im_city, lb_city = next(city_iter)
-        city_epoch = i * configer.get('dataset1', 'ims_per_gpu') / 2976
-        try:
-            im_a2d2, lb_a2d2 = next(a2d2_iter)
-            if not im_a2d2.size()[0] == configer.get('dataset3', 'ims_per_gpu'):
-                raise StopIteration
-        except StopIteration:
-            a2d2_iter = iter(dl_a2d2)
-            im_a2d2, lb_a2d2 = next(a2d2_iter)
-        a2d2_epoch = i * configer.get('dataset3', 'ims_per_gpu') / 30000
-        
+        ims = []
+        lbs = []    
+        for j in range(0,len(dl_iters)):
+            try:
+                im, lb = next(dl_iters[j])
+                while torch.min(lb) == 255:
+                    im, lb = next(dl_iters[j])
 
-        im_city = im_city.cuda()
-        lb_city = lb_city.cuda()
+                if not im.size()[0] == configer.get('dataset'+str(j+1), 'ims_per_gpu'):
+                    raise StopIteration
+            except StopIteration:
+                dl_iters[j] = iter(dls[j])
+                im, lb = next(dl_iters[j])
+                while torch.min(lb) == 255:
+                    im, lb = next(dl_iters[j])
+            
+            ims.append(im)
+            lbs.append(lb)
+                
 
-        im_cam = im_cam.cuda()
-        lb_cam = lb_cam.cuda()
-        
-        im_a2d2 = im_a2d2.cuda()
-        lb_a2d2 = lb_a2d2.cuda()
-        
-        lb_city = torch.squeeze(lb_city, 1)
-        lb_cam = torch.squeeze(lb_cam, 1)
-        lb_a2d2 = torch.squeeze(lb_a2d2, 1)
+        im = torch.cat(ims, dim=0)
+        lb = torch.cat(lbs, dim=0)
 
-        im = [im_city, im_cam, im_a2d2]
-        lb = [lb_city, lb_cam, lb_a2d2]
-        
-        to_tensor = T.ToTensor_im(
-            mean=(0.3038, 0.3383, 0.3034), 
-            std=(0.2071, 0.2088, 0.2090),
-        )
-        
-        to_im = T.TensorToIMG(
-            mean=(0.3038, 0.3383, 0.3034), 
-            std=(0.2071, 0.2088, 0.2090),
-        )
-        
-        for j in range(0, n_datasets):
+        im = im.cuda()
+        lb = lb.cuda()
 
-            dataset_lbs = j * torch.ones(lb[j].shape[0]).cuda()
-            optim.zero_grad()
-            with amp.autocast(enabled=configer.get('use_fp16')):
-                if finetune and i >= fix_param_iters + aux_iter:
-                    finetune = False
-                    if is_distributed():
-                        net.module.switch_require_grad_state(True)
-                    else:
-                        net.switch_require_grad_state(True)
-                    
+        dataset_lbs = torch.cat([i*torch.ones(this_lb.shape[0], dtype=torch.int) for i,this_lb in enumerate(lbs)], dim=0)
+        dataset_lbs = dataset_lbs.cuda()
+        
+        
+        optim.zero_grad()
+        with amp.autocast(enabled=configer.get('use_fp16')):
                 
                 ## 修改为多数据集模式
-                
-                if train_aux:
-                    train_aux = False
-                    if is_distributed():
-                        net.module.set_train_dataset_aux(False)
-                    else:
-                        net.set_train_dataset_aux(False)    
-                                
-
-                enh_im = []
-                for k in range(0, n_datasets):
-                    if k == j:
-                        trans_func = T.GaussianNoise(
-                                mean=0,
-                                sigma=0.03
-                            )
-
-                        bs = im[j].shape[0]
-                        Gauss_im = []
-                        for b in range(0, bs):
-                            ori_im = to_im(im[j][b])
-                            Gauss_im.append(to_tensor(trans_func(ori_im)))
-
-                        enh_im.append(torch.stack(Gauss_im, dim=0).cuda())
-                    else:
-                        enh_im.append(im[j])
-                
-                out = net(im[j], *enh_im, dataset=j)
-
-                
+            out = net(im)
+            cur_index = 0
+            loss = None
+            for j in range(0, n_datasets):
                 # logits, *logits_aux = out['seg']
                 # emb = out['embed']
-                
-                with_embed = True if i >= contrast_warmup_iters else False
-
-                adaptive_out = {}
-                for k, v in out.items():
-                    if v is None:
-                        adaptive_out[k] = None
-                    elif k == 'seg':
-                        logits_list = []
-                        for logit in v:
-                            logits_list.append(logit[0])
-                                            
-                        adaptive_out[k] = logits_list
-                    elif k == 'embed':
-                        # v[0] ： emb, v[1]: emb_others
-                        emb_list = []
-                        for emb in v[1]:
-                            emb_list.append(emb[0])
-                            
-                        adaptive_out[k] = [v[0][0], emb_list]
-                        
-                    else:
-                        adaptive_out[k] = v[0]
-
-                # adaptive_out = {}
-                # for k, v in out.items():
-                #     if v is None:
-                #         adaptive_out[k] = None
-                #     elif k == 'seg' or k == 'domain':
-                #         logits_list = []
-                #         for logit in v:
-                #             if logit is None:
-                #                 tot_out = None
-                #             else:
-                #                 tot_out = torch.cat((logit[0], logit[1]), 0)
-                #             logits_list.append(tot_out)
-                                            
-                #         adaptive_out[k] = logits_list
-                #     elif k == 'embed':
-                #         adaptive_out[k] = v
-                #     else:
-                #         tot_out = torch.cat((v[0], v[1]), 0)
-                #         adaptive_out[k] = tot_out
-
-                if is_distributed():
-                    adaptive_out['prototypes'] = net.module.prototypes
-                
+                n_cats = configer.get('dataset'+str(j+1), 'n_cats')
+                adaptive_out = out['seg'][cur_index:cur_index+n_cats]
+                cur_index += n_cats
+                    
+                backward_loss = criteria(adaptive_out, lb[j])
+                if loss is None:
+                    loss = backward_loss
                 else:
-                    adaptive_out['prototypes'] = net.prototypes
-                    
-                    
+                    loss += backward_loss
 
-                if i < configer.get('lr', 'warmup_iters') or not configer.get('contrast', 'use_contrast'):
-                    is_warmup = True
-                            
-                else:
-                    is_warmup = False
-                    
-                    
-                backward_loss, loss_seg, loss_aux, loss_contrast, loss_domain, kl_loss, new_proto = contrast_losses(adaptive_out, lb[j], dataset_lbs, is_warmup)
-
-            if is_distributed():
-                net.module.PrototypesUpdate(new_proto)
-            else:
-                net.PrototypesUpdate(new_proto)        
             
-                
-            # if with_memory and 'key' in out:
-            #     dequeue_and_enqueue(configer, city_out['seg'], city_out['key'], lb_city.detach(),
-            #                         city_out['segment_queue'], i, CITY_ID)
-            #     dequeue_and_enqueue(configer, cam_out['seg'], cam_out['key'], lb_cam.detach(),
-            #                         cam_out['segment_queue'], i, CAM_ID)
-
-
-            # print('before backward')
-            # set_trace()
-            # with torch.autograd.detect_anomaly():
-            scaler.scale(backward_loss).backward()
-            # print('after backward')
-
-            # configer.plus_one('iters')
-            # self.configer.plus_one('iters')
-
-            # scaler.scale(loss).backward()
+            scaler.scale(loss).backward()
             scaler.step(optim)
             scaler.update()
             torch.cuda.synchronize()
             # print('synchronize')
             time_meter.update()
-            loss_meter.update(backward_loss.item())
-            if kl_loss:
-                kl_loss_meter.update(kl_loss.item())
-            
-            # loss_pre_meter.update(loss_pre.item())
-            
-            if not use_dataset_aux_head or i > aux_iter:
-                loss_pre_meter.update(loss_seg.item()) 
-                if with_domain_adversarial:
-                    loss_domain_meter.update(loss_domain)
-                if with_aux:
-                    _ = [mter.update(lss.item()) for mter, lss in zip(loss_aux_meters, loss_aux)]
-                
-                if i >= configer.get('lr', 'warmup_iters') and configer.get('contrast', 'use_contrast'):
-                    loss_contrast_meter.update(loss_contrast.item())
-
-        
+            loss_meter.update(loss.item())
 
         ## print training log message
         if (i + 1) % 100 == 0:
-            writer.add_scalars("loss",{"seg":loss_pre_meter.getWoErase(),"contrast":loss_contrast_meter.getWoErase(), "domain":loss_domain_meter.getWoErase()},configer.get("iter")+1)
             lr = lr_schdr.get_lr()
             lr = sum(lr) / len(lr)
             print_log_msg(
-                i, cam_epoch, city_epoch, configer.get('lr', 'max_iter')+starti, lr, time_meter, loss_meter,
+                i, 0, 0, configer.get('lr', 'max_iter')+starti, lr, time_meter, loss_meter,
                 loss_pre_meter, loss_aux_meters, loss_contrast_meter, loss_domain_meter, kl_loss_meter)
             
 
-        if (i + 1) % 2000 == 0:
+        if (i + 1) % 10000 == 0:
             save_pth = osp.join(configer.get('res_save_pth'), 'model_{}.pth'.format(i+1))
             logger.info('\nsave models to {}'.format(save_pth))
 
@@ -591,8 +440,6 @@ def train():
             else:
                 heads, mious = eval_model_func(configer, net)
                 
-            writer.add_scalars("mious",{"Cityscapes":mious[CITY_ID],"Camvid":mious[CAM_ID]},configer.get("iter")+1)
-            # writer.export_scalars_to_json(osp.join(configer.get('res_save_pth'), str(time())+'_writer.json'))
             logger.info(tabulate([mious, ], headers=heads, tablefmt='orgtbl'))
             net.train()
             
@@ -610,7 +457,6 @@ def train():
     save_pth = osp.join(configer.get('res_save_pth'), 'model_final.pth')
     logger.info('\nsave models to {}'.format(save_pth))
     
-    writer.close()
     if is_distributed():
         state = net.module.state_dict()
         if dist.get_rank() == 0: torch.save(state, save_pth)

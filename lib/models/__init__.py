@@ -24,5 +24,6 @@ model_factory = {
     'hrnet_w48_gnn': HRNet_W48_GNN,
     'learnable_topology_GAT': Learnable_Topology_GAT,
     'learnable_topology_BGNN': Learnable_Topology_BGNN,
+    # 'learnable_topology_BGNN_2': Learnable_Topology_BGNN_2,
     'self_attention_GNN': Self_Attention_GNN,
 }

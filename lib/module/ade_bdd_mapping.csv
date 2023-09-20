@@ -1,0 +1,32 @@
+sky,identity,sky
+pole,identity,pole
+truck,identity,truck
+minibike,identity,motorcycle
+traffic light,identity,traffic light
+road,identity,road
+wall,identity,wall
+bus,identity,bus
+bicycle,identity,bicycle
+person,parent,rider
+person,parent,person
+fence,parent,fence
+car,child,car
+van,child,car
+sidewalk,child,sidewalk
+path,child,sidewalk
+tree,child,vegetation
+flower,child,vegetation
+palm,child,vegetation
+booth,child,building
+grandstand,child,building
+house,child,building
+tower,child,building
+skyscraper,child,building
+building,child,building
+hovel,child,building
+dirt track,child,terrain
+land,child,terrain
+earth,child,terrain
+field,child,terrain
+grass,child,terrain
+sand,child,terrain

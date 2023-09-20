@@ -1,0 +1,27 @@
+bus,identity,bus
+train,identity,train
+motorcycle,identity,motorcycle
+car,identity,car
+truck,identity,truck
+traffic light,identity,traffic light
+bicycle,identity,bicycle
+sky,identity,sky-other-merged
+traffic sign,parent,stop sign
+terrain,parent,grass-merged
+terrain,parent,sand
+terrain,parent,dirt-merged
+vegetation,parent,tree-merged
+vegetation,parent,flower
+wall,parent,wall-stone
+wall,parent,wall-wood
+wall,parent,wall-other-merged
+wall,parent,wall-brick
+wall,parent,wall-tile
+sidewalk,child,pavement-merged
+road,child,road
+fence,child,fence-merged
+person,child,person
+rider,child,person
+building,has_part,roof
+building,parent,building-other-merged
+building,parent,house
