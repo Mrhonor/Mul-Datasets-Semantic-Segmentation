@@ -49,14 +49,14 @@
       "label_names": ["Bird", "Ground Animal", "Curb", "Fence", "Guard Rail", "Barrier", "Road Median", "Road Side", "Temporary Barrier", "Wall", "Bike Lane", "Crosswalk - Plain", "Driveway", "Parking", "Parking Aisle", "Pedestrian Area", "Rail Track", "Road", "Service Lane", "Sidewalk", "Traffic Island", "Bridge", "Building", "Garage", "Tunnel", "Person Group", "Bicyclist", "Motorcyclist", "Other Rider", "Lane Marking - Ambiguous", "Lane Marking - Arrow (Other)", "Lane Marking - Arrow (Right)", "Lane Marking - Arrow (Split Right or Straight)", "Lane Marking - Arrow (Straight)", "Lane Marking - Give Way (Row)", "Lane Marking - Give Way (Single)", "Lane Marking - Hatched (Diagonal)", "Lane Marking - Text", "Lane Marking (only) - Test", "Mountain", "Sand", "Sky", "Snow", "Terrain", "Vegetation", "Water", "Banner", "Bench", "Bike Rack", "Catch Basin", "CCTV Camera", "Fire Hydrant", "Junction Box", "Manhole", "Parking Meter", "Phone Booth", "Pothole", "Signage - Back", "Signage - Information", "Signage - Other", "Signage - Store", "Street Light", "Pole Group", "Traffic Sign Frame", "Utility Pole", "Traffic Cone", "Traffic Light - Other", "Traffic Sign - Parking", "Traffic Sign - Temporary (Back)", "Traffic Sign - Temporary (Front)", "Trash Can", "Bicycle", "Boat", "Bus", "Caravan", "Motorcycle", "On Rails", "Other Vehicle", "Trailer", "Truck", "Vehicle Group", "Wheeled Slow", "Water Valve", "Car Mount", "Dynamic", "Ego Vehicle", "Ground", "Static"]
     },
     "dataset2": {
-      "n_cats": 65, 
+      "n_cats": 64, 
       "data_reader": "Mapiv1",
       "im_root": "/cpfs01/projects-HDD/pujianxiangmuzu_HDD/pujian/mr/datasets/mapi",
       "train_im_anns":"datasets/mapi/training_v1.txt",
       "val_im_anns":"datasets/mapi/validation_v1.txt", 
       "ims_per_gpu": 3,
       "eval_ims_per_gpu": 1,
-      "label_names": ["Bird", "Ground Animal", "Curb", "Fence", "Guard Rail", "Barrier", "Wall", "Bike Lane", "Crosswalk - Plain", "Curb Cut", "Parking", "Pedestrian Area", "Rail Track", "Road", "Service Lane", "Sidewalk", "Bridge", "Building", "Tunnel", "Person", "Bicyclist", "Motorcyclist", "Other Rider", "Lane Marking - Crosswalk", "Lane Marking - General", "Mountain", "Sand", "Sky", "Snow", "Terrain", "Vegetation", "Water", "Banner", "Bench", "Bike Rack", "Billboard", "Catch Basin", "CCTV Camera", "Fire Hydrant", "Junction Box", "Mailbox", "Manhole", "Phone Booth", "Pothole", "Street Light", "Pole", "Traffic Sign Frame", "Utility Pole", "Traffic Light", "Traffic Sign (Back)", "Traffic Sign (Front)", "Trash Can", "Bicycle", "Boat", "Bus", "Car", "Caravan", "Motorcycle", "On Rails", "Other Vehicle", "Trailer", "Truck", "Wheeled Slow", "Car Mount", "Ego Vehicle"]
+      "label_names": ["Bird", "Ground Animal", "Curb", "Fence", "Guard Rail", "Barrier", "Wall", "Bike Lane", "Crosswalk - Plain", "Curb Cut", "Parking", "Pedestrian Area", "Rail Track", "Road", "Service Lane", "Sidewalk", "Bridge", "Building", "Tunnel", "Person", "Bicyclist", "Motorcyclist", "Other Rider", "Lane Marking - Crosswalk", "Lane Marking - General", "Mountain", "Sand", "Sky", "Snow", "Terrain", "Vegetation", "Water", "Banner", "Bench", "Bike Rack", "Billboard", "Catch Basin", "CCTV Camera", "Fire Hydrant", "Junction Box", "Manhole", "Phone Booth", "Pothole", "Street Light", "Pole", "Traffic Sign Frame", "Utility Pole", "Traffic Light", "Traffic Sign (Back)", "Traffic Sign (Front)", "Trash Can", "Bicycle", "Boat", "Bus", "Car", "Caravan", "Motorcycle", "On Rails", "Other Vehicle", "Trailer", "Truck", "Wheeled Slow", "Car Mount", "Ego Vehicle"]
     },
     "dataset3": {
       "n_cats": 37, 
@@ -129,11 +129,11 @@
     },
     "use_ema": false,
     "lr": {
-      "lr_start": 1e-3,
+      "lr_start": 2e-3,
       "weight_decay": 1e-5,
       "warmup_iters": 1000,
       "fix_param_iters": 0,
-      "max_iter": 360000,
+      "max_iter": 900000,
       "init_iter": 0
     },
     "train": {
@@ -143,8 +143,8 @@
       "finetune_from": "res/celoss/pretrain_seg_model_30000.pth",
       "graph_finetune": false,
       "graph_finetune_from": "res/celoss/graph_model_60000.pth",
-      "seg_iters": 60000,
-      "gnn_iters": 30000,
+      "seg_iters": 90000,
+      "gnn_iters": 60000,
       "finetune_stage1_iters": 30000,
       "finetune_stage2_iters": 60000,
       "joint_train": true

@@ -885,6 +885,7 @@ class Learnable_Topology_BGNN(nn.Module):
         # self.attentions_layer2 = nn.ModuleList([GraphAttentionLayer(self.nhid * self.nheads, self.nhid, dropout=self.dropout_rate, alpha=self.alpha, concat=True) for _ in range(self.nheads)])
 
         self.GCN_layer2 = GCN(self.nfeat_out, self.nfeat_out)
+        self.GCN_layer3 = GCN(self.nfeat_out, self.nfeat_out)
         
         self.linear1 = nn.Linear(self.nfeat_out, self.output_feat_dim)
         
@@ -901,7 +902,11 @@ class Learnable_Topology_BGNN(nn.Module):
         
         # self.register_buffer("fix_node_features", torch.randn(self.total_cats, self.nfeat))
         self.unify_node_features = nn.Parameter(torch.randn(self.max_num_unify_class, self.nfeat), requires_grad=True)
+        
+        self.unlable_node_features = nn.Parameter(torch.randn(self.n_datasets, self.nfeat), requires_grad=True)
+        
         trunc_normal_(self.unify_node_features, std=0.02)
+        trunc_normal_(self.unlable_node_features, std=0.02)
         
         ## Graph adjacency matrix
         self.adj_matrix = nn.Parameter(torch.zeros(self.total_cats+self.max_num_unify_class, self.total_cats+self.max_num_unify_class), requires_grad=True)
@@ -910,8 +915,10 @@ class Learnable_Topology_BGNN(nn.Module):
         self.netD1.weights_init()
         self.netD2 = Discriminator(self.nfeat_out, 128, 1, self.dropout_rate)
         self.netD2.weights_init()
+        self.netD3 = Discriminator(self.nfeat_out, 128, 1, self.dropout_rate)
+        self.netD3.weights_init()
         
-        self.use_km = True
+        self.use_km = False
         if self.use_km:
             self.km_algorithms = Munkres()
         # else:
@@ -920,9 +927,16 @@ class Learnable_Topology_BGNN(nn.Module):
         
         
     def forward(self, x, pretraining=False):
-        x = torch.cat([x, self.unify_node_features], dim=0)
+        # cur_cat = 0
+        # dataset_feats = []
+        # for i in range(0, self.n_datasets):
+        #     dataset_feats.append(x[cur_cat:cur_cat+self.dataset_cats[i]])
+        #     dataset_feats.append(self.unlable_node_features[i].unsqueeze(0))
         
-        feat1 = self.linear_before(x)
+        # dataset_feats = torch.cat(dataset_feats, dim=0)
+        input_x = torch.cat([x, self.unify_node_features], dim=0)
+        
+        feat1 = self.linear_before(input_x)
         adj_mI, non_norm_adj_mI = self.calc_adjacency_matrix(feat1)
         feat1_relu = self.relu(feat1)
         
@@ -939,17 +953,25 @@ class Learnable_Topology_BGNN(nn.Module):
         out_fake_2 = self.netD2(feat_gcn2.detach())
         g_out_fake_2 = self.netD2(feat_gcn2)
         
-        feat3 = F.elu(feat_gcn2 + before_gcn2_x)
+        feat3 = feat_gcn2 + before_gcn2_x
+        before_gcn3_x = F.dropout(feat3, self.dropout_rate, training=self.training)
+        feat_gcn3 = self.GCN_layer3(before_gcn3_x, adj_mI)
+        out_real_3 = self.netD3(before_gcn3_x.detach())
+        out_fake_3 = self.netD3(feat_gcn3.detach())
+        g_out_fake_3 = self.netD3(feat_gcn3)
+        
+        feat4 = F.elu(feat_gcn3 + before_gcn3_x)
         # feat3_drop = F.dropout(feat3, self.dropout_rate, training=self.training)
-        feat_out = self.linear1(feat3)
+        feat_out = self.linear1(feat4)
 
         adv_out = {}
         adv_out['ADV1'] = [out_real_1, out_fake_1, g_out_fake_1]
         adv_out['ADV2'] = [out_real_2, out_fake_2, g_out_fake_2]
+        adv_out['ADV3'] = [out_real_3, out_fake_3, g_out_fake_3]
         if pretraining:
             return feat_out[self.total_cats:], self.sep_bipartite_graphs(non_norm_adj_mI), adv_out, non_norm_adj_mI
         elif self.calc_bipartite:
-            arch_x = self.relu(feat3 + feat_out)
+            arch_x = self.relu(feat4 + feat_out)
             arch_x = self.linear2(arch_x)
             _, non_norm_adj_mI_after = self.calc_adjacency_matrix(arch_x)
             
@@ -974,9 +996,9 @@ class Learnable_Topology_BGNN(nn.Module):
                 self.bipartite_graphs.append(max_bipartite_graph)
                 
             if self.output_softmax_and_max_adj or not self.output_max_adj:
-                softmax_bipartite_graph = F.softmax(this_bipartite_graph/0.07, dim=0)
+                # softmax_bipartite_graph = F.softmax(this_bipartite_graph/0.07, dim=0)
 
-                self.bipartite_graphs.append(softmax_bipartite_graph)
+                self.bipartite_graphs.append(this_bipartite_graph)
             
             cur_cat += self.dataset_cats[i]
         
@@ -1025,6 +1047,15 @@ class Learnable_Topology_BGNN(nn.Module):
             return torch.mm(r_inv_sqrt, mx)
         
         # similar_matrix = normalize_adj(similar_matrix)
+        cur_cat = 0
+        for i in range(0, self.n_datasets):
+            this_bipartite_graph = adj_mI[cur_cat:cur_cat+self.dataset_cats[i], self.total_cats:]
+
+            softmax_bipartite_graph = F.softmax(this_bipartite_graph/0.07, dim=0)
+            adj_mI[cur_cat:cur_cat+self.dataset_cats[i], self.total_cats:] = softmax_bipartite_graph
+            cur_cat = cur_cat+self.dataset_cats[i]
+
+        # softmax_adj = F.softmax(adj_mI/0.07, dim=0)
         norm_adj_mI = normalize_adj(adj_mI)
         return norm_adj_mI, adj_mI
     
@@ -1040,12 +1071,14 @@ class Learnable_Topology_BGNN(nn.Module):
         feat2 = feat_gcn1 + feat1_relu
         feat_gcn2 = self.GCN_layer2(feat2, adj_mI)
         
-        feat3 = F.elu(feat_gcn2 + feat2)
-        feat_out = self.linear1(feat3)
+        feat3 = feat_gcn2 + feat2
+        feat_gcn3 = self.GCN_layer3(feat3, adj_mI)
+        feat4 = F.elu(feat_gcn3 + feat3)
+        feat_out = self.linear1(feat4)
 
         if init:
             if self.calc_bipartite:
-                arch_x = self.relu(feat3 + feat_out)
+                arch_x = self.relu(feat4 + feat_out)
                 arch_x = self.linear2(arch_x)
                 _, non_norm_adj_mI_after = self.calc_adjacency_matrix(arch_x)
                 

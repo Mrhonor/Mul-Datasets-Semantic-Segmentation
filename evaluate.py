@@ -711,7 +711,8 @@ def eval_model_contrast(configer, net):
     single_scale = MscEvalV0_Contrast(configer, (1., ), False)
     
     for i in range(0, configer.get('n_datasets')):
-        mIOU = single_scale(net, dls[i], configer.get('dataset'+str(i+1),"n_cats"), i)
+        # mIOU = single_scale(net, dls[i], configer.get('dataset'+str(i+1), "eval_cats"), i)
+        mIOU = single_scale(net, dls[i], configer.get('dataset'+str(i+1), "n_cats"), i)
         mious.append(mIOU)
     
 

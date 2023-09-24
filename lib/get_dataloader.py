@@ -13,7 +13,7 @@ from lib.ADE20K import ade20k
 from lib.ade2016_data import ade2016
 from lib.bdd100k_data import Bdd100k
 from lib.idd_cv2 import Idd
-from lib.Mapi import Mapi
+from lib.Mapi import Mapi, Mapiv1
 from lib.sunrgbd import Sunrgbd
 from lib.coco_data import Coco_data
 from lib.a2d2_city_dataset import A2D2CityScapes

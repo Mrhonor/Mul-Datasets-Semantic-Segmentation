@@ -183,31 +183,31 @@ labels_info_v12 = [
 {'name': 'CCTV Camera', 'id': 37, 'color': [222, 40, 40], 'trainId': 37},
 {'name': 'Fire Hydrant', 'id': 38, 'color': [100, 170, 30], 'trainId': 38},
 {'name': 'Junction Box', 'id': 39, 'color': [40, 40, 40], 'trainId': 39}, 
-{'name': 'Mailbox', 'id': 40, 'color': [33, 33, 33], 'trainId': 40},
-{'name': 'Manhole', 'id': 41, 'color': [100, 128, 160], 'trainId': 41},
-{'name': 'Phone Booth', 'id': 42, 'color': [142, 0, 0], 'trainId': 42},
-{'name': 'Pothole', 'id': 43, 'color': [70, 100, 150], 'trainId': 43}, 
-{'name': 'Street Light', 'id': 44, 'color': [210, 170, 100], 'trainId': 44},
-{'name': 'Pole', 'id': 45, 'color': [153, 153, 153], 'trainId': 45}, 
-{'name': 'Traffic Sign Frame', 'id': 46, 'color': [128, 128, 128], 'trainId': 46},
-{'name': 'Utility Pole', 'id': 47, 'color': [0, 0, 80], 'trainId': 47}, 
-{'name': 'Traffic Light', 'id': 48, 'color': [250, 170, 30], 'trainId': 48},
-{'name': 'Traffic Sign (Back)', 'id': 49, 'color': [192, 192, 192], 'trainId': 49},
-{'name': 'Traffic Sign (Front)', 'id': 50, 'color': [220, 220, 0], 'trainId': 50},
-{'name': 'Trash Can', 'id': 51, 'color': [140, 140, 20], 'trainId': 51},
-{'name': 'Bicycle', 'id': 52, 'color': [119, 11, 32], 'trainId': 52}, 
-{'name': 'Boat', 'id': 53, 'color': [150, 0, 255], 'trainId': 53}, 
-{'name': 'Bus', 'id': 54, 'color': [0, 60, 100], 'trainId': 54}, 
-{'name': 'Car', 'id': 55, 'color': [0, 0, 142], 'trainId': 55}, 
-{'name': 'Caravan', 'id': 56, 'color': [0, 0, 90], 'trainId': 56},
-{'name': 'Motorcycle', 'id': 57, 'color': [0, 0, 230], 'trainId': 57}, 
-{'name': 'On Rails', 'id': 58, 'color': [0, 80, 100], 'trainId': 58},
-{'name': 'Other Vehicle', 'id': 59, 'color': [128, 64, 64], 'trainId': 59},
-{'name': 'Trailer', 'id': 60, 'color': [0, 0, 110], 'trainId': 60},
-{'name': 'Truck', 'id': 61, 'color': [0, 0, 70], 'trainId': 61},
-{'name': 'Wheeled Slow', 'id': 62, 'color': [0, 0, 192], 'trainId': 62},
-{'name': 'Car Mount', 'id': 63, 'color': [32, 32, 32], 'trainId': 63}, 
-{'name': 'Ego Vehicle', 'id': 64, 'color': [120, 10, 10], 'trainId': 64},
+{'name': 'Mailbox', 'id': 40, 'color': [33, 33, 33], 'trainId': 255},
+{'name': 'Manhole', 'id': 41, 'color': [100, 128, 160], 'trainId': 40},
+{'name': 'Phone Booth', 'id': 42, 'color': [142, 0, 0], 'trainId': 41},
+{'name': 'Pothole', 'id': 43, 'color': [70, 100, 150], 'trainId': 42}, 
+{'name': 'Street Light', 'id': 44, 'color': [210, 170, 100], 'trainId': 43},
+{'name': 'Pole', 'id': 45, 'color': [153, 153, 153], 'trainId': 44}, 
+{'name': 'Traffic Sign Frame', 'id': 46, 'color': [128, 128, 128], 'trainId': 45},
+{'name': 'Utility Pole', 'id': 47, 'color': [0, 0, 80], 'trainId': 46}, 
+{'name': 'Traffic Light', 'id': 48, 'color': [250, 170, 30], 'trainId': 47},
+{'name': 'Traffic Sign (Back)', 'id': 49, 'color': [192, 192, 192], 'trainId': 48},
+{'name': 'Traffic Sign (Front)', 'id': 50, 'color': [220, 220, 0], 'trainId': 49},
+{'name': 'Trash Can', 'id': 51, 'color': [140, 140, 20], 'trainId': 50},
+{'name': 'Bicycle', 'id': 52, 'color': [119, 11, 32], 'trainId': 51}, 
+{'name': 'Boat', 'id': 53, 'color': [150, 0, 255], 'trainId': 52}, 
+{'name': 'Bus', 'id': 54, 'color': [0, 60, 100], 'trainId': 53}, 
+{'name': 'Car', 'id': 55, 'color': [0, 0, 142], 'trainId': 54}, 
+{'name': 'Caravan', 'id': 56, 'color': [0, 0, 90], 'trainId': 55},
+{'name': 'Motorcycle', 'id': 57, 'color': [0, 0, 230], 'trainId': 56}, 
+{'name': 'On Rails', 'id': 58, 'color': [0, 80, 100], 'trainId': 57},
+{'name': 'Other Vehicle', 'id': 59, 'color': [128, 64, 64], 'trainId': 58},
+{'name': 'Trailer', 'id': 60, 'color': [0, 0, 110], 'trainId': 59},
+{'name': 'Truck', 'id': 61, 'color': [0, 0, 70], 'trainId': 60},
+{'name': 'Wheeled Slow', 'id': 62, 'color': [0, 0, 192], 'trainId': 61},
+{'name': 'Car Mount', 'id': 63, 'color': [32, 32, 32], 'trainId': 62}, 
+{'name': 'Ego Vehicle', 'id': 64, 'color': [120, 10, 10], 'trainId': 63},
 {'name': 'Unlabeled', 'id': 65, 'color': [0, 0, 0], 'trainId': 255},
 ]
 
@@ -318,7 +318,10 @@ class Mapi(BaseDataset):
                 dataroot, annpath, trans_func, mode)
     
         
+        mode = 'eval'
         self.n_cats = 88
+        if mode == 'train':
+            self.n_cats = 89
         
         self.lb_ignore = -1
         # self.lb_ignore = 255
@@ -327,7 +330,11 @@ class Mapi(BaseDataset):
         self.labels_info = labels_info
             
         for el in self.labels_info:
-            self.lb_map[el['id']] = el['trainId']
+            if mode=='train' and el['trainId'] == 255:
+                self.lb_map[el['id']] = self.n_cats - 1
+            else:
+                self.lb_map[el['id']] = el['trainId']
+            
 
         self.to_tensor = T.ToTensor(
             mean=(0.3038, 0.3383, 0.3034), # city, rgb
@@ -342,7 +349,10 @@ class Mapiv1(BaseDataset):
         super(Mapiv1, self).__init__(
                 dataroot, annpath, trans_func, mode)
         
-        self.n_cats = 65
+        mode = 'eval'
+        self.n_cats = 64
+        if mode == 'train':
+            self.n_cats = 65
         
         self.lb_ignore = -1
         # self.lb_ignore = 255
@@ -351,7 +361,10 @@ class Mapiv1(BaseDataset):
         self.labels_info = labels_info_v12
             
         for el in self.labels_info:
-            self.lb_map[el['id']] = el['trainId']
+            if mode=='train' and el['trainId'] == 255:
+                self.lb_map[el['id']] = self.n_cats - 1
+            else:
+                self.lb_map[el['id']] = el['trainId']
 
         self.to_tensor = T.ToTensor(
             mean=(0.3038, 0.3383, 0.3034), # city, rgb

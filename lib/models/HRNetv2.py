@@ -594,9 +594,10 @@ class HRNet_W48_GNN(nn.Module):
         self.proj_head = ProjectionHeadOri(dim_in=in_channels, proj_dim=self.output_feat_dim, bn_type=self.configer.get('network', 'bn_type'))
 
         self.total_cats = 0
-        
+        self.datasets_cats = []
         for i in range(0, self.n_datasets):
-            self.total_cats += self.configer.get('dataset'+str(i+1), 'n_cats')
+            self.datasets_cats.append(self.configer.get('dataset'+str(i+1), 'n_cats'))
+            self.total_cats += self.datasets_cats[i]
         print("self.total_cats:", self.total_cats)
         
         self.max_num_unify_class = int(self.configer.get('GNN', 'unify_ratio') * self.total_cats)
@@ -635,11 +636,13 @@ class HRNet_W48_GNN(nn.Module):
                 return {'seg':emb}
         elif self.aux_mode == 'eval':
             logits = torch.einsum('bchw, nc -> bnhw', emb, self.unify_prototype)
+            # remap_logits = torch.einsum('bchw, nc -> bnhw', logits, self.bipartite_graphs[dataset][:self.datasets_cats[dataset]-1])
             remap_logits = torch.einsum('bchw, nc -> bnhw', logits, self.bipartite_graphs[dataset])
             # remap_logits = F.interpolate(remap_logits, size=(target.size(1), target.size(2)), mode="bilinear", align_corners=True)
             return remap_logits
         elif self.aux_mode == 'pred':
             logits = torch.einsum('bchw, nc -> bnhw', emb, self.unify_prototype)
+            # logits = torch.einsum('bchw, nc -> bnhw', logits, self.bipartite_graphs[dataset][:self.datasets_cats[dataset]-1])
             logits = torch.einsum('bchw, nc -> bnhw', logits, self.bipartite_graphs[dataset])
             logits = F.interpolate(logits, size=(logits.size(2)*4, logits.size(3)*4), mode="bilinear", align_corners=True)
             

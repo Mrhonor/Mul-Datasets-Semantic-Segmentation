@@ -17,7 +17,7 @@ from tools.configer import Configer
 from lib.module.gen_graph_node_feature import gen_graph_node_feature
 
 torch.set_grad_enabled(False) 
-np.random.seed(5234)
+np.random.seed(123)
 
 # args
 parse = argparse.ArgumentParser()
@@ -25,7 +25,7 @@ parse = argparse.ArgumentParser()
 parse.add_argument('--weight_path', type=str, default='res/clip/seg_model_final.pth',)
 parse.add_argument('--gnn_weight_path', type=str, default='res/clip/gnn_model_final.pth',)
 parse.add_argument('--config', dest='config', type=str, default='configs/ltbgnn_7_datasets.json',)
-parse.add_argument('--img_path', dest='img_path', type=str, default='img/131886_leftImg8bit.png',)
+parse.add_argument('--img_path', dest='img_path', type=str, default='img/0006R0_f00990.png',)
 args = parse.parse_args()
 # cfg = set_cfg_from_file(args.config)
 configer = Configer(configs=args.config)
@@ -656,7 +656,7 @@ class E2EModel(torch.nn.Module):
         self.net.load_state_dict(torch.load(weight_path, map_location='cpu'), strict=False)
         self.net.eval()
         self.net.aux_mode='pred'
-        self.net.aux_mode='uni'
+        # self.net.aux_mode='uni'
         # self.net.train()
         self.net.cuda()
 

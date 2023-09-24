@@ -385,7 +385,7 @@ def gen_graph_node_feature(configer):
             print("gen finished")
             torch.save(this_graph_node_features.clone(), this_file_name)
 
-            out_features.append(this_graph_node_features)
+            out_features.append(this_graph_node_features.cpu())
     
     out_features = torch.cat(out_features, dim=0)
     print(out_features.shape)

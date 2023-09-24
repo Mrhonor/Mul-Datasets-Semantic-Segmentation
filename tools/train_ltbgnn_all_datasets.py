@@ -90,6 +90,7 @@ def set_model(configer):
     if configer.get('train', 'finetune'):
         logger.info(f"load pretrained weights from {configer.get('train', 'finetune_from')}")
         state = torch.load(configer.get('train', 'finetune_from'), map_location='cpu')
+        del state['unify_prototype']
         for i in range(0, configer.get('n_datasets')):
             del state[f'bipartite_graphs.{i}']
         net.load_state_dict(state, strict=False)

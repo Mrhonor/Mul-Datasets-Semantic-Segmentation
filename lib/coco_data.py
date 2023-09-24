@@ -149,6 +149,7 @@ labels_info = [
 {"name": "rock-merged", "id": 198, "trainId": 130},
 {"name": "wall-other-merged", "id": 199, "trainId": 131},
 {"name": "rug-merged", "id": 200, "trainId": 132},
+{"name": "unlabeled", "id":0, "trainId": 255},
 ]
 
 # labels_info_train = labels_info
@@ -163,8 +164,13 @@ class Coco_data(BaseDataset):
     def __init__(self, dataroot, annpath, trans_func=None, mode='train'):
         super(Coco_data, self).__init__(
                 dataroot, annpath, trans_func, mode)
+            
+            
+        mode = 'eval'
     
         self.n_cats = 133
+        if mode=='train':
+            self.n_cats = 134
         
         self.lb_ignore = -1
         # self.lb_ignore = 255
@@ -173,7 +179,10 @@ class Coco_data(BaseDataset):
         self.labels_info = labels_info
             
         for el in self.labels_info:
-            self.lb_map[el['id']] = el['trainId']
+            if mode=='train' and el['trainId'] == 255:
+                self.lb_map[el['id']] = 134
+            else:
+                self.lb_map[el['id']] = el['trainId']
 
         self.to_tensor = T.ToTensor(
             mean=(0.3038, 0.3383, 0.3034), # city, rgb

@@ -179,8 +179,12 @@ class ade2016(BaseDataset):
         super(ade2016, self).__init__(
                 dataroot, annpath, trans_func, mode)
     
-        
+        mode = 'eval'
+
         self.n_cats = 150
+        if mode == 'train':
+            self.n_cats = 151
+        
         
         self.lb_ignore = -1
         # self.lb_ignore = 255
@@ -189,7 +193,10 @@ class ade2016(BaseDataset):
         self.labels_info = labels_info
             
         for el in self.labels_info:
-            self.lb_map[el['id']] = el['trainId']
+            if mode == 'train' and el['trainId'] == 255:
+                self.lb_map[el['id']] = 150
+            else:
+                self.lb_map[el['id']] = el['trainId']
 
         self.to_tensor = T.ToTensor(
             mean=(0.3038, 0.3383, 0.3034), # city, rgb
