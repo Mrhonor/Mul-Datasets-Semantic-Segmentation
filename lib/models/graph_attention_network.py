@@ -976,9 +976,9 @@ class Learnable_Topology_BGNN(nn.Module):
             adv_out['ADV2'] = [out_real_2, out_fake_2, g_out_fake_2]
             adv_out['ADV3'] = [out_real_3, out_fake_3, g_out_fake_3]
         elif self.mse_or_adv == 'mse':
-            adv_out['ADV1'] = [feat1_relu, feat_gcn1]
-            adv_out['ADV2'] = [feat2, feat_gcn2]
-            adv_out['ADV3'] = [feat3, feat_gcn3]
+            adv_out['ADV1'] = [feat1_relu.detach(), feat_gcn1]
+            adv_out['ADV2'] = [feat2.detach(), feat_gcn2]
+            adv_out['ADV3'] = [feat3.detach(), feat_gcn3]
             
         if pretraining:
             return feat_out[self.total_cats:], self.sep_bipartite_graphs(non_norm_adj_mI), adv_out, non_norm_adj_mI

@@ -796,6 +796,7 @@ class CrossDatasetsCELoss_AdvGNN(nn.Module):
         self.with_softmax_and_max = self.configer.get('GNN', 'output_softmax_and_max_adj')
         self.with_orth = self.configer.get('GNN', 'with_orth')
         self.with_max_adj = self.configer.get('GNN', 'output_max_adj')
+        self.mse_or_adv = self.configer.get('GNN', 'mse_or_adv')
         self.max_iter = self.configer.get('lr', 'max_iter')
         # self.seg_gnn_alter_iters = self.configer.get('train', 'seg_gnn_alter_iters')
         self.gnn_iters = self.configer.get('train', 'gnn_iters')
@@ -814,8 +815,7 @@ class CrossDatasetsCELoss_AdvGNN(nn.Module):
         self.advloss = nn.BCELoss()
         self.adv_loss_weight = self.configer.get('loss', 'adv_loss_weight')
         
-        if self.with_max_enc:
-            self.MSE_loss = torch.nn.MSELoss()
+        self.MSE_loss = torch.nn.MSELoss()
     
     def similarity_dsb(self, proto_vecs):
         """
@@ -936,14 +936,17 @@ class CrossDatasetsCELoss_AdvGNN(nn.Module):
                 loss = loss + self.MSE_loss(unify_prototype, logits)
         
         if is_adv:  
-            real_out = self.advloss(adv_out['ADV1'][0], label_real) + self.advloss(adv_out['ADV2'][0], label_real) + self.advloss(adv_out['ADV3'][0], label_real)
-            fake_out = self.advloss(adv_out['ADV1'][1], label_fake) + self.advloss(adv_out['ADV2'][1], label_fake) + self.advloss(adv_out['ADV3'][1], label_fake)
-            adv_loss = real_out + fake_out
+            if self.mse_or_adv == 'adv':
+                real_out = self.advloss(adv_out['ADV1'][0], label_real) + self.advloss(adv_out['ADV2'][0], label_real) + self.advloss(adv_out['ADV3'][0], label_real)
+                fake_out = self.advloss(adv_out['ADV1'][1], label_fake) + self.advloss(adv_out['ADV2'][1], label_fake) + self.advloss(adv_out['ADV3'][1], label_fake)
+                adv_loss = real_out + fake_out
 
-            G_fake_out = self.advloss(adv_out['ADV1'][2], label_real) + self.advloss(adv_out['ADV2'][2], label_real) + self.advloss(adv_out['ADV3'][2], label_real)
-            loss = loss + self.adv_loss_weight * G_fake_out
-                   
-
+                G_fake_out = self.advloss(adv_out['ADV1'][2], label_real) + self.advloss(adv_out['ADV2'][2], label_real) + self.advloss(adv_out['ADV3'][2], label_real)
+                loss = loss + self.adv_loss_weight * G_fake_out
+            elif self.mse_or_adv == 'mse':
+                adv_loss = self.MSE_loss(adv_out['ADV1'][1], adv_out['ADV1'][0]) + self.MSE_loss(adv_out['ADV2'][1], adv_out['ADV2'][0]) + self.MSE_loss(adv_out['ADV3'][1], adv_out['ADV3'][0])
+                loss = loss + self.adv_loss_weight * adv_loss
+                
         return loss, adv_loss
     
 class CrossDatasetsCELoss_AdvGNN_Only(nn.Module):

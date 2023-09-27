@@ -351,6 +351,7 @@ def train():
     use_ema = configer.get('use_ema')
     use_contrast = configer.get('contrast', 'use_contrast')
     joint_train = configer.get('train', 'joint_train')
+    mse_or_adv = configer.get('GNN', 'mse_or_adv')
     ## dataset
 
     # dl = get_single_data_loader(configer, aux_mode='train', distributed=is_dist)
@@ -724,7 +725,7 @@ def train():
             loss_contrast = None
 
 
-        if is_adv:
+        if is_adv and mse_or_adv == 'adv':
             backward_loss += adv_loss
             # scaler.scale(adv_loss).backward()
             # scaler.step(gnn_optimD)
