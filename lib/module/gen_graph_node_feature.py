@@ -67,6 +67,65 @@ def get_img_for_everyclass(configer, dataset_id=None):
     
     return img_lists, lb_lists, lb_info_list
 
+def sep_train_set_for_everyclass(configer, dataset_id=None):
+    n_datasets = configer.get("n_datasets")
+
+    num_classes = []
+    for i in range(1, n_datasets + 1):
+        num_classes.append(configer.get("dataset" + str(i), "n_cats"))
+
+    dls = get_data_loader(configer, aux_mode='ret_path', distributed=False)
+
+    # train_lists = []
+    # test_lists  = []
+    for i in range(0, n_datasets):
+        this_train_lists = []
+        this_test_lists = []
+        this_class_len = []
+        
+        if dataset_id != None and i != dataset_id:
+            # img_lists.append(this_img_lists)
+            # lb_lists.append(this_lb_lists)
+            continue
+        # print("cur dataset id： ", i)
+        
+        for label_id in range(0, num_classes[i]):
+            this_class_len.append(0)
+            
+            
+        for im, lb, lbpth in dls[i]:
+            im = im[0]
+            lbpth = lbpth[0]
+            lb = lb.squeeze()
+            flag = False
+            for label_id in range(0, num_classes[i]):
+                if this_class_len[label_id] < 50 and (lb == label_id).any():
+                    this_class_len[label_id] += 1 
+                    if flag == False:
+                        this_test_lists.append(im +', '+lbpth)
+                        
+                        
+                    flag = True
+            if flag == False:
+                this_train_lists.append(im +', '+lbpth)
+                    
+
+        # for j, lb in enumerate(this_lb_lists):
+        #     if len(lb) == 0:
+        #         print("the number {} class has no image".format(j))
+        
+        
+        strsplit = '\n'
+        with open(f"{i}_train_1.txt","w") as f:
+            f.write(strsplit.join(this_train_lists))
+        
+        with open(f"{i}_train_2.txt","w") as f:
+            f.write(strsplit.join(this_test_lists))
+        
+    
+    
+
+
 def get_img_for_everyclass_single(configer, dls):
     n_datasets = configer.get("n_datasets")
 
@@ -488,8 +547,10 @@ def gen_graph_node_feature_storage(configer):
 
 
 if __name__ == "__main__":
-    configer = Configer(configs="configs/ltbgnn_5_datasets.json")
-    img_feature_vecs = gen_graph_node_feature_storage(configer) 
+    configer = Configer(configs="configs/ltbgnn_7_datasets.json")
+    # img_feature_vecs = gen_graph_node_feature_storage(configer) 
+    sep_train_set_for_everyclass(configer)
+    print('finished')
     # print(img_feature_vecs[0][0])
     # print(img_feature_vecs)
 
