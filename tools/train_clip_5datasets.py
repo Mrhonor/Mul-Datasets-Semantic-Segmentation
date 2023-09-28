@@ -2,9 +2,9 @@
 # -*- encoding: utf-8 -*-
 
 
-from cgi import print_directory
-from email.policy import strict
-from math import perm
+# from cgi import print_directory
+# from email.policy import strict
+# from math import perm
 import sys
 sys.path.insert(0, '.')
 import os
@@ -95,8 +95,9 @@ def set_model(configer):
 
     net = model_factory[configer.get('model_name')](configer)
 
+    print(configer.get('train', 'finetune'))
     if configer.get('train', 'finetune'):
-        logger.info(f"load pretrained weights from {configer.get('train', 'finetune_from')}")
+        # logger.info(f"load pretrained weights from {configer.get('train', 'finetune_from')}")
         net.load_state_dict(torch.load(configer.get('train', 'finetune_from'), map_location='cpu'), strict=False)
 
         
@@ -121,7 +122,7 @@ def set_ema_model(configer):
     net = model_factory[configer.get('model_name') + '_ema'](configer)
 
     if configer.get('train', 'finetune'):
-        logger.info(f"ema load pretrained weights from {configer.get('train', 'finetune_from')}")
+        # logger.info(f"ema load pretrained weights from {configer.get('train', 'finetune_from')}")
         net.load_state_dict(torch.load(configer.get('train', 'finetune_from'), map_location='cpu'), strict=False)
 
         
@@ -505,7 +506,7 @@ def train():
                 loss_pre_meter, loss_aux_meters, loss_contrast_meter, loss_domain_meter, kl_loss_meter)
             
 
-        if (i + 1) % 10000 == 0:
+        if (i + 1) % 30000 == 0:
             save_pth = osp.join(configer.get('res_save_pth'), 'model_{}.pth'.format(i+1))
             logger.info('\nsave models to {}'.format(save_pth))
             if is_distributed():
@@ -526,7 +527,7 @@ def train():
             else:
                 heads, mious = eval_model_func(configer, net)
                 
-            writer.add_scalars("mious",{"Cityscapes":mious[CITY_ID],"Camvid":mious[CAM_ID]},configer.get("iter")+1)
+            # writer.add_scalars("mious",{"Cityscapes":mious[CITY_ID],"Camvid":mious[CAM_ID]},configer.get("iter")+1)
             # writer.export_scalars_to_json(osp.join(configer.get('res_save_pth'), str(time())+'_writer.json'))
             logger.info(tabulate([mious, ], headers=heads, tablefmt='orgtbl'))
             net.train()
@@ -579,7 +580,8 @@ def main():
     
     if not osp.exists(configer.get('res_save_pth')): os.makedirs(configer.get('res_save_pth'))
 
-    setup_logger(f"{configer.get('model_name')}-train", configer.get('res_save_pth'))
+    model_name = configer.get('model_name')
+    setup_logger(str(model_name)+"-train", configer.get('res_save_pth'))
     train()
 
 def temp():
