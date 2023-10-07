@@ -356,6 +356,8 @@ def train():
 
     # dl = get_single_data_loader(configer, aux_mode='train', distributed=is_dist)
     dls = get_data_loader(configer, aux_mode='train', distributed=is_dist)
+    dls_stage1 = get_data_loader(configer, aux_mode='train', distributed=is_dist, stage=1)
+    dls_stage2 = get_data_loader(configer, aux_mode='train', distributed=is_dist, stage=2)
     # dl_city, dl_cam = get_data_loader(configer, aux_mode='train', distributed=is_dist)
     
     ## model
@@ -396,7 +398,7 @@ def train():
     # 两个数据集分别处理
     # 使用迭代器读取数据
     
-    dl_iters = [iter(dl) for dl in dls]
+    dl_iters = [iter(dl) for dl in dls_stage1]
     
     ## train loop
     # for it, (im, lb) in enumerate(dl):
@@ -441,7 +443,7 @@ def train():
                 if not im.size()[0] == configer.get('dataset'+str(j+1), 'ims_per_gpu'):
                     raise StopIteration
             except StopIteration:
-                dl_iters[j] = iter(dls[j])
+                dl_iters[j] = iter(dls_stage1[j])
                 im, lb = next(dl_iters[j])
                 while torch.min(lb) == 255:
                     im, lb = next(dl_iters[j])
@@ -598,7 +600,7 @@ def train():
                 if not im.size()[0] == configer.get('dataset'+str(j+1), 'ims_per_gpu'):
                     raise StopIteration
             except StopIteration:
-                dl_iters[j] = iter(dls[j])
+                dl_iters[j] = iter(dls_stage1[j])
                 im, lb = next(dl_iters[j])
                 while torch.min(lb) == 255:
                     im, lb = next(dl_iters[j])
@@ -925,7 +927,11 @@ def train():
                     if not im.size()[0] == configer.get('dataset'+str(j+1), 'ims_per_gpu'):
                         raise StopIteration
                 except StopIteration:
-                    dl_iters[j] = iter(dls[j])
+                    if stage == 'stage1':
+                        dl_iters[j] = iter(dls_stage1[j])
+                    else:
+                        dl_iters[j] = iter(dls[j])
+                        
                     im, lb = next(dl_iters[j])
                     while torch.min(lb) == 255:
                         im, lb = next(dl_iters[j])
@@ -1079,8 +1085,8 @@ if __name__ == "__main__":
     # # print(im_lb.shape)
     # print(im.shape)
     # print(lb.shape)
-    # dls = get_data_loader(configer, aux_mode='train', distributed=False)
-    # dl_iters = [iter(dl) for dl in dls]
+    # dls_stage1 = get_data_loader(configer, aux_mode='train', distributed=False)
+    # dl_iters = [iter(dl) for dl in dls_stage1]
     
     # for j in range(0,len(dl_iters)):
     #     print("!!!!!!!!!")

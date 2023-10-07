@@ -1030,8 +1030,16 @@ class Learnable_Topology_BGNN(nn.Module):
         similar_matrix = torch.einsum('nc, mc -> nm', norm_adj_feat, norm_adj_feat)
         # adj_mI = similar_matrix - torch.diag(torch.diag(similar_matrix))
         adj_mI = similar_matrix
-        adj_mI[:self.max_num_unify_class, :self.max_num_unify_class] -= similar_matrix[:self.max_num_unify_class, :self.max_num_unify_class] 
-        adj_mI[self.max_num_unify_class:, self.max_num_unify_class:] -= similar_matrix[self.max_num_unify_class:, self.max_num_unify_class:]
+        mask = torch.ones(adj_mI.size(), dtype=torch.bool)
+        if adj_mI.is_cuda:
+            mask = mask.cuda()
+        
+        mask[:self.total_cats, :self.total_cats] = 0
+        mask[self.total_cats:, self.total_cats:] = 0
+        adj_mI = adj_mI * mask
+            
+        # adj_mI[:self.total_cats, :self.total_cats] -= similar_matrix[:self.total_cats, :self.total_cats] 
+        # adj_mI[self.total_cats:, self.total_cats:] -= similar_matrix[self.total_cats:, self.total_cats:]
         
         def normalize_adj(mx):
         

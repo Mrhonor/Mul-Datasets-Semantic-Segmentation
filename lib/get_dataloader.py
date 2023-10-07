@@ -48,7 +48,7 @@ class TransformationVal(object):
         return dict(im=im, lb=lb)
 
 
-def get_data_loader(configer, aux_mode='eval', distributed=True):
+def get_data_loader(configer, aux_mode='eval', distributed=True, stage=None):
     mode = aux_mode
     n_datasets = configer.get('n_datasets')
     max_iter = configer.get('lr', 'max_iter')
@@ -58,7 +58,10 @@ def get_data_loader(configer, aux_mode='eval', distributed=True):
         cropsize = configer.get('train', 'cropsize')
         trans_func = TransformationTrain(scales, cropsize)
         batchsize = [configer.get('dataset'+str(i), 'ims_per_gpu') for i in range(1, n_datasets+1)]
-        annpath = [configer.get('dataset'+str(i), 'train_im_anns') for i in range(1, n_datasets+1)]
+        if stage != None:
+            annpath = [configer.get('dataset'+str(i), 'train_im_anns').replace('.txt', f'_{stage}.txt') for i in range(1, n_datasets+1)]
+        else:
+            annpath = [configer.get('dataset'+str(i), 'train_im_anns') for i in range(1, n_datasets+1)]
         imroot = [configer.get('dataset'+str(i), 'im_root') for i in range(1, n_datasets+1)]
         data_reader = [configer.get('dataset'+str(i), 'data_reader') for i in range(1, n_datasets+1)]
         

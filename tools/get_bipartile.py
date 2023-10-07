@@ -160,7 +160,7 @@ def find_unuse(configer, net):
     n_datasets = configer.get('n_datasets')
     is_dist = dist.is_initialized()
     net.eval()
-    dls = get_data_loader(configer, aux_mode='eval', distributed=is_dist)
+    dls = get_data_loader(configer, aux_mode='eval', distributed=is_dist, stage=2)
 
     out_buckets = {}
     for i in range(0, n_datasets): 
