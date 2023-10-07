@@ -129,11 +129,11 @@
     },
     "use_ema": false,
     "lr": {
-      "lr_start": 1.5e-3,
+      "lr_start": 1e-3,
       "weight_decay": 1e-5,
       "warmup_iters": 1000,
       "fix_param_iters": 0,
-      "max_iter": 450000,
+      "max_iter": 300000,
       "init_iter": 0
     },
     "train": {

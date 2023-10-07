@@ -872,6 +872,8 @@ class Learnable_Topology_BGNN(nn.Module):
         self.output_max_adj = self.configer.get('GNN', 'output_max_adj')
         self.output_softmax_and_max_adj = self.configer.get('GNN', 'output_softmax_and_max_adj')
 
+        self.mse_or_adv = self.configer.get('GNN', 'mse_or_adv')
+
         self.linear_before = nn.Linear(self.nfeat, self.nfeat_out)
         self.linear_adj = nn.Linear(self.nfeat_out, self.nfeat_adj)
         if self.calc_bipartite:
@@ -911,12 +913,13 @@ class Learnable_Topology_BGNN(nn.Module):
         ## Graph adjacency matrix
         self.adj_matrix = nn.Parameter(torch.zeros(self.total_cats+self.max_num_unify_class, self.total_cats+self.max_num_unify_class), requires_grad=True)
         # self.init_adjacency_matrix()
-        self.netD1 = Discriminator(self.nfeat_out, 128, 1, self.dropout_rate)
-        self.netD1.weights_init()
-        self.netD2 = Discriminator(self.nfeat_out, 128, 1, self.dropout_rate)
-        self.netD2.weights_init()
-        self.netD3 = Discriminator(self.nfeat_out, 128, 1, self.dropout_rate)
-        self.netD3.weights_init()
+        if self.mse_or_adv == 'adv':
+            self.netD1 = Discriminator(self.nfeat_out, 128, 1, self.dropout_rate)
+            self.netD1.weights_init()
+            self.netD2 = Discriminator(self.nfeat_out, 128, 1, self.dropout_rate)
+            self.netD2.weights_init()
+            self.netD3 = Discriminator(self.nfeat_out, 128, 1, self.dropout_rate)
+            self.netD3.weights_init()
         
         self.use_km = False
         if self.use_km:
@@ -942,32 +945,41 @@ class Learnable_Topology_BGNN(nn.Module):
         
         before_gcn1_x = F.dropout(feat1_relu, self.dropout_rate, training=self.training)
         feat_gcn1 = self.GCN_layer1(before_gcn1_x, adj_mI)
-        out_real_1 = self.netD1(before_gcn1_x.detach())
-        out_fake_1 = self.netD1(feat_gcn1.detach())
-        g_out_fake_1 = self.netD1(feat_gcn1)
+        if self.mse_or_adv == 'adv':
+            out_real_1 = self.netD1(before_gcn1_x.detach())
+            out_fake_1 = self.netD1(feat_gcn1.detach())
+            g_out_fake_1 = self.netD1(feat_gcn1)
         
         feat2 = feat_gcn1 + before_gcn1_x
         before_gcn2_x = F.dropout(feat2, self.dropout_rate, training=self.training)
         feat_gcn2 = self.GCN_layer2(before_gcn2_x, adj_mI)
-        out_real_2 = self.netD2(before_gcn2_x.detach())
-        out_fake_2 = self.netD2(feat_gcn2.detach())
-        g_out_fake_2 = self.netD2(feat_gcn2)
+        if self.mse_or_adv == 'adv':
+            out_real_2 = self.netD2(before_gcn2_x.detach())
+            out_fake_2 = self.netD2(feat_gcn2.detach())
+            g_out_fake_2 = self.netD2(feat_gcn2)
         
         feat3 = feat_gcn2 + before_gcn2_x
         before_gcn3_x = F.dropout(feat3, self.dropout_rate, training=self.training)
         feat_gcn3 = self.GCN_layer3(before_gcn3_x, adj_mI)
-        out_real_3 = self.netD3(before_gcn3_x.detach())
-        out_fake_3 = self.netD3(feat_gcn3.detach())
-        g_out_fake_3 = self.netD3(feat_gcn3)
+        if self.mse_or_adv == 'adv':
+            out_real_3 = self.netD3(before_gcn3_x.detach())
+            out_fake_3 = self.netD3(feat_gcn3.detach())
+            g_out_fake_3 = self.netD3(feat_gcn3)
         
         feat4 = F.elu(feat_gcn3 + before_gcn3_x)
         # feat3_drop = F.dropout(feat3, self.dropout_rate, training=self.training)
         feat_out = self.linear1(feat4)
 
         adv_out = {}
-        adv_out['ADV1'] = [out_real_1, out_fake_1, g_out_fake_1]
-        adv_out['ADV2'] = [out_real_2, out_fake_2, g_out_fake_2]
-        adv_out['ADV3'] = [out_real_3, out_fake_3, g_out_fake_3]
+        if self.mse_or_adv == 'adv':
+            adv_out['ADV1'] = [out_real_1, out_fake_1, g_out_fake_1]
+            adv_out['ADV2'] = [out_real_2, out_fake_2, g_out_fake_2]
+            adv_out['ADV3'] = [out_real_3, out_fake_3, g_out_fake_3]
+        elif self.mse_or_adv == 'mse':
+            adv_out['ADV1'] = [feat1_relu.detach(), feat_gcn1]
+            adv_out['ADV2'] = [feat2.detach(), feat_gcn2]
+            adv_out['ADV3'] = [feat3.detach(), feat_gcn3]
+            
         if pretraining:
             return feat_out[self.total_cats:], self.sep_bipartite_graphs(non_norm_adj_mI), adv_out, non_norm_adj_mI
         elif self.calc_bipartite:
@@ -1041,6 +1053,7 @@ class Learnable_Topology_BGNN(nn.Module):
         # adj_mI[:self.total_cats, :self.total_cats] -= similar_matrix[:self.total_cats, :self.total_cats] 
         # adj_mI[self.total_cats:, self.total_cats:] -= similar_matrix[self.total_cats:, self.total_cats:]
         
+
         def normalize_adj(mx):
         
             rowsum = mx.sum(1)
