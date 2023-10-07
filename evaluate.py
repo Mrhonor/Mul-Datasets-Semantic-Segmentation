@@ -711,7 +711,8 @@ def eval_model_contrast(configer, net):
     single_scale = MscEvalV0_Contrast(configer, (1., ), False)
     
     for i in range(0, configer.get('n_datasets')):
-        mIOU = single_scale(net, dls[i], configer.get('dataset'+str(i+1),"n_cats"), i)
+        # mIOU = single_scale(net, dls[i], configer.get('dataset'+str(i+1), "eval_cats"), i)
+        mIOU = single_scale(net, dls[i], configer.get('dataset'+str(i+1), "n_cats"), i)
         mious.append(mIOU)
     
 
@@ -949,6 +950,7 @@ def Find_label_relation(configer, datasets_remaps):
     return out_label_relation
     # conflict = []
     
+@torch.no_grad()
 def find_unuse_label(configer, net, dl, n_classes, dataset_id):
         ## evaluate
     # hist = torch.zeros(n_classes, n_classes).cuda().detach()
@@ -962,38 +964,45 @@ def find_unuse_label(configer, net, dl, n_classes, dataset_id):
     bipart_graph = net.bipartite_graphs
     for i in range(0, n_datasets):
         total_cats += configer.get("dataset"+str(i+1), "n_cats")
+    total_cats = int(total_cats * configer.get('GNN', 'unify_ratio'))
 
     hist = torch.zeros(n_classes, total_cats).cuda().detach()
     if dist.is_initialized() and dist.get_rank() != 0:
         diter = enumerate(dl)
     else:
         diter = enumerate(tqdm(dl))
-    for i, (imgs, label) in diter:
-        N, _, H, W = label.shape
-
-        label = label.squeeze(1).cuda()
-        size = label.size()[-2:]
-
-        im_sc = F.interpolate(imgs, size=(H, W),
-                mode='bilinear', align_corners=True)
-
-        im_sc = im_sc.cuda()
         
+    
+    with torch.no_grad():
+        for i, (imgs, label) in diter:
+            N, _, H, W = label.shape
+            if H > 2048 or W > 2048:
+                H = 2048
+                W = 2048
+                
+
+            label = label.squeeze(1).cuda()
+            size = label.shape[-2:]
+
+            im_sc = F.interpolate(imgs, size=(H, W),
+                    mode='bilinear', align_corners=True)
+
+            im_sc = im_sc.cuda()
             
-        emb = net(im_sc, dataset=dataset_id)
+            emb = net(im_sc, dataset=dataset_id)
         
-        logits = torch.einsum('bchw, nc -> bnhw', emb['seg'], unify_prototype)
+            logits = torch.einsum('bchw, nc -> bnhw', emb['seg'], unify_prototype)
 
-        logits = F.interpolate(logits, size=size,
-                mode='bilinear', align_corners=True)
-        probs = torch.softmax(logits, dim=1)
-        preds = torch.argmax(probs, dim=1)
-        keep = label != ignore_label
+            logits = F.interpolate(logits, size=size,
+                    mode='bilinear', align_corners=True)
+            probs = torch.softmax(logits, dim=1)
+            preds = torch.argmax(probs, dim=1)
+            keep = label != ignore_label
 
-        hist += torch.tensor(np.bincount(
-            label.cpu().numpy()[keep.cpu().numpy()] * total_cats + preds.cpu().numpy()[keep.cpu().numpy()],
-            minlength=n_classes * total_cats
-        )).cuda().view(n_classes, total_cats)
+            hist += torch.tensor(np.bincount(
+                label.cpu().numpy()[keep.cpu().numpy()] * total_cats + preds.cpu().numpy()[keep.cpu().numpy()],
+                minlength=n_classes * total_cats
+            )).cuda().view(n_classes, total_cats)
 
     max_value, max_index = torch.max(bipart_graph[dataset_id], dim=0)
     # print(max_value)

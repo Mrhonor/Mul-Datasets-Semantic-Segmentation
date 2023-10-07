@@ -22,15 +22,16 @@ np.random.seed(123)
 # args
 parse = argparse.ArgumentParser()
 
-parse.add_argument('--weight_path', type=str, default='res/celoss/seg_model_final.pth',)
-parse.add_argument('--gnn_weight_path', type=str, default='res/celoss/gnn_model_final.pth',)
-parse.add_argument('--config', dest='config', type=str, default='configs/ltbgnn_5_datasets.json',)
-parse.add_argument('--img_path', dest='img_path', type=str, default='img/berlin_000011_000019_leftImg8bit.png',)
+parse.add_argument('--weight_path', type=str, default='res/clip/seg_model_final.pth',)
+parse.add_argument('--gnn_weight_path', type=str, default='res/clip/gnn_model_final.pth',)
+parse.add_argument('--config', dest='config', type=str, default='configs/ltbgnn_7_datasets.json',)
+parse.add_argument('--img_path', dest='img_path', type=str, default='img/0006R0_f00990.png',)
 args = parse.parse_args()
 # cfg = set_cfg_from_file(args.config)
 configer = Configer(configs=args.config)
 
-# palette = np.random.randint(0, 256, (256, 3), dtype=np.uint8)
+palette = np.random.randint(0, 256, (512, 3), dtype=np.uint8)
+print(palette.shape)
 # labels_info_eval = [
 #     {"name": "road", "ignoreInEval": False, "id": 7, "color": [128, 64, 128], "trainId": 0},
 #     {"name": "sidewalk", "ignoreInEval": False, "id": 8, "color": [244, 35, 232], "trainId": 1},
@@ -638,7 +639,7 @@ def buildPalette(label_info):
         palette.append(el["color"])
         
     return np.array(palette)
-palette = buildPalette(labels_info)
+# palette = buildPalette(labels_info)
 # print(Palette)
 
 class E2EModel(torch.nn.Module):
@@ -655,7 +656,7 @@ class E2EModel(torch.nn.Module):
         self.net.load_state_dict(torch.load(weight_path, map_location='cpu'), strict=False)
         self.net.eval()
         self.net.aux_mode='pred'
-        self.net.aux_mode='uni'
+        # self.net.aux_mode='uni'
         # self.net.train()
         self.net.cuda()
 
@@ -713,8 +714,8 @@ for i in range(1):
     t0 = time()
     # input_im = to_tensor(dict(im=im, lb=None))['im'].unsqueeze(0).cuda()
     # input_im = cv2.resize(im, (960, 768))
-    # input_im = cv2.resize(im, (1024, 512))
-    input_im = im
+    input_im = cv2.resize(im, (1024, 512))
+    # input_im = im
     
     input_im = torch.tensor(input_im.astype(np.float32).copy()).unsqueeze(0)#.cuda()
     

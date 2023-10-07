@@ -49,8 +49,10 @@ class Bdd100k(BaseDataset):
         super(Bdd100k, self).__init__(
                 dataroot, annpath, trans_func, mode)
     
-        
+        mode = 'eval'
         self.n_cats = 19
+        if mode=='train':
+            self.n_cats =20
         
         self.lb_ignore = 255
         # self.lb_ignore = 255
@@ -59,7 +61,10 @@ class Bdd100k(BaseDataset):
         self.labels_info = labels_info
             
         for el in self.labels_info:
-            self.lb_map[el['id']] = el['trainId']
+            if mode=='train' and el['trainId'] == 255:
+                self.lb_map[el['id']] = 19
+            else:
+                self.lb_map[el['id']] = el['trainId']
 
         self.to_tensor = T.ToTensor(
             mean=(0.3038, 0.3383, 0.3034), # city, rgb

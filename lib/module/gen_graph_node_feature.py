@@ -35,7 +35,7 @@ def get_img_for_everyclass(configer, dataset_id=None):
     for i in range(0, n_datasets):
         this_img_lists = []
         this_lb_lists = []
-        lb_info_list(dls[i].dataset.labels_info)
+        lb_info_list.append(dls[i].dataset.lb_map)
         
         if dataset_id != None and i != dataset_id:
             img_lists.append(this_img_lists)
@@ -371,7 +371,7 @@ def gen_graph_node_feature(configer):
     for i in range(0, n_datasets):
         this_file_name = file_name + f'_{dataset_names[i]}.pt' 
         if osp.exists(this_file_name):
-            this_graph_node_features = torch.load(this_file_name)
+            this_graph_node_features = torch.load(this_file_name, map_location='cpu')
 
             out_features.append(this_graph_node_features)
         else:
@@ -385,39 +385,39 @@ def gen_graph_node_feature(configer):
             print("gen finished")
             torch.save(this_graph_node_features.clone(), this_file_name)
 
-            out_features.append(this_graph_node_features)
+            out_features.append(this_graph_node_features.cpu())
     
     out_features = torch.cat(out_features, dim=0)
     print(out_features.shape)
     return out_features 
     
     
-    if not osp.exists(configer.get('res_save_pth')): os.makedirs(configer.get('res_save_pth'))
+    # if not osp.exists(configer.get('res_save_pth')): os.makedirs(configer.get('res_save_pth'))
     
-    file_name = configer.get('res_save_pth') + 'graph_node_features'+str(configer.get('n_datasets'))
-    for i in range(0, configer.get('n_datasets')):
-        file_name += '_'+str(configer.get('dataset'+str(i+1), 'data_reader'))
+    # file_name = configer.get('res_save_pth') + 'graph_node_features'+str(configer.get('n_datasets'))
+    # for i in range(0, configer.get('n_datasets')):
+    #     file_name += '_'+str(configer.get('dataset'+str(i+1), 'data_reader'))
     
-    file_name += '.pt'
+    # file_name += '.pt'
 
-    if osp.exists(file_name):
-        graph_node_features = torch.load(file_name)
-    else:
-        print("gen_graph_node_feature")
-        text_feature_vecs = get_encode_lb_vec(configer)
-        text_feat_tensor = torch.cat(text_feature_vecs, dim=0)
-        print(text_feat_tensor.shape)
-        print("gen_text_feature_vecs")
-        img_feature_vecs = gen_image_features(configer)
-        img_feat_tensor = torch.cat(img_feature_vecs, dim=0)
-        print(img_feat_tensor.shape)
-        print("gen_img_features")
-        graph_node_features = torch.cat([text_feat_tensor, img_feat_tensor], dim=1)
-        # graph_node_features = (text_feat_tensor+img_feat_tensor)/2
-        print(graph_node_features.shape)
-        torch.save(graph_node_features.clone(), file_name)
+    # if osp.exists(file_name):
+    #     graph_node_features = torch.load(file_name)
+    # else:
+    #     print("gen_graph_node_feature")
+    #     text_feature_vecs = get_encode_lb_vec(configer)
+    #     text_feat_tensor = torch.cat(text_feature_vecs, dim=0)
+    #     print(text_feat_tensor.shape)
+    #     print("gen_text_feature_vecs")
+    #     img_feature_vecs = gen_image_features(configer)
+    #     img_feat_tensor = torch.cat(img_feature_vecs, dim=0)
+    #     print(img_feat_tensor.shape)
+    #     print("gen_img_features")
+    #     graph_node_features = torch.cat([text_feat_tensor, img_feat_tensor], dim=1)
+    #     # graph_node_features = (text_feat_tensor+img_feat_tensor)/2
+    #     print(graph_node_features.shape)
+    #     torch.save(graph_node_features.clone(), file_name)
     
-    return graph_node_features
+    # return graph_node_features
 
     
 def gen_graph_node_feature_single(configer, img_feature_vecs, text_feat_tensor=None):
