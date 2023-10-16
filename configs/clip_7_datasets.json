@@ -127,8 +127,8 @@
     "train": {
       "scales": [0.5, 1.0, 2.0],
       "cropsize": [512, 1024],
-      "finetune": false,
-      "finetune_from": "res/celoss/model_50000.pth",
+      "finetune": true,
+      "finetune_from": "res/clip/model_50000.pth",
       "graph_finetune": false,
       "graph_finetune_from": "res/celoss/gnn_model_final.pth",
       "seg_iters": 20000,

@@ -22,9 +22,9 @@ np.random.seed(123)
 # args
 parse = argparse.ArgumentParser()
 
-parse.add_argument('--weight_path', type=str, default='res/clip/seg_model_final.pth',)
-parse.add_argument('--gnn_weight_path', type=str, default='res/clip/gnn_model_final.pth',)
-parse.add_argument('--config', dest='config', type=str, default='configs/ltbgnn_7_datasets.json',)
+parse.add_argument('--weight_path', type=str, default='res/celoss/seg_model_60000.pth',)
+parse.add_argument('--gnn_weight_path', type=str, default='res/celoss/graph_model_60000.pth',)
+parse.add_argument('--config', dest='config', type=str, default='configs/ltbgnn_7_datasets_2.json',)
 parse.add_argument('--img_path', dest='img_path', type=str, default='img/0006R0_f00990.png',)
 args = parse.parse_args()
 # cfg = set_cfg_from_file(args.config)
@@ -656,27 +656,27 @@ class E2EModel(torch.nn.Module):
         self.net.load_state_dict(torch.load(weight_path, map_location='cpu'), strict=False)
         self.net.eval()
         self.net.aux_mode='pred'
-        # self.net.aux_mode='uni'
+        self.net.aux_mode='uni'
         # self.net.train()
         self.net.cuda()
 
-        # graph_net = model_factory[configer.get('GNN','model_name')](configer)
-        # torch.set_printoptions(profile="full")
-        # graph_net.load_state_dict(torch.load(args.gnn_weight_path, map_location='cpu'), strict=False)
-        # graph_net.cuda()
-        # graph_net.eval()
-        # graph_net.train()
-        # graph_node_features = gen_graph_node_feature(configer)
+        graph_net = model_factory[configer.get('GNN','model_name')](configer)
+        torch.set_printoptions(profile="full")
+        graph_net.load_state_dict(torch.load(args.gnn_weight_path, map_location='cpu'), strict=False)
+        graph_net.cuda()
+        graph_net.eval()
+        graph_net.train()
+        graph_node_features = gen_graph_node_feature(configer)
         # unify_prototype, ori_bi_graphs = graph_net.get_optimal_matching(graph_node_features, init=True) 
         # if len(ori_bi_graphs) == 10:
         #     for j in range(0, len(ori_bi_graphs), 2):
         #         bi_graphs.append(ori_bi_graphs[j+1].detach())
         # else:
         #     bi_graphs = [bigh.detach() for bigh in ori_bi_graphs]
-        # unify_prototype, bi_graphs, adv_out, _ = graph_net(graph_node_features)
+        unify_prototype, bi_graphs, adv_out, _ = graph_net(graph_node_features)
 
-        # print(bi_graphs[0])
-        # print(bi_graphs[0][18])
+        # print(self.net.bipartite_graphs[6])
+        print(bi_graphs[6])
 
         # self.net.set_unify_prototype(unify_prototype)
         # self.net.set_bipartite_graphs(bi_graphs)
@@ -725,7 +725,7 @@ for i in range(1):
     # out1 = net1(input_im).squeeze().detach().cpu().numpy()
     # out2 = net(input_im).long().squeeze().detach().cpu().numpy()
     # net.train()
-    out2 = net(input_im)
+    # out2 = net(input_im)
     # print(out2.shape)
     print(out2.shape)
     print(torch.max(out2))
