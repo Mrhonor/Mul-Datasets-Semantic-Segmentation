@@ -275,13 +275,13 @@ def print_unified_label_mapping(configer, bi_graphs, adj):
         
 
 def main():
-    configer = Configer(configs='configs/ltbgnn_5_datasets_ade.json')
+    configer = Configer(configs='configs/ltbgnn_3_datasets.json')
     net = model_factory[configer.get('model_name')](configer)
     graph_net = model_factory[configer.get('GNN','model_name')](configer)
-    graph_net.load_state_dict(torch.load('res/celoss/graph_model_40000.pth', map_location='cpu'), strict=False)
+    graph_net.load_state_dict(torch.load('res/celoss/graph_model_10000.pth', map_location='cpu'), strict=False)
     
         
-    state = torch.load('res/celoss/seg_model_40000.pth', map_location='cpu')
+    state = torch.load('res/celoss/seg_model_10000.pth', map_location='cpu')
     
         
         # del state['unify_prototype']
@@ -291,7 +291,7 @@ def main():
     node_feat = gen_graph_node_feature(configer)
     _, bipart_graphs = graph_net.get_optimal_matching(node_feat, True)
     
-    print_bipartite(configer, 5, bipart_graphs)
+    print_bipartite(configer, 3, bipart_graphs)
     
 
 

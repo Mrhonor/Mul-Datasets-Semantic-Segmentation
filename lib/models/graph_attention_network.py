@@ -8,6 +8,7 @@ import numpy as np
 import scipy.sparse as sp
 from munkres import Munkres
 import ot
+import random
 
 class GCN(nn.Module):
     def __init__(self, infeat, outfeat):
@@ -1240,6 +1241,41 @@ class Learnable_Topology_BGNN(nn.Module):
             self.bipartite_graphs.append(out_bipartite_graphs) 
                 
             cur_cat += self.dataset_cats[i]
+        
+        temp_bipartite_graphs = torch.cat(self.bipartite_graphs, dim=0)
+        unique_cols, unique_indices = torch.unique(temp_bipartite_graphs, sorted=False, dim=1, return_inverse=True)
+        
+        for j in range(0, len(unique_indices)):
+            if sum(unique_indices == unique_indices[j]) == 1:
+                continue
+                
+            flag = True
+            while flag:
+                new_col = torch.zeros_like(temp_bipartite_graphs[:,j])
+                cur_cat = 0
+                for s_id in range(0, self.n_datasets):
+                    rint = random.randint(cur_cat, cur_cat+self.dataset_cats[s_id]-1)
+                    cur_cat += self.dataset_cats[s_id]
+                    new_col[rint] = 1
+                    
+                flag = False
+                for col in range(0, temp_bipartite_graphs.shape[1]):
+                    if (temp_bipartite_graphs[:, col] == new_col).all():
+                        flag = True
+                        break
+                    
+                if flag == False:
+                    print(f"cats: {j}")
+                    temp_bipartite_graphs[:, j] = new_col
+                    unique_indices[j] = -1
+                    
+                    
+                
+        self.bipartite_graphs = []
+        cur_cat = 0
+        for s_id in range(0, self.n_datasets):
+            self.bipartite_graphs.append(temp_bipartite_graphs[cur_cat:cur_cat+self.dataset_cats[s_id], :])
+            cur_cat += self.dataset_cats[s_id]
         
         return self.bipartite_graphs 
 
