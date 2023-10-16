@@ -218,7 +218,7 @@ def set_model_dist(net):
     net = nn.parallel.DistributedDataParallel(
         net,
         device_ids=[local_rank, ],
-        find_unused_parameters=True,
+        find_unused_parameters=False,
         output_device=local_rank
         )
     return net
@@ -351,7 +351,7 @@ def train():
     ## dataset
 
     # dl = get_single_data_loader(configer, aux_mode='train', distributed=is_dist)
-    dls = get_data_loader(configer, aux_mode='train', distributed=is_dist)
+    
     # dl_city, dl_cam = get_data_loader(configer, aux_mode='train', distributed=is_dist)
     
     ## model
@@ -371,23 +371,24 @@ def train():
 
     graph_node_features = gen_graph_node_feature(configer).cuda()
     graph_net.eval()
-    with torch.no_grad():
+    # with torch.no_grad():
 
-        unify_prototype, ori_bi_graphs = graph_net.get_optimal_matching(graph_node_features, True)     
+    #     unify_prototype, ori_bi_graphs = graph_net.get_optimal_matching(graph_node_features, True)     
 
-        print(torch.norm(unify_prototype[0][0], p=2))
-        unify_prototype = unify_prototype.detach()
-        bi_graphs = []
-        if len(ori_bi_graphs) == 2*n_datasets:
-            for j in range(0, len(ori_bi_graphs), 2):
-                bi_graphs.append(ori_bi_graphs[j+1].detach())
-        else:
-            bi_graphs = [bigh.detach() for bigh in ori_bi_graphs]
-        fix_graph = True
-        adv_out = None
+    #     print(torch.norm(unify_prototype[0][0], p=2))
+    #     unify_prototype = unify_prototype.detach()
+    #     bi_graphs = []
+    #     if len(ori_bi_graphs) == 2*n_datasets:
+    #         for j in range(0, len(ori_bi_graphs), 2):
+    #             bi_graphs.append(ori_bi_graphs[j+1].detach())
+    #     else:
+    #         bi_graphs = [bigh.detach() for bigh in ori_bi_graphs]
+    #     fix_graph = True
+    #     adv_out = None
 
-        net.set_unify_prototype(unify_prototype, True)
-        net.set_bipartite_graphs(bi_graphs)
+    #     net.set_unify_prototype(unify_prototype, True)
+    #     net.set_bipartite_graphs(bi_graphs)
+    net.unify_prototype.requires_grad = True
 
     optim = set_optimizer(net, configer)
     gnn_optim = set_optimizer(graph_net, configer)
@@ -411,7 +412,7 @@ def train():
     # 两个数据集分别处理
     # 使用迭代器读取数据
     
-    dl_iters = [iter(dl) for dl in dls]
+    # dl_iters = [iter(dl) for dl in dls]
     
     ## train loop
     # for it, (im, lb) in enumerate(dl):
@@ -465,6 +466,7 @@ def train():
         print(stage)
 
         if stage == 'stage2':
+            dls = get_data_loader(configer, aux_mode='train', distributed=is_dist, stage=2)
             if is_distributed():
                 loaded_map = find_unuse(configer, net.module)
             else:
@@ -484,7 +486,11 @@ def train():
                 net.set_bipartite_graphs(bi_graphs) 
                           
             optim = set_optimizer(net, configer)
+        else:
+            dls = get_data_loader(configer, aux_mode='train', distributed=is_dist, stage=1)
                         
+        dl_iters = [iter(dl) for dl in dls]
+        
         lr_schdr = WarmupPolyLrScheduler(optim, power=0.9,
             max_iter=configer.get('train',f'finetune_{stage}_iters'), warmup_iter=configer.get('lr','warmup_iters'),
             warmup_ratio=0.1, warmup='exp', last_epoch=-1,) 
@@ -696,9 +702,9 @@ def train():
                     loss_pre_meter, loss_aux_meters, loss_contrast_meter, loss_domain_meter, kl_loss_meter)
                 
 
-            if (i + 1) % 30000 == 0:
+            if (i + 1) % 40000 == 0:
                 stage_iter = 0 if stage == 'stage1' else configer.get('train', 'finetune_stage1_iters')
-                seg_save_pth = osp.join(configer.get('res_save_pth'), 'seg_model_{}.pth'.format(i+1+configer.get('lr','max_iter')))
+                seg_save_pth = osp.join(configer.get('res_save_pth'), 'seg_model_{}_{}.pth'.format(stage, i+1+configer.get('lr','max_iter')))
                 logger.info('\nsave seg_models to {}'.format(seg_save_pth))
                 if is_distributed():
                     seg_state = net.module.state_dict()

@@ -635,10 +635,14 @@ class HRNet_W48_GNN(nn.Module):
             else:
                 return {'seg':emb}
         elif self.aux_mode == 'eval':
+
+            # cur_cat=0
+            # for i in range(0, dataset):
+            #     cur_cat += self.datasets_cats[i]
+            
+            # logits = torch.einsum('bchw, nc -> bnhw', emb, self.unify_prototype[cur_cat:cur_cat+self.datasets_cats[dataset]])   
             logits = torch.einsum('bchw, nc -> bnhw', emb, self.unify_prototype)
-            # remap_logits = torch.einsum('bchw, nc -> bnhw', logits, self.bipartite_graphs[dataset][:self.datasets_cats[dataset]-1])
             remap_logits = torch.einsum('bchw, nc -> bnhw', logits, self.bipartite_graphs[dataset])
-            # remap_logits = F.interpolate(remap_logits, size=(target.size(1), target.size(2)), mode="bilinear", align_corners=True)
             return remap_logits
         elif self.aux_mode == 'pred':
             logits = torch.einsum('bchw, nc -> bnhw', emb, self.unify_prototype)
@@ -649,6 +653,25 @@ class HRNet_W48_GNN(nn.Module):
             pred = logits.argmax(dim=1)
             
             return pred
+        elif self.aux_mode == 'clip':
+            cur_cat=0
+            for i in range(0, dataset):
+                cur_cat += self.datasets_cats[i]
+            
+            logits = torch.einsum('bchw, nc -> bnhw', emb, self.unify_prototype[cur_cat:cur_cat+self.datasets_cats[dataset]])   
+            return logits
+        elif self.aux_mode == 'uni_eval':
+            logits = torch.einsum('bchw, nc -> bnhw', emb, self.unify_prototype)
+            return logits
+        elif self.aux_mode == 'unseen':
+            logits = torch.einsum('bchw, nc -> bnhw', emb, self.unify_prototype)
+
+            max_index = torch.argmax(logits, dim=1)
+            temp = torch.eye(logits.size(1)).cuda()
+            one_hot = temp[max_index]
+            remap_logits = torch.einsum('bhwc, nc -> bnhw', one_hot, self.bipartite_graphs[dataset])
+            return remap_logits
+            
         else:
             logits = torch.einsum('bchw, nc -> bnhw', emb, self.unify_prototype)
             # logits = torch.einsum('bchw, nc -> bnhw', logits, self.bipartite_graphs[dataset])
@@ -710,10 +733,20 @@ class HRNet_W48_GNN(nn.Module):
         return wd_params, nowd_params, lr_mul_wd_params, lr_mul_nowd_params
     
     def set_bipartite_graphs(self, bi_graphs):
-        for i in range(0, self.n_datasets):
-            self.bipartite_graphs[i] = nn.Parameter(
-                bi_graphs[i], requires_grad=False
-                )
+        
+        if len(bi_graphs) == 2 * self.n_datasets:
+            for i in range(0, self.n_datasets):
+                self.bipartite_graphs[i] = nn.Parameter(
+                    bi_graphs[2*i], requires_grad=False
+                    )
+        else:
+            print("bi_graphs len:", len(bi_graphs))
+            for i in range(0, self.n_datasets):
+                print("i: ", i)
+                self.bipartite_graphs[i] = nn.Parameter(
+                    bi_graphs[i], requires_grad=False
+                    )
+            
         
     def set_unify_prototype(self, unify_prototype, grad=False):
         self.unify_prototype = nn.Parameter(unify_prototype,

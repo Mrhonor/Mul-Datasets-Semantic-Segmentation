@@ -1163,7 +1163,7 @@ class Learnable_Topology_BGNN(nn.Module):
             alpha = ot.unif(self.max_num_unify_class)
                 
             Q_st = ot.unbalanced.sinkhorn_knopp_unbalanced(alpha, self.beta[i], this_bipartite_graph.T.cpu().numpy(), 
-                                                            reg=0.01, reg_m=0.5, stopThr=1e-4) 
+                                                            reg=0.01, reg_m=5, stopThr=1e-6) 
 
             Q_st = torch.from_numpy(Q_st).float().cuda()
 
@@ -1213,6 +1213,21 @@ class Learnable_Topology_BGNN(nn.Module):
                     if flag is False:
                         print("error don't find correct one")
                     
+            for row in range(0, self.dataset_cats[i]):
+                if torch.sum(out_bipartite_graphs[row]) > 1:
+                    max_v, max_i = 0, 0
+                    for index, val in enumerate(out_bipartite_graphs[row]):
+                        if val == 1:
+                            if max_v < Q_st_bar[index, row]:
+                                max_v = Q_st_bar[index, row]
+                                max_i = index
+                            if Q_st_bar[index, row] < 1/float(self.max_num_unify_class):
+                                out_bipartite_graphs[row, index] = 0
+                        
+                            
+                    if torch.sum(out_bipartite_graphs[row]) == 0:
+                        out_bipartite_graphs[row, max_i] = 1
+                
             new_beta = torch.sum(Q_st_bar,0).cpu().numpy()
 
 

@@ -545,6 +545,31 @@ def gen_graph_node_feature_storage(configer):
     
     return out_features 
 
+def gen_graph_node_feature_test(configer):
+    n_datasets = configer.get("n_datasets")
+
+    if not osp.exists(configer.get('res_save_pth')): os.makedirs(configer.get('res_save_pth'))
+    
+    file_name = configer.get('res_save_pth') + 'graph_node_features'
+    dataset_names = []
+    for i in range(0, configer.get('n_datasets')):
+        # file_name += '_'+str(configer.get('dataset'+str(i+1), 'data_reader'))
+        dataset_names.append(str(configer.get('dataset'+str(i+1), 'data_reader')))
+    
+    # file_name += '.pt'
+    out_features = []
+    for i in range(0, n_datasets):
+        
+        text_feature_vecs = get_encode_lb_vec(configer, i)[0]
+        this_graph_node_features = torch.cat([text_feature_vecs, torch.zeros_like(text_feature_vecs)], dim=1)
+        
+        print("gen finished")
+
+        out_features.append(this_graph_node_features.cpu())
+    
+    out_features = torch.cat(out_features, dim=0)
+    print(out_features.shape)
+    return out_features 
 
 if __name__ == "__main__":
     configer = Configer(configs="configs/ltbgnn_7_datasets.json")

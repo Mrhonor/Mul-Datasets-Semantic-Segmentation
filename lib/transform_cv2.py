@@ -24,11 +24,19 @@ class RandomResizedCrop(object):
             return im_lb
 
         im, lb = im_lb['im'], im_lb['lb']
+        H, W = im.shape[:2]        
 
         assert im.shape[:2] == lb.shape[:2]
-
+        
+        
+            
         crop_h, crop_w = self.size
+        
         scale = np.random.uniform(min(self.scales), max(self.scales))
+        if np.min([H, W]) < 1080:
+            scale = scale * (1080 / np.min([H, W]))
+            
+        
         im_h, im_w = [math.ceil(el * scale) for el in im.shape[:2]]
         im = cv2.resize(im, (im_w, im_h))
         lb = cv2.resize(lb, (im_w, im_h), interpolation=cv2.INTER_NEAREST)

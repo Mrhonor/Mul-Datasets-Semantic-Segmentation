@@ -26,7 +26,8 @@
       "calc_bipartite": false,
       "output_max_adj": false,
       "output_softmax_and_max_adj": true,
-      "with_orth": true
+      "with_orth": true,
+      "mse_or_adv": "None"
     },
     "dataset1": {
       "n_cats": 19,
@@ -131,22 +132,22 @@
     "lr": {
       "lr_start": 1e-3,
       "weight_decay": 1e-5,
-      "warmup_iters": 1000,
+      "warmup_iters": 5000,
       "fix_param_iters": 0,
-      "max_iter": 300000,
+      "max_iter": 600000,
       "init_iter": 0
     },
     "train": {
-      "scales": [0.5, 1.0, 2.0],
-      "cropsize": [512, 1024],
+      "scales": [0.5, 2.0],
+      "cropsize": [713, 713],
       "finetune": true,
-      "finetune_from": "res/celoss/seg_model_150000.pth",
-      "graph_finetune": true,
+      "finetune_from": "res/clip/7_dataset_model_final.pth",
+      "graph_finetune": false,
       "graph_finetune_from": "res/celoss/graph_model_150000.pth",
-      "seg_iters": 90000,
-      "gnn_iters": 60000,
-      "finetune_stage1_iters": 30000,
-      "finetune_stage2_iters": 60000,
+      "seg_iters": 120000,
+      "gnn_iters": 80000,
+      "finetune_stage1_iters": 80000,
+      "finetune_stage2_iters": 120000,
       "joint_train": true
     },
     "val": {
@@ -154,7 +155,7 @@
       "cropsize": [512, 512]
     },
     "use_fp16": false,
-    "use_sync_bn": true,
+    "use_sync_bn": false,
     "contrast": {
       "use_contrast": true,
       "proj_dim": 512,

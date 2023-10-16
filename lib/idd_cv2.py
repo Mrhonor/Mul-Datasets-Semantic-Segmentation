@@ -1,6 +1,8 @@
 #!/usr/bin/python
 # -*- encoding: utf-8 -*-
-
+import sys
+from time import sleep
+sys.path.insert(0, '.')
 import os
 import os.path as osp
 import json
@@ -10,6 +12,7 @@ from torch.utils.data import Dataset, DataLoader
 import torch.distributed as dist
 import cv2
 import numpy as np
+from PIL import Image
 
 import lib.transform_cv2 as T
 from lib.base_dataset import BaseDataset, BaseDatasetIm
@@ -185,18 +188,104 @@ class Idd(BaseDataset):
 
 ## Only return img without label
 
+class IddIm(BaseDataset):
+    '''
+    '''
+    def __init__(self, dataroot, annpath, trans_func=None, mode='train'):
+        super(IddIm, self).__init__(
+                dataroot, annpath, trans_func, mode)
+    
+        
+        mode = 'eval'
+        # self.n_cats = 37
+        # if mode == 'eval':
+        self.n_cats = 26
+        if mode == 'train':
+            self.n_cats = 27
+        
+        self.lb_ignore = -1
+        # self.lb_ignore = 255
+        self.lb_map = np.arange(256).astype(np.uint8)
+        
+        self.labels_info = labels_info
+            
+        for el in self.labels_info:
+            if mode=='train' and el['trainId'] == 255:
+                self.lb_map[el['id']] = self.n_cats - 1
+            else:
+                self.lb_map[el['id']] = el['trainId']
 
-# if __name__ == "__main__":
-#     from tqdm import tqdm
-#     from torch.utils.data import DataLoader
-#     ds = CityScapes('./data/', mode='eval')
-#     dl = DataLoader(ds,
-#                     batch_size = 4,
-#                     shuffle = True,
-#                     num_workers = 4,
-#                     drop_last = True)
-#     for imgs, label in dl:
-#         print(len(imgs))
-#         for el in imgs:
-#             print(el.size())
-#         break
+        self.to_tensor = T.ToTensor(
+            mean=(0.3038, 0.3383, 0.3034), # city, rgb
+            std=(0.2071, 0.2088, 0.2090),
+        )
+        
+    def __getitem__(self, idx):
+        impth = self.img_paths[idx]
+        lbpth = self.lb_paths[idx]
+        
+        # start = time.time()
+        img = cv2.imread(impth)[:, :, ::-1]
+
+        # img = cv2.resize(img, (1920, 1280))
+        label = np.array(Image.open(lbpth).convert('RGB'))
+        # end = time.time()
+        # print("idx: {}, cv2.imread time: {}".format(idx, end - start))
+        # label = np.array(Image.open(lbpth).convert('RGB').resize((1920, 1280),Image.ANTIALIAS))
+        
+        # start = time.time()
+        # label = self.convert_labels(label, impth)
+        label = Image.fromarray(label)
+        # end = time.time()
+        # print("idx: {}, convert_labels time: {}".format(idx, end - start))
+
+        if not self.lb_map is None:
+            label = self.lb_map[label]
+            
+        if (label == 19).any():
+            print(impth)
+        im_lb = dict(im=img, lb=label)
+        if not self.trans_func is None:
+            # start = time.time()
+            im_lb = self.trans_func(im_lb)
+            # end = time.time()  
+            # print("idx: {}, trans time: {}".format(idx, end - start))
+        im_lb = self.to_tensor(im_lb)
+        img, label = im_lb['im'], im_lb['lb']
+        if self.mode == 'ret_path':
+            return impth, label.unsqueeze(0).detach()
+        
+        return img, label
+        # return img.detach()
+
+    def __len__(self):
+        return self.len
+
+    # def convert_labels(self, label, impth):
+    #     mask = np.full(label.shape[:2], 2, dtype=np.uint8)
+    #     # mask = np.zeros(label.shape[:2])
+    #     for k, v in self.color2id.items():
+    #         mask[cv2.inRange(label, np.array(k) - 1, np.array(k) + 1) == 255] = v
+            
+            
+    #         # if v == 30 and cv2.inRange(label, np.array(k) - 1, np.array(k) + 1).any() == True:
+    #         #     label[cv2.inRange(label, np.array(k) - 1, np.array(k) + 1) == 255] = [0, 0, 0]
+    #         #     cv2.imshow(impth, label)
+    #         #     cv2.waitKey(0)
+    #     return mask
+
+if __name__ == "__main__":
+    from tqdm import tqdm
+    from torch.utils.data import DataLoader
+    ds = IddIm('/cpfs01/projects-SSD/pujianxiangmuzu_SSD/pujian/mr/datasets/idd', 'datasets/IDD/val.txt')
+    dl = DataLoader(ds,
+                    batch_size = 1,
+                    shuffle = False,
+                    num_workers = 1,
+                    drop_last = False)
+    for imgs, label in dl:
+        continue
+        # print(len(imgs))
+        # for el in imgs:
+        #     print(el.size())
+        # break

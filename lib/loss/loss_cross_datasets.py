@@ -816,6 +816,8 @@ class CrossDatasetsCELoss_AdvGNN(nn.Module):
         self.adv_loss_weight = self.configer.get('loss', 'adv_loss_weight')
         
         self.MSE_loss = torch.nn.MSELoss()
+
+        self.orth_weight = self.configer.get('GNN', 'orth_weight')
     
     def similarity_dsb(self, proto_vecs):
         """
@@ -834,10 +836,10 @@ class CrossDatasetsCELoss_AdvGNN(nn.Module):
         return loss
 
     def forward(self, preds, target, dataset_ids, is_adv=True, init_gnn_stage=False):
-        if not is_adv:
-            CELoss = self.OhemCELoss
-        else:
-            CELoss = self.CELoss
+        # if not is_adv:
+        CELoss = self.OhemCELoss
+        # else:
+        #     CELoss = self.CELoss
 
         logits = preds['seg']
         unify_prototype = preds['unify_prototype']
@@ -864,7 +866,7 @@ class CrossDatasetsCELoss_AdvGNN(nn.Module):
         # print("logits_max : {}, logits_min : {}".format(torch.max(logits), torch.min(logits)))
         
         if is_adv and self.with_orth:
-            loss = self.similarity_dsb(unify_prototype)
+            loss = self.orth_weight * self.similarity_dsb(unify_prototype)
         
         for i in range(0, self.n_datasets):
 
@@ -891,17 +893,26 @@ class CrossDatasetsCELoss_AdvGNN(nn.Module):
             if not init_gnn_stage:
                 if is_adv and self.with_softmax_and_max and self.with_max_adj:
                     cur_iter = self.configer.get('iter')
-                    max_rate = (cur_iter % self.gnn_iters+self.seg_iters) / self.gnn_iters
+                    cur_iter = cur_iter % (self.gnn_iters+self.seg_iters) % self.gnn_iters
+                        
+                    max_rate = float(cur_iter) / self.gnn_iters
                     if loss is None:
-                        loss = max_rate * CELoss(max_remap_logits, target[dataset_ids==i]) + (1 - max_rate) * CELoss(softmax_remap_logits, target[dataset_ids==i]) 
+                        loss = (dataset_ids==i).sum() * (max_rate * CELoss(max_remap_logits, target[dataset_ids==i]) + (1 - max_rate) * CELoss(softmax_remap_logits, target[dataset_ids==i]))
                     else:
-                        loss = loss + max_rate * CELoss(max_remap_logits, target[dataset_ids==i]) + (1 - max_rate) * CELoss(softmax_remap_logits, target[dataset_ids==i]) 
+                        loss = loss + (dataset_ids==i).sum() * ( max_rate * CELoss(max_remap_logits, target[dataset_ids==i]) + (1 - max_rate) * CELoss(softmax_remap_logits, target[dataset_ids==i]))
                     
                 else:
+                    celoss = CELoss(remap_logits, target[dataset_ids==i])
+                    if torch.isnan(celoss):
+                        print("NaN celoss found in datasets :", i)
+                        print(target[dataset_ids==i].shape)
+                        for j in range(0, self.n_datasets):
+                            print("min index:", torch.min(target[dataset_ids==i][j]))
+                        
                     if loss is None or torch.isnan(loss):
-                        loss = CELoss(remap_logits, target[dataset_ids==i])
+                        loss = (dataset_ids==i).sum() * celoss
                     else:
-                        loss = loss + CELoss(remap_logits, target[dataset_ids==i])
+                        loss = loss + (dataset_ids==i).sum() * celoss
 
             if init_gnn_stage and adj_matrix is not None:
                 needed_adj = adj_matrix[:self.total_cats, :self.total_cats]
