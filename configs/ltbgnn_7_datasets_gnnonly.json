@@ -124,13 +124,13 @@
       "weight_decay": 1e-5,
       "warmup_iters": 1000,
       "fix_param_iters": 0,
-      "max_iter": 100000
+      "max_iter": 30000
     },
     "train": {
       "scales": [0.5, 1.0, 2.0],
       "cropsize": [512, 1024],
       "finetune": true,
-      "finetune_from": "res/clip_pretrain.pth",
+      "finetune_from": "res/celoss/7_dataset_model_final.pth",
       "graph_finetune": false,
       "graph_finetune_from": "res/celoss/graph_model_60000.pth",
       "seg_iters": 30000,
