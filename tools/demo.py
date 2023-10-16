@@ -25,7 +25,7 @@ parse = argparse.ArgumentParser()
 parse.add_argument('--weight_path', type=str, default='res/celoss/train3_seg_model_80000.pth',)
 parse.add_argument('--gnn_weight_path', type=str, default='res/celoss/train3_graph_model_80000.pth',)
 parse.add_argument('--config', dest='config', type=str, default='configs/ltbgnn_3_datasets.json',)
-parse.add_argument('--img_path', dest='img_path', type=str, default='img/873809_leftImg8bit.png',)
+parse.add_argument('--img_path', dest='img_path', type=str, default='img/053471_leftImg8bit.png',)
 args = parse.parse_args()
 # cfg = set_cfg_from_file(args.config)
 configer = Configer(configs=args.config)
@@ -659,7 +659,7 @@ class E2EModel(torch.nn.Module):
         self.net.load_state_dict(state, strict=False)
         self.net.eval()
         self.net.aux_mode='pred'
-        # self.net.aux_mode='uni'
+        self.net.aux_mode='uni'
         # self.net.train()
         self.net.cuda()
         # with open('camvid_mapping.txt', 'r') as f:

@@ -871,6 +871,7 @@ class Learnable_Topology_BGNN(nn.Module):
         self.calc_bipartite = self.configer.get('GNN', 'calc_bipartite')
         self.output_max_adj = self.configer.get('GNN', 'output_max_adj')
         self.output_softmax_and_max_adj = self.configer.get('GNN', 'output_softmax_and_max_adj')
+        self.uot_ratio = self.configer.get('GNN', 'uot_ratio')
 
         self.mse_or_adv = self.configer.get('GNN', 'mse_or_adv')
 
@@ -1213,6 +1214,7 @@ class Learnable_Topology_BGNN(nn.Module):
                     if flag is False:
                         print("error don't find correct one")
                     
+                    
             for row in range(0, self.dataset_cats[i]):
                 if torch.sum(out_bipartite_graphs[row]) > 1:
                     max_v, max_i = 0, 0
@@ -1221,7 +1223,7 @@ class Learnable_Topology_BGNN(nn.Module):
                             if max_v < Q_st_bar[index, row]:
                                 max_v = Q_st_bar[index, row]
                                 max_i = index
-                            if Q_st_bar[index, row] < 1/float(self.max_num_unify_class):
+                            if Q_st_bar[index, row] < self.uot_ratio/(Q_st_bar.shape[0]*Q_st_bar.shape[1]):
                                 out_bipartite_graphs[row, index] = 0
                         
                             
