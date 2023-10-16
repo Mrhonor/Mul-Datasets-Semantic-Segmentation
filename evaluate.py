@@ -163,6 +163,7 @@ class MscEvalV0_Contrast(object):
         miou = np.nanmean(ious.detach().cpu().numpy())
         return miou.item()
 
+
 class MscEvalV0_AutoLink(object):
 
     def __init__(self, configer, scales=(0.5, ), flip=False, ignore_label=255):
@@ -727,6 +728,124 @@ def eval_model_contrast(configer, net):
     return heads, mious
 
 @torch.no_grad()
+def eval_model_unseen(configer, net):
+    org_aux = net.aux_mode
+    net.aux_mode = 'unseen'
+
+    is_dist = dist.is_initialized()
+    
+    # cfg_city = set_cfg_from_file(configer.get('dataset1'))
+    # cfg_cam  = set_cfg_from_file(configer.get('dataset2'))
+
+    n_datasets = configer.get("n_datasets")
+
+    # dl_cam = get_data_loader(cfg_cam, mode='val', distributed=is_dist)
+    dls = get_data_loader(configer, aux_mode='eval', distributed=is_dist)
+    # dl_city = get_data_loader(configer, aux_mode='eval', distributed=is_dist)[0]
+    net.eval()
+    # net.train()
+
+    heads, mious = [], []
+    logger = logging.getLogger()
+
+    single_scale = MscEvalV0_Contrast(configer, (1., ), False)
+    
+    for i in range(0, configer.get('n_datasets')):
+        # mIOU = single_scale(net, dls[i], configer.get('dataset'+str(i+1), "eval_cats"), i)
+        mIOU = single_scale(net, dls[i], configer.get('dataset'+str(i+1), "n_cats"), i)
+        mious.append(mIOU)
+    
+
+    heads.append('single_scale')
+    # mious.append(mIOU_cam)
+    # mious.append(mIOU_city)
+    # mious.append(mIOU_a2d2)
+    # logger.info('Cam single mIOU is: %s\nCityScapes single mIOU is: %s\n A2D2 single mIOU is: %s\n', mIOU_cam, mIOU_city, mIOU_a2d2)
+    # logger.info('Cam single mIOU is: %s\nCityScapes single mIOU is: %s\n', mIOU_cam, mIOU_city)
+
+    net.aux_mode = org_aux
+    return heads, mious    
+
+
+@torch.no_grad()
+def eval_model_clip(configer, net):
+    org_aux = net.aux_mode
+    net.aux_mode = 'clip'
+
+    is_dist = dist.is_initialized()
+    
+    # cfg_city = set_cfg_from_file(configer.get('dataset1'))
+    # cfg_cam  = set_cfg_from_file(configer.get('dataset2'))
+
+    n_datasets = configer.get("n_datasets")
+
+    # dl_cam = get_data_loader(cfg_cam, mode='val', distributed=is_dist)
+    dls = get_data_loader(configer, aux_mode='eval', distributed=is_dist)
+    # dl_city = get_data_loader(configer, aux_mode='eval', distributed=is_dist)[0]
+    net.eval()
+    # net.train()
+
+    heads, mious = [], []
+    logger = logging.getLogger()
+
+    single_scale = MscEvalV0_Contrast(configer, (1., ), False)
+    
+    for i in range(0, configer.get('n_datasets')):
+        # mIOU = single_scale(net, dls[i], configer.get('dataset'+str(i+1), "eval_cats"), i)
+        mIOU = single_scale(net, dls[i], configer.get('dataset'+str(i+1), "n_cats"), i)
+        mious.append(mIOU)
+    
+
+    heads.append('single_scale')
+    # mious.append(mIOU_cam)
+    # mious.append(mIOU_city)
+    # mious.append(mIOU_a2d2)
+    # logger.info('Cam single mIOU is: %s\nCityScapes single mIOU is: %s\n A2D2 single mIOU is: %s\n', mIOU_cam, mIOU_city, mIOU_a2d2)
+    # logger.info('Cam single mIOU is: %s\nCityScapes single mIOU is: %s\n', mIOU_cam, mIOU_city)
+
+    net.aux_mode = org_aux
+    return heads, mious
+
+@torch.no_grad()
+def eval_model_uni(configer, net):
+    org_aux = net.aux_mode
+    net.aux_mode = 'eval'
+
+    is_dist = dist.is_initialized()
+    
+    # cfg_city = set_cfg_from_file(configer.get('dataset1'))
+    # cfg_cam  = set_cfg_from_file(configer.get('dataset2'))
+
+    n_datasets = configer.get("n_datasets")
+
+    # dl_cam = get_data_loader(cfg_cam, mode='val', distributed=is_dist)
+    dls = get_data_loader(configer, aux_mode='eval', distributed=is_dist)
+    # dl_city = get_data_loader(configer, aux_mode='eval', distributed=is_dist)[0]
+    net.eval()
+    # net.train()
+
+    heads, mious = [], []
+    logger = logging.getLogger()
+
+    single_scale = MscEvalV0_Contrast(configer, (1., ), False)
+    
+    for i in range(0, configer.get('n_datasets')):
+        # mIOU = single_scale(net, dls[i], configer.get('dataset'+str(i+1), "eval_cats"), i)
+        mIOU = single_scale(net, dls[i], 1+configer.get('dataset'+str(i+1), "n_cats"), i)
+        mious.append(mIOU)
+    
+
+    heads.append('single_scale')
+    # mious.append(mIOU_cam)
+    # mious.append(mIOU_city)
+    # mious.append(mIOU_a2d2)
+    # logger.info('Cam single mIOU is: %s\nCityScapes single mIOU is: %s\n A2D2 single mIOU is: %s\n', mIOU_cam, mIOU_city, mIOU_a2d2)
+    # logger.info('Cam single mIOU is: %s\nCityScapes single mIOU is: %s\n', mIOU_cam, mIOU_city)
+
+    net.aux_mode = org_aux
+    return heads, mious
+
+@torch.no_grad()
 def eval_model_label_link(configer, net):
     org_aux = net.aux_mode
     net.aux_mode = 'eval'
@@ -959,6 +1078,7 @@ def find_unuse_label(configer, net, dl, n_classes, dataset_id):
     n_datasets = configer.get("n_datasets")
     total_cats = 0
     net.aux_mode = 'train'
+    net.eval()
     unify_prototype = net.unify_prototype
     # print(unify_prototype.shape)
     bipart_graph = net.bipartite_graphs
@@ -1035,7 +1155,7 @@ def find_unuse_label(configer, net, dl, n_classes, dataset_id):
                 if rate < 1e-4:
                     buckets[index].remove(i)
 
-
+    net.train()
     return buckets 
 
 

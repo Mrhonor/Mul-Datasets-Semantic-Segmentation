@@ -1,6 +1,7 @@
 #!/usr/bin/python
 # -*- encoding: utf-8 -*-
-
+import sys
+sys.path.insert(0, '.')
 import os
 import os.path as osp
 import json
@@ -230,17 +231,46 @@ class ade2016Im(BaseDatasetIm):
 
 
 
-# if __name__ == "__main__":
-#     from tqdm import tqdm
-#     from torch.utils.data import DataLoader
-#     ds = CityScapes('./data/', mode='eval')
-#     dl = DataLoader(ds,
-#                     batch_size = 4,
-#                     shuffle = True,
-#                     num_workers = 4,
-#                     drop_last = True)
-#     for imgs, label in dl:
-#         print(len(imgs))
-#         for el in imgs:
-#             print(el.size())
-#         break
+if __name__ == "__main__":
+
+    from tqdm import tqdm
+    from torch.utils.data import DataLoader
+    
+    
+    class TransformationTrain(object):
+
+        def __init__(self, scales, cropsize):
+            self.trans_func = T.Compose([
+                T.RandomResizedCrop(scales, cropsize),
+                T.RandomHorizontalFlip(),
+                T.ColorJitter(
+                    brightness=0.4,
+                    contrast=0.4,
+                    saturation=0.4
+                ),
+            ])
+
+        def __call__(self, im_lb):
+            im_lb = self.trans_func(im_lb)
+            return im_lb
+
+    trans_func = TransformationTrain([0.5,2.0], [713, 713])
+    
+    ds = ade2016('/cpfs01/projects-HDD/pujianxiangmuzu_HDD/pujian/mr/datasets/ade/ADEChallengeData2016/', 'datasets/ADE/training.txt', trans_func, mode='train')
+    dl = DataLoader(ds,
+                    batch_size = 4,
+                    shuffle = True,
+                    num_workers = 2,
+                    drop_last = True)
+    i = 0
+    index = 0
+    for imgs, label in dl:
+        
+        if index % 10 == 0:
+            print(index)
+            
+        index += 1
+        if torch.min(label) == 255:
+            print('min_label: 255')
+            i += 1
+    print(i)

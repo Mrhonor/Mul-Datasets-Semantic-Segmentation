@@ -22,10 +22,10 @@ np.random.seed(123)
 # args
 parse = argparse.ArgumentParser()
 
-parse.add_argument('--weight_path', type=str, default='res/celoss/seg_model_60000.pth',)
-parse.add_argument('--gnn_weight_path', type=str, default='res/celoss/graph_model_60000.pth',)
-parse.add_argument('--config', dest='config', type=str, default='configs/ltbgnn_7_datasets_2.json',)
-parse.add_argument('--img_path', dest='img_path', type=str, default='img/0006R0_f00990.png',)
+parse.add_argument('--weight_path', type=str, default='res/celoss/train3_seg_model_80000.pth',)
+parse.add_argument('--gnn_weight_path', type=str, default='res/celoss/train3_graph_model_80000.pth',)
+parse.add_argument('--config', dest='config', type=str, default='configs/ltbgnn_3_datasets.json',)
+parse.add_argument('--img_path', dest='img_path', type=str, default='img/873809_leftImg8bit.png',)
 args = parse.parse_args()
 # cfg = set_cfg_from_file(args.config)
 configer = Configer(configs=args.config)
@@ -632,7 +632,8 @@ elif dataset_id is A2D2_ID:
 else:
     labels_info = labels_info_eval
 
-labels_info = labels_info_city + labels_info_cam + sunrgb_labels + bdd_labels + idd_labels
+# labels_info = labels_info_city + labels_info_cam + sunrgb_labels + bdd_labels + idd_labels
+labels_info = idd_labels
 def buildPalette(label_info):
     palette = []
     for el in label_info:
@@ -653,30 +654,44 @@ class E2EModel(torch.nn.Module):
         
         # self.net = model_factory[cfg.model_type](cfg.n_cats, aux_mode="pred")
         self.net = model_factory[configer.get('model_name')](configer)
-        self.net.load_state_dict(torch.load(weight_path, map_location='cpu'), strict=False)
+        state = torch.load(weight_path, map_location='cpu')
+        # del state['bipartite_graphs.0']
+        self.net.load_state_dict(state, strict=False)
         self.net.eval()
         self.net.aux_mode='pred'
-        self.net.aux_mode='uni'
+        # self.net.aux_mode='uni'
         # self.net.train()
         self.net.cuda()
+        # with open('camvid_mapping.txt', 'r') as f:
+        #     lines = f.readlines()
 
-        graph_net = model_factory[configer.get('GNN','model_name')](configer)
-        torch.set_printoptions(profile="full")
-        graph_net.load_state_dict(torch.load(args.gnn_weight_path, map_location='cpu'), strict=False)
-        graph_net.cuda()
-        graph_net.eval()
-        graph_net.train()
-        graph_node_features = gen_graph_node_feature(configer)
+        # bi_graphs = []
+        # for i, line in enumerate(lines):
+        #     bi_graph = torch.zeros((11, 224), dtype=torch.float32).cuda()
+        #     ids = line.replace('\n', '').replace(' ', '').split(',')
+        #     ids = [int(id) for id in ids]
+        #     print(ids)
+        #     for id in ids:
+        #         bi_graph[i, id] = 1
+        # bi_graphs.append(bi_graph)
+
+        # graph_net = model_factory[configer.get('GNN','model_name')](configer)
+        # torch.set_printoptions(profile="full")
+        # graph_net.load_state_dict(torch.load(args.gnn_weight_path, map_location='cpu'), strict=False)
+        # graph_net.cuda()
+        # graph_net.eval()
+        # graph_net.train()
+        # graph_node_features = gen_graph_node_feature(configer)
         # unify_prototype, ori_bi_graphs = graph_net.get_optimal_matching(graph_node_features, init=True) 
         # if len(ori_bi_graphs) == 10:
         #     for j in range(0, len(ori_bi_graphs), 2):
         #         bi_graphs.append(ori_bi_graphs[j+1].detach())
         # else:
         #     bi_graphs = [bigh.detach() for bigh in ori_bi_graphs]
-        unify_prototype, bi_graphs, adv_out, _ = graph_net(graph_node_features)
+        # unify_prototype, bi_graphs, adv_out, _ = graph_net(graph_node_features)
 
         # print(self.net.bipartite_graphs[6])
-        print(bi_graphs[6])
+        # print(bi_graphs[6])
 
         # self.net.set_unify_prototype(unify_prototype)
         # self.net.set_bipartite_graphs(bi_graphs)
@@ -688,7 +703,7 @@ class E2EModel(torch.nn.Module):
         x = x.sub_(self.mean).div_(self.std).clone()
         # out = self.net(x)[0]
         # x = torch.cat((x,x), dim=0)
-        out = self.net(x.cuda(), dataset=0)
+        out = self.net(x.cuda(), dataset=2)
         return out
     
 ## mean: [0.3038, 0.3383, 0.3034] std: [0.2071, 0.2088, 0.2090]    
@@ -725,7 +740,7 @@ for i in range(1):
     # out1 = net1(input_im).squeeze().detach().cpu().numpy()
     # out2 = net(input_im).long().squeeze().detach().cpu().numpy()
     # net.train()
-    # out2 = net(input_im)
+    out2 = net(input_im)
     # print(out2.shape)
     print(out2.shape)
     print(torch.max(out2))
