@@ -553,7 +553,8 @@ def train():
             ratio =  2 * (1 - float(i) / total_max_iter / 2)
 
             gnn_optim = set_optimizer(graph_net, configer, ratio)
-            gnn_optimD = set_optimizerD(graph_net, configer, ratio)
+            if mse_or_adv == 'adv':
+                gnn_optimD = set_optimizerD(graph_net, configer, ratio)
 
             alter_iter = 0
             train_seg_or_gnn = GNN
