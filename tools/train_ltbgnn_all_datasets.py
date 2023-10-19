@@ -512,7 +512,7 @@ def train():
     for i in range(starti, configer.get('lr','max_iter') + starti):
         configer.plus_one('iter')
         alter_iter += 1
-        if i > 10000:
+        if i > 5000:
             init_gnn_stage = False
 
         ims = []
@@ -569,6 +569,14 @@ def train():
 
         elif train_seg_or_gnn == GNN and alter_iter >  configer.get('train', 'gnn_iters'):
             ratio =  (1 - float(i) / total_max_iter / 2)
+            net = model_factory[configer.get('model_name')](configer)
+            net.train()
+            net.cuda()
+            if configer.get('use_sync_bn'): 
+                net = nn.SyncBatchNorm.convert_sync_batchnorm(net)
+            if is_distributed():
+                net = set_model_dist(net)
+                
             optim = set_optimizer(net, configer, ratio)
             alter_iter = 0
             train_seg_or_gnn = SEG

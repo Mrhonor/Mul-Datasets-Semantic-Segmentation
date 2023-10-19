@@ -815,7 +815,7 @@ class CrossDatasetsCELoss_AdvGNN(nn.Module):
         self.advloss = nn.BCELoss()
         self.adv_loss_weight = self.configer.get('loss', 'adv_loss_weight')
         
-        self.MSE_loss = torch.nn.MSELoss()
+        self.MSE_loss = torch.nn.MSELoss(reduction = 'sum')
 
         self.orth_weight = self.configer.get('GNN', 'orth_weight')
     
@@ -906,8 +906,8 @@ class CrossDatasetsCELoss_AdvGNN(nn.Module):
                     if torch.isnan(celoss):
                         print("NaN celoss found in datasets :", i)
                         print(target[dataset_ids==i].shape)
-                        for j in range(0, self.n_datasets):
-                            print("min index:", torch.min(target[dataset_ids==i][j]))
+                        # for j in range(0, self.n_datasets):
+                        print("min index:", torch.min(target[dataset_ids==i]))
                         
                     if loss is None or torch.isnan(loss):
                         loss = (dataset_ids==i).sum() * celoss
@@ -942,9 +942,9 @@ class CrossDatasetsCELoss_AdvGNN(nn.Module):
               
         if init_gnn_stage:
             if loss is None:
-                loss = self.MSE_loss(unify_prototype, logits)
+                loss = 0.1 * self.MSE_loss(unify_prototype, logits)
             else:
-                loss = loss + self.MSE_loss(unify_prototype, logits)
+                loss = loss + 0.1 * self.MSE_loss(unify_prototype, logits)
         
         if is_adv:  
             if self.mse_or_adv == 'adv':

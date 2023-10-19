@@ -23,6 +23,7 @@
       "threshold_value": 0.95,
       "alpha": 0.2,
       "fix_architecture_alter_iter": 2000,
+      "uot_ratio": 1.25,
       "calc_bipartite": false,
       "output_max_adj": true,
       "output_softmax_and_max_adj": true,
@@ -115,8 +116,8 @@
       "finetune_from": "res/clip/7_dataset_model_final.pth",
       "graph_finetune": false,
       "graph_finetune_from": "res/celoss/graph_model_40000.pth",
-      "seg_iters": 40000,
-      "gnn_iters": 40000,
+      "seg_iters": 20000,
+      "gnn_iters": 20000,
       "finetune_stage1_iters": 80000,
       "finetune_stage2_iters": 120000,
       "joint_train": true
