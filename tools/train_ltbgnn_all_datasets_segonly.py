@@ -466,7 +466,7 @@ def train():
         print(stage)
 
         if stage == 'stage2':
-            dls = get_data_loader(configer, aux_mode='train', distributed=is_dist, stage=2)
+            dls = get_data_loader(configer, aux_mode='train', distributed=is_dist)
             if is_distributed():
                 loaded_map = find_unuse(configer, net.module)
             else:

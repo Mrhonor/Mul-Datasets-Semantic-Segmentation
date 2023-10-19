@@ -58,7 +58,7 @@ def parse_args():
     parse.add_argument('--local_rank', dest='local_rank', type=int, default=-1,)
     parse.add_argument('--port', dest='port', type=int, default=16854,)
     parse.add_argument('--finetune_from', type=str, default=None,)
-    parse.add_argument('--config', dest='config', type=str, default='configs/ltbgnn_7_datasets_2.json',)
+    parse.add_argument('--config', dest='config', type=str, default='configs/ltbgnn_5_datasets_ade.json',)
     return parse.parse_args()
 
 # 使用绝对路径
@@ -91,6 +91,7 @@ def set_model(configer):
         logger.info(f"load pretrained weights from {configer.get('train', 'finetune_from')}")
         state = torch.load(configer.get('train', 'finetune_from'), map_location='cpu')
         
+        print('unify_protype' in state)
         # del state['unify_prototype']
         # for i in range(0, configer.get('n_datasets')):
         #     del state[f'bipartite_graphs.{i}']
@@ -494,7 +495,7 @@ def train():
     alter_iter = 0
     SEG = 0
     GNN = 1
-    init_gnn_stage = False
+    init_gnn_stage = True
     fix_graph = False
     train_seg_or_gnn = GNN
     GNN_INIT = configer.get('train', 'graph_finetune')
@@ -513,7 +514,7 @@ def train():
     for i in range(starti, configer.get('lr','max_iter') + starti):
         configer.plus_one('iter')
         alter_iter += 1
-        if i > 10000:
+        if alter_iter > configer.get('train', 'init_gnn_iters'):
             init_gnn_stage = False
 
         ims = []
@@ -552,7 +553,7 @@ def train():
 
         if train_seg_or_gnn == SEG and alter_iter > configer.get('train', 'seg_iters'):
             ratio =  2 * (1 - float(i) / total_max_iter / 2)
-
+            init_gnn_stage = True
             gnn_optim = set_optimizer(graph_net, configer, ratio)
             if mse_or_adv == 'adv':
                 gnn_optimD = set_optimizerD(graph_net, configer, ratio)
@@ -569,6 +570,36 @@ def train():
                     warmup_ratio=0.1, warmup='exp', last_epoch=-1,)
 
         elif train_seg_or_gnn == GNN and alter_iter >  configer.get('train', 'gnn_iters'):
+            with torch.no_grad():
+                if is_distributed():
+                    unify_prototype, ori_bi_graphs = graph_net.module.get_optimal_matching(graph_node_features, GNN_INIT)
+                    # unify_prototype, bi_graphs, adv_out = graph_net(graph_node_features)    
+                else:
+                    unify_prototype, ori_bi_graphs = graph_net.get_optimal_matching(graph_node_features, GNN_INIT)     
+                    # unify_prototype, bi_graphs, adv_out = graph_net(graph_node_features)     
+                # print(bi_graphs)
+
+                # print(torch.norm(unify_prototype[0][0], p=2))
+                unify_prototype = unify_prototype.detach()
+                bi_graphs = []
+                if len(ori_bi_graphs) == 2*n_datasets:
+                    for j in range(0, len(ori_bi_graphs), 2):
+                        bi_graphs.append(ori_bi_graphs[j+1].detach())
+                else:
+                    bi_graphs = [bigh.detach() for bigh in ori_bi_graphs]
+                
+                adv_out = None
+                print(len(bi_graphs))
+
+
+                init_gnn_stage = False
+                if is_distributed():
+                    net.module.set_unify_prototype(unify_prototype, True)
+                    net.module.set_bipartite_graphs(bi_graphs)
+                else:
+                    net.set_unify_prototype(unify_prototype, True)
+                    net.set_bipartite_graphs(bi_graphs)
+                    
             ratio =  (1 - float(i) / total_max_iter / 2)
             optim = set_optimizer(net, configer, ratio)
             alter_iter = 0
@@ -581,12 +612,10 @@ def train():
         # with torch.no_grad():
         #     seg_out = net(im)
 
-        if train_seg_or_gnn == SEG:
-            optim.zero_grad()
-        else:
-            gnn_optim.zero_grad()
-            if mse_or_adv == 'adv':
-                gnn_optimD.zero_grad()
+        optim.zero_grad()
+        gnn_optim.zero_grad()
+        if mse_or_adv == 'adv':
+            gnn_optimD.zero_grad()
         with amp.autocast(enabled=configer.get('use_fp16')):
             
             ## 修改为多数据集模式
@@ -623,38 +652,6 @@ def train():
                 is_adv = False
                 graph_net.eval()
                 net.train()
-                
-                if fix_graph == False:
-                    with torch.no_grad():
-                        if is_distributed():
-                            unify_prototype, ori_bi_graphs = graph_net.module.get_optimal_matching(graph_node_features, GNN_INIT)
-                            # unify_prototype, bi_graphs, adv_out = graph_net(graph_node_features)    
-                        else:
-                            unify_prototype, ori_bi_graphs = graph_net.get_optimal_matching(graph_node_features, GNN_INIT)     
-                            # unify_prototype, bi_graphs, adv_out = graph_net(graph_node_features)     
-                        # print(bi_graphs)
-
-                        # print(torch.norm(unify_prototype[0][0], p=2))
-                        unify_prototype = unify_prototype.detach()
-                        bi_graphs = []
-                        if len(ori_bi_graphs) == 2*n_datasets:
-                            for j in range(0, len(ori_bi_graphs), 2):
-                                bi_graphs.append(ori_bi_graphs[j+1].detach())
-                        else:
-                            bi_graphs = [bigh.detach() for bigh in ori_bi_graphs]
-                        fix_graph = True
-                        adv_out = None
-                        print(len(bi_graphs))
-
-
-                        init_gnn_stage = False
-                        if is_distributed():
-                            net.module.set_unify_prototype(unify_prototype)
-                            net.module.set_bipartite_graphs(bi_graphs)
-                        else:
-                            net.set_unify_prototype(unify_prototype)
-                            net.set_bipartite_graphs(bi_graphs)
-
                 
                 seg_out = net(im)
                 seg_out['unify_prototype'] = None
@@ -1068,10 +1065,10 @@ def train():
             ## print training log message
             if (i + 1) % 100 == 0:
                 # writer.add_scalars("loss",{"seg":loss_pre_meter.getWoErase(),"contrast":loss_contrast_meter.getWoErase(), "domain":loss_domain_meter.getWoErase()},configer.get("iter")+1)
+                if train_seg_or_gnn == SEG:
+                    lr = lr_schdr.get_lr()
 
-                lr = lr_schdr.get_lr()
-                if type(lr) != float:
-                    lr = sum(lr) / len(lr)
+                lr = sum(lr) / len(lr)
                 print_log_msg(
                     i, 0, 0, configer.get('lr', 'max_iter')+starti, lr, time_meter, loss_meter,
                     loss_pre_meter, loss_aux_meters, loss_contrast_meter, loss_domain_meter, kl_loss_meter)
@@ -1107,7 +1104,7 @@ def train():
                     torch.cuda.empty_cache()
                     heads, mious = eval_model_func(configer, net)
                     
-                # writer.add_scalars("mious",{"Cityscapes":mious[CITY_ID],"Camvid":mious[CAM_ID]},configer.get("iter")+1)
+                writer.add_scalars("mious",{"Cityscapes":mious[CITY_ID],"Camvid":mious[CAM_ID]},configer.get("iter")+1)
                 # writer.export_scalars_to_json(osp.join(configer.get('res_save_pth'), str(time())+'_writer.json'))
                 logger.info(tabulate([mious, ], headers=heads, tablefmt='orgtbl'))
                 net.train()
