@@ -941,6 +941,7 @@ class CrossDatasetsCELoss_AdvGNN(nn.Module):
                 print("NaN value found in datasets :", i)
               
         if init_gnn_stage:
+            
             if loss is None:
                 loss = 0.1 * self.MSE_loss(unify_prototype, logits)
             else:

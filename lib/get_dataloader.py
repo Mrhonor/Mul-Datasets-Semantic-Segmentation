@@ -101,7 +101,7 @@ def get_data_loader(configer, aux_mode='eval', distributed=True, stage=None):
 
     if distributed:
         assert dist.is_available(), "dist should be initialzed"
-        if mode == 'train':
+        if mode == 'train' and stage != 2:
             assert not max_iter is None
             n_train_imgs = [ims_per_gpu * dist.get_world_size() * max_iter for ims_per_gpu in batchsize]
             sampler = [RepeatedDistSampler(dataset, n_train_img, shuffle=shuffle) for n_train_img, dataset in zip(n_train_imgs, ds)] 

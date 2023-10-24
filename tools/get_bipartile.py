@@ -278,10 +278,10 @@ def main():
     configer = Configer(configs='configs/ltbgnn_3_datasets.json')
     net = model_factory[configer.get('model_name')](configer)
     graph_net = model_factory[configer.get('GNN','model_name')](configer)
-    graph_net.load_state_dict(torch.load('res/celoss/graph_model_10000.pth', map_location='cpu'), strict=False)
+    graph_net.load_state_dict(torch.load('res/celoss/graph_model_50000.pth', map_location='cpu'), strict=False)
     
         
-    state = torch.load('res/celoss/seg_model_10000.pth', map_location='cpu')
+    state = torch.load('res/celoss/seg_model_50000.pth', map_location='cpu')
     
         
         # del state['unify_prototype']

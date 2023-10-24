@@ -291,7 +291,8 @@ def train():
     ## optimizer
     optim = set_optimizer(net, configer)
     gnn_optim = set_optimizer(graph_net, configer)
-    gnn_optimD = set_optimizerD(graph_net, configer)
+    if mse_or_adv == 'adv':
+        gnn_optimD = set_optimizerD(graph_net, configer)
 
     ## mixed precision training
     scaler = amp.GradScaler()
@@ -495,7 +496,7 @@ def train():
     GNN = 1
     init_gnn_stage = False
     fix_graph = False
-    train_seg_or_gnn = GNN
+    train_seg_or_gnn = SEG
     GNN_INIT = configer.get('train', 'graph_finetune')
     # GNN_INIT = True
     gnn_lr_schdr = WarmupPolyLrScheduler(gnn_optim, power=0.9,
@@ -588,9 +589,12 @@ def train():
         # with torch.no_grad():
         #     seg_out = net(im)
 
-        optim.zero_grad()
-        gnn_optim.zero_grad()
-        gnn_optimD.zero_grad()
+        if train_seg_or_gnn == SEG:
+            optim.zero_grad()
+        else:
+            gnn_optim.zero_grad()
+            if mse_or_adv == 'adv':
+                gnn_optimD.zero_grad()
         with amp.autocast(enabled=configer.get('use_fp16')):
             
             ## 修改为多数据集模式
@@ -762,7 +766,8 @@ def train():
 
             optim.zero_grad()
             gnn_optim.zero_grad()
-            gnn_optimD.zero_grad()
+            if mse_or_adv == 'adv':
+                gnn_optimD.zero_grad()
             
             if is_distributed():
                 torch.cuda.empty_cache()
@@ -932,7 +937,8 @@ def train():
 
             optim.zero_grad()
             gnn_optim.zero_grad()
-            gnn_optimD.zero_grad()
+            if mse_or_adv == 'adv':
+                gnn_optimD.zero_grad()
             with amp.autocast(enabled=configer.get('use_fp16')):
                 # if finetune and i >= fix_param_iters + aux_iter:
                 #     finetune = False
@@ -1070,10 +1076,10 @@ def train():
             ## print training log message
             if (i + 1) % 100 == 0:
                 # writer.add_scalars("loss",{"seg":loss_pre_meter.getWoErase(),"contrast":loss_contrast_meter.getWoErase(), "domain":loss_domain_meter.getWoErase()},configer.get("iter")+1)
-                if train_seg_or_gnn == SEG:
-                    lr = lr_schdr.get_lr()
 
-                lr = sum(lr) / len(lr)
+                lr = lr_schdr.get_lr()
+                if type(lr) != float:
+                    lr = sum(lr) / len(lr)
                 print_log_msg(
                     i, 0, 0, configer.get('lr', 'max_iter')+starti, lr, time_meter, loss_meter,
                     loss_pre_meter, loss_aux_meters, loss_contrast_meter, loss_domain_meter, kl_loss_meter)
@@ -1109,7 +1115,7 @@ def train():
                     torch.cuda.empty_cache()
                     heads, mious = eval_model_func(configer, net)
                     
-                writer.add_scalars("mious",{"Cityscapes":mious[CITY_ID],"Camvid":mious[CAM_ID]},configer.get("iter")+1)
+                # writer.add_scalars("mious",{"Cityscapes":mious[CITY_ID],"Camvid":mious[CAM_ID]},configer.get("iter")+1)
                 # writer.export_scalars_to_json(osp.join(configer.get('res_save_pth'), str(time())+'_writer.json'))
                 logger.info(tabulate([mious, ], headers=heads, tablefmt='orgtbl'))
                 net.train()
