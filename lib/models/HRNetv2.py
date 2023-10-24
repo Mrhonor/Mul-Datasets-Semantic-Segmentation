@@ -710,26 +710,29 @@ class HRNet_W48_GNN(nn.Module):
 
     def get_params(self):
         def add_param_to_list(mod, wd_params, nowd_params):
-            for param in mod.parameters():
-                if param.requires_grad == False:
-                    continue
-                
-                if param.dim() == 1:
-                    nowd_params.append(param)
-                elif param.dim() == 4 or param.dim() == 2:
-                    wd_params.append(param)
-                else:
-                    nowd_params.append(param)
-                    print(param.dim())
-                    # print(param)
-                    print(name)
+            # for param in mod.parameters():
+            if param.requires_grad == False:
+                return
+                # continue
+            
+            if param.dim() == 1:
+                nowd_params.append(param)
+            elif param.dim() == 4 or param.dim() == 2:
+                wd_params.append(param)
+            else:
+                nowd_params.append(param)
+                print(param.dim())
+                # print(param)
+                print(name)
 
         wd_params, nowd_params, lr_mul_wd_params, lr_mul_nowd_params = [], [], [], []
-        for name, child in self.named_children():
+        # for name, child in self.named_children():
+        for name, param in self.named_parameters():
+            
             if 'head' in name or 'aux' in name:
-                add_param_to_list(child, lr_mul_wd_params, lr_mul_nowd_params)
+                add_param_to_list(param, lr_mul_wd_params, lr_mul_nowd_params)
             else:
-                add_param_to_list(child, wd_params, nowd_params)
+                add_param_to_list(param, wd_params, nowd_params)
         return wd_params, nowd_params, lr_mul_wd_params, lr_mul_nowd_params
     
     def set_bipartite_graphs(self, bi_graphs):

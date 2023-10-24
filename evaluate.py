@@ -1002,37 +1002,37 @@ def main():
     
     logger = logging.getLogger()
     net = model_factory[configer.get('model_name')](configer)
-    state = torch.load('res/celoss/seg_model_300000.pth', map_location='cpu')
+    state = torch.load('res/celoss/train3_seg_model_stage1_150000.pth', map_location='cpu')
     net.load_state_dict(state, strict=False)
     
     net.cuda()
     net.aux_mode = 'eval'
     net.eval()
     
-    graph_net = model_factory[configer.get('GNN','model_name')](configer)
-    torch.set_printoptions(profile="full")
-    graph_net.load_state_dict(torch.load('res/celoss/graph_model_270000.pth', map_location='cpu'), strict=False)
-    graph_net.cuda()
-    graph_net.eval()
-    # graph_node_features = gen_graph_node_feature(configer)
-    graph_node_features = torch.load('res/celoss/graph_node_features5_CityScapes_CamVid_Sunrgbd_Bdd100k_Idd.pt')
+    # graph_net = model_factory[configer.get('GNN','model_name')](configer)
+    # torch.set_printoptions(profile="full")
+    # graph_net.load_state_dict(torch.load('res/celoss/graph_model_270000.pth', map_location='cpu'), strict=False)
+    # graph_net.cuda()
+    # graph_net.eval()
+    # # graph_node_features = gen_graph_node_feature(configer)
+    # graph_node_features = torch.load('res/celoss/graph_node_features5_CityScapes_CamVid_Sunrgbd_Bdd100k_Idd.pt')
+    # # unify_prototype, ori_bi_graphs = graph_net.get_optimal_matching(graph_node_features, init=True) 
+    # # unify_prototype, ori_bi_graphs,_,_ = graph_net(graph_node_features)
     # unify_prototype, ori_bi_graphs = graph_net.get_optimal_matching(graph_node_features, init=True) 
-    # unify_prototype, ori_bi_graphs,_,_ = graph_net(graph_node_features)
-    unify_prototype, ori_bi_graphs = graph_net.get_optimal_matching(graph_node_features, init=True) 
-    bi_graphs = []
-    if len(ori_bi_graphs) == 10:
-        for j in range(0, len(ori_bi_graphs), 2):
-            bi_graphs.append(ori_bi_graphs[j+1].detach())
-    else:
-        bi_graphs = [bigh.detach() for bigh in ori_bi_graphs]
-    # unify_prototype, bi_graphs, adv_out, _ = graph_net(graph_node_features)
+    # bi_graphs = []
+    # if len(ori_bi_graphs) == 10:
+    #     for j in range(0, len(ori_bi_graphs), 2):
+    #         bi_graphs.append(ori_bi_graphs[j+1].detach())
+    # else:
+    #     bi_graphs = [bigh.detach() for bigh in ori_bi_graphs]
+    # # unify_prototype, bi_graphs, adv_out, _ = graph_net(graph_node_features)
 
-    # print(bi_graphs[0])
-    # print(bi_graphs[0][18])
-    print(torch.norm(net.unify_prototype[0][0], p=2))
-    print(torch.norm(unify_prototype[0][0], p=2))
-    net.set_unify_prototype(unify_prototype)
-    net.set_bipartite_graphs(bi_graphs) 
+    # # print(bi_graphs[0])
+    # # print(bi_graphs[0][18])
+    # print(torch.norm(net.unify_prototype[0][0], p=2))
+    # print(torch.norm(unify_prototype[0][0], p=2))
+    # net.set_unify_prototype(unify_prototype)
+    # net.set_bipartite_graphs(bi_graphs) 
     
     heads, mious = eval_model_contrast(configer, net)
     
@@ -1082,6 +1082,7 @@ def find_unuse_label(configer, net, dl, n_classes, dataset_id):
     unify_prototype = net.unify_prototype
     # print(unify_prototype.shape)
     bipart_graph = net.bipartite_graphs
+    
     for i in range(0, n_datasets):
         total_cats += configer.get("dataset"+str(i+1), "n_cats")
     total_cats = int(total_cats * configer.get('GNN', 'unify_ratio'))
@@ -1133,6 +1134,8 @@ def find_unuse_label(configer, net, dl, n_classes, dataset_id):
 
     buckets = {}
     for index, j in enumerate(max_index):
+        if max_value[index] == 0:
+            continue
         
         if int(j) not in buckets:
             buckets[int(j)] = [index]
@@ -1141,19 +1144,21 @@ def find_unuse_label(configer, net, dl, n_classes, dataset_id):
 
     for index in range(0, n_cat):
         if index not in buckets:
+            print('index not in buckets:', index)
             buckets[index] = []
 
     for index, val in buckets.items():
         total_num = 0
         for i in val:
             total_num += hist[index][i]
-        
-        
+        new_val = []
         if total_num != 0:
             for i in val:
                 rate = hist[index][i] / total_num
-                if rate < 1e-4:
-                    buckets[index].remove(i)
+                if rate > 1e-5:
+                    new_val.append(i)
+        
+        buckets[index] = new_val
 
     net.train()
     return buckets 

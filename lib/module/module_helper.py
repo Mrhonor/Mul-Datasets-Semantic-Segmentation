@@ -782,6 +782,47 @@ class GraphConvolution(nn.Module):
         return self.__class__.__name__ + ' (' \
                + str(self.in_features) + ' -> ' \
                + str(self.out_features) + ')'
+
+class GraphSAGEConvolution(nn.Module):
+    def __init__(self, in_features, out_features, bias=True):
+        super(GraphSAGEConvolution, self).__init__()
+        self.in_features = in_features
+        self.out_features = out_features
+        
+        # GraphSAGE中，原始节点特征和邻居的聚合特征进行串联，所以权重矩阵的大小为 2*in_features x out_features
+        self.weight = nn.Parameter(torch.FloatTensor(2*in_features, out_features))
+        
+        if bias:
+            self.bias = nn.Parameter(torch.FloatTensor(out_features))
+        else:
+            self.register_parameter('bias', None)
+        self.reset_parameters()
+
+    def reset_parameters(self):
+        stdv = 1. / math.sqrt(self.weight.size(1))
+        self.weight.data.uniform_(-stdv, stdv)
+        if self.bias is not None:
+            self.bias.data.uniform_(-stdv, stdv)
+
+    def forward(self, input, adj):
+        # 使用带权的邻接矩阵计算邻居的特征加权和
+        neighbor_weighted_sum = torch.spmm(adj, input)
+        
+        # 将原始节点特征与加权邻居的特征串联
+        concat_features = torch.cat([input, neighbor_weighted_sum], dim=-1)
+        
+        # 线性变换
+        output = torch.mm(concat_features, self.weight)
+        
+        if self.bias is not None:
+            return output + self.bias
+        else:
+            return output
+
+    def __repr__(self):
+        return self.__class__.__name__ + ' (' \
+               + str(self.in_features) + ' -> ' \
+               + str(self.out_features) + ')'
             
 class Discriminator(nn.Module):
     def __init__(self, infeat, hidfeat, outfeat, dropout):

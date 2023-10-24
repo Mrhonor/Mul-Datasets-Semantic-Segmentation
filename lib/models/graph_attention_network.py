@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from timm.models.layers import trunc_normal_
-from lib.module.module_helper import GraphAttentionLayer, SpGraphAttentionLayer, GraphConvolution, Discriminator, MultiHeadedAttention, AttentionalPropagation
+from lib.module.module_helper import GraphAttentionLayer, SpGraphAttentionLayer, GraphConvolution, Discriminator, MultiHeadedAttention, AttentionalPropagation, GraphSAGEConvolution
 from lib.module.sinkhorn import solve_optimal_transport
 import numpy as np
 import scipy.sparse as sp
@@ -17,7 +17,21 @@ class GCN(nn.Module):
         self.gc1 = GraphConvolution(infeat, outfeat)
 
     def forward(self, x, adj):
-        x = torch.tanh(self.gc1(x, adj))
+        x = torch.tanh(self.gc1(x, adj)+x)
+        return x
+
+    def aggregation(self, x, adj):
+        x = self.gc1(x, adj)
+        return x
+
+class GSAGE(nn.Module):
+    def __init__(self, infeat, outfeat):
+        super(GSAGE, self).__init__()
+
+        self.gc1 = GraphSAGEConvolution(infeat, outfeat)
+
+    def forward(self, x, adj):
+        x = torch.tanh(self.gc1(x, adj)+x)
         return x
 
     def aggregation(self, x, adj):
@@ -875,6 +889,7 @@ class Learnable_Topology_BGNN(nn.Module):
         self.uot_ratio = self.configer.get('GNN', 'uot_ratio')
 
         self.mse_or_adv = self.configer.get('GNN', 'mse_or_adv')
+        self.GNN_type = self.configer.get('GNN', 'GNN_type')
 
         self.linear_before = nn.Linear(self.nfeat, self.nfeat_out)
         self.linear_adj = nn.Linear(self.nfeat_out, self.nfeat_adj)
@@ -884,12 +899,15 @@ class Learnable_Topology_BGNN(nn.Module):
             
         self.relu = nn.ReLU()
 
-        self.GCN_layer1 = GCN(self.nfeat_out, self.nfeat_out)
 
-        # self.attentions_layer2 = nn.ModuleList([GraphAttentionLayer(self.nhid * self.nheads, self.nhid, dropout=self.dropout_rate, alpha=self.alpha, concat=True) for _ in range(self.nheads)])
-
-        self.GCN_layer2 = GCN(self.nfeat_out, self.nfeat_out)
-        self.GCN_layer3 = GCN(self.nfeat_out, self.nfeat_out)
+        if self.GNN_type == 'GCN':
+            self.GCN_layer1 = GCN(self.nfeat_out, self.nfeat_out)
+            self.GCN_layer2 = GCN(self.nfeat_out, self.nfeat_out)
+            self.GCN_layer3 = GCN(self.nfeat_out, self.nfeat_out)
+        elif self.GNN_type == 'GSAGE':
+            self.GCN_layer1 = GSAGE(self.nfeat_out, self.nfeat_out)
+            self.GCN_layer2 = GSAGE(self.nfeat_out, self.nfeat_out)
+            self.GCN_layer3 = GSAGE(self.nfeat_out, self.nfeat_out)   
         
         self.linear1 = nn.Linear(self.nfeat_out, self.output_feat_dim)
         
@@ -952,25 +970,25 @@ class Learnable_Topology_BGNN(nn.Module):
             out_fake_1 = self.netD1(feat_gcn1.detach())
             g_out_fake_1 = self.netD1(feat_gcn1)
         
-        feat2 = feat_gcn1 + before_gcn1_x
-        before_gcn2_x = F.dropout(feat2, self.dropout_rate, training=self.training)
+        # feat2 = feat_gcn1 + before_gcn1_x
+        before_gcn2_x = F.dropout(feat_gcn1, self.dropout_rate, training=self.training)
         feat_gcn2 = self.GCN_layer2(before_gcn2_x, adj_mI)
         if self.mse_or_adv == 'adv':
             out_real_2 = self.netD2(before_gcn2_x.detach())
             out_fake_2 = self.netD2(feat_gcn2.detach())
             g_out_fake_2 = self.netD2(feat_gcn2)
         
-        feat3 = feat_gcn2 + before_gcn2_x
-        before_gcn3_x = F.dropout(feat3, self.dropout_rate, training=self.training)
+        # feat3 = feat_gcn2 + before_gcn2_x
+        before_gcn3_x = F.dropout(feat_gcn2, self.dropout_rate, training=self.training)
         feat_gcn3 = self.GCN_layer3(before_gcn3_x, adj_mI)
         if self.mse_or_adv == 'adv':
             out_real_3 = self.netD3(before_gcn3_x.detach())
             out_fake_3 = self.netD3(feat_gcn3.detach())
             g_out_fake_3 = self.netD3(feat_gcn3)
         
-        feat4 = F.elu(feat_gcn3 + before_gcn3_x)
+        # feat4 = F.elu(feat_gcn3 + before_gcn3_x)
         # feat3_drop = F.dropout(feat3, self.dropout_rate, training=self.training)
-        feat_out = self.linear1(feat4)
+        feat_out = self.linear1(feat_gcn3)
 
         adv_out = {}
         if self.mse_or_adv == 'adv':
@@ -979,13 +997,13 @@ class Learnable_Topology_BGNN(nn.Module):
             adv_out['ADV3'] = [out_real_3, out_fake_3, g_out_fake_3]
         elif self.mse_or_adv == 'mse':
             adv_out['ADV1'] = [feat1_relu.detach(), feat_gcn1]
-            adv_out['ADV2'] = [feat2.detach(), feat_gcn2]
-            adv_out['ADV3'] = [feat3.detach(), feat_gcn3]
+            adv_out['ADV2'] = [feat_gcn1.detach(), feat_gcn2]
+            adv_out['ADV3'] = [feat_gcn2.detach(), feat_gcn3]
             
         if pretraining:
             return feat_out[self.total_cats:], self.sep_bipartite_graphs(non_norm_adj_mI), adv_out, non_norm_adj_mI
         elif self.calc_bipartite:
-            arch_x = self.relu(feat4 + feat_out)
+            arch_x = self.relu(feat_out)
             arch_x = self.linear2(arch_x)
             _, non_norm_adj_mI_after = self.calc_adjacency_matrix(arch_x)
             
@@ -1091,24 +1109,24 @@ class Learnable_Topology_BGNN(nn.Module):
         
         feat_gcn1 = self.GCN_layer1(feat1_relu, adj_mI)
         
-        feat2 = feat_gcn1 + feat1_relu
-        feat_gcn2 = self.GCN_layer2(feat2, adj_mI)
+        # feat2 = feat_gcn1 + feat1_relu
+        feat_gcn2 = self.GCN_layer2(feat_gcn1, adj_mI)
         
-        feat3 = feat_gcn2 + feat2
-        feat_gcn3 = self.GCN_layer3(feat3, adj_mI)
-        feat4 = F.elu(feat_gcn3 + feat3)
-        feat_out = self.linear1(feat4)
+        # feat3 = feat_gcn2 + feat2
+        feat_gcn3 = self.GCN_layer3(feat_gcn2, adj_mI)
+        # feat4 = F.elu(feat_gcn3 + feat3)
+        feat_out = self.linear1(feat_gcn3)
 
         if init:
             if self.calc_bipartite:
-                arch_x = self.relu(feat4 + feat_out)
+                arch_x = self.relu(feat_gcn3 + feat_out)
                 arch_x = self.linear2(arch_x)
                 _, non_norm_adj_mI_after = self.calc_adjacency_matrix(arch_x)
                 
                 return feat_out[self.total_cats:], self.sep_bipartite_graphs_by_km(non_norm_adj_mI_after)
             else:
-                # return feat_out[self.total_cats:], self.sep_bipartite_graphs(non_norm_adj_mI)
-                return feat_out[self.total_cats:], self.sep_bipartite_graphs_by_uot(non_norm_adj_mI)
+                return feat_out[self.total_cats:], self.sep_bipartite_graphs(non_norm_adj_mI)
+                # return feat_out[self.total_cats:], self.sep_bipartite_graphs_by_uot(non_norm_adj_mI)
                 # return feat_out[self.total_cats:], self.sep_bipartite_graphs_by_km(non_norm_adj_mI)
         else:
             return feat_out[self.total_cats:], self.pretrain_bipartite_graphs(x.is_cuda)
@@ -1242,40 +1260,40 @@ class Learnable_Topology_BGNN(nn.Module):
                 
             cur_cat += self.dataset_cats[i]
         
-        temp_bipartite_graphs = torch.cat(self.bipartite_graphs, dim=0)
-        unique_cols, unique_indices = torch.unique(temp_bipartite_graphs, sorted=False, dim=1, return_inverse=True)
+        # temp_bipartite_graphs = torch.cat(self.bipartite_graphs, dim=0)
+        # unique_cols, unique_indices = torch.unique(temp_bipartite_graphs, sorted=False, dim=1, return_inverse=True)
         
-        for j in range(0, len(unique_indices)):
-            if sum(unique_indices == unique_indices[j]) == 1:
-                continue
+        # for j in range(0, len(unique_indices)):
+        #     if sum(unique_indices == unique_indices[j]) == 1:
+        #         continue
                 
-            flag = True
-            while flag:
-                new_col = torch.zeros_like(temp_bipartite_graphs[:,j])
-                cur_cat = 0
-                for s_id in range(0, self.n_datasets):
-                    rint = random.randint(cur_cat, cur_cat+self.dataset_cats[s_id]-1)
-                    cur_cat += self.dataset_cats[s_id]
-                    new_col[rint] = 1
+        #     flag = True
+        #     while flag:
+        #         new_col = torch.zeros_like(temp_bipartite_graphs[:,j])
+        #         cur_cat = 0
+        #         for s_id in range(0, self.n_datasets):
+        #             rint = random.randint(cur_cat, cur_cat+self.dataset_cats[s_id]-1)
+        #             cur_cat += self.dataset_cats[s_id]
+        #             new_col[rint] = 1
                     
-                flag = False
-                for col in range(0, temp_bipartite_graphs.shape[1]):
-                    if (temp_bipartite_graphs[:, col] == new_col).all():
-                        flag = True
-                        break
+        #         flag = False
+        #         for col in range(0, temp_bipartite_graphs.shape[1]):
+        #             if (temp_bipartite_graphs[:, col] == new_col).all():
+        #                 flag = True
+        #                 break
                     
-                if flag == False:
-                    print(f"cats: {j}")
-                    temp_bipartite_graphs[:, j] = new_col
-                    unique_indices[j] = -1
+        #         if flag == False:
+        #             print(f"cats: {j}")
+        #             temp_bipartite_graphs[:, j] = new_col
+        #             unique_indices[j] = -1
                     
                     
                 
-        self.bipartite_graphs = []
-        cur_cat = 0
-        for s_id in range(0, self.n_datasets):
-            self.bipartite_graphs.append(temp_bipartite_graphs[cur_cat:cur_cat+self.dataset_cats[s_id], :])
-            cur_cat += self.dataset_cats[s_id]
+        # self.bipartite_graphs = []
+        # cur_cat = 0
+        # for s_id in range(0, self.n_datasets):
+        #     self.bipartite_graphs.append(temp_bipartite_graphs[cur_cat:cur_cat+self.dataset_cats[s_id], :])
+        #     cur_cat += self.dataset_cats[s_id]
         
         return self.bipartite_graphs 
 
@@ -1790,4 +1808,5 @@ class Learnable_Topology_BGAT(nn.Module):
 
     def set_unify_node_features(self, unify_node_features, grad=True):
         self.unify_node_features = nn.Parameter(unify_node_features, requires_grad=grad)
+
 
