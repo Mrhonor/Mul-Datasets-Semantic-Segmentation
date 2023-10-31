@@ -1,7 +1,7 @@
 {
     "model_name": "hrnet_w48_gnn",
     "aux_mode": "train",
-    "n_datasets": 1,
+    "n_datasets": 4,
     "hrnet": {
       "cfg": "hrnet48",
       "keep_imagenet_head": false,
@@ -19,7 +19,8 @@
       "output_feat_dim": 512,
       "adj_feat_dim": 128,
       "dropout_rate": 0.5,
-      "unify_ratio": 8.96,
+      "unify_ratio": 0.427,
+      "uot_ratio":1,
       "threshold_value": 0.95,
       "alpha": 0.2,
       "fix_architecture_alter_iter": 2000,
@@ -38,6 +39,36 @@
       "ims_per_gpu": 2,
       "eval_ims_per_gpu": 2,
       "label_names": ["ego vehicle", "road", "sidewalk", "building", "wall", "fence", "guard rail", "pole", "traffic light", "traffic sign", "vegetation", "terrain", "sky", "person", "rider", "car", "truck", "bus", "motorcycle", "bicycle", "pickup", "van", "billboard", "street-light", "road-marking"]
+    },
+    "dataset4": {
+      "n_cats": 19,
+      "data_reader": "CityScapes",
+      "im_root": "/cpfs01/projects-SSD/pujianxiangmuzu_SSD/pujian/mr/datasets",
+      "train_im_anns":"datasets/Cityscapes/train.txt",
+      "val_im_anns":"datasets/Cityscapes/val.txt", 
+      "ims_per_gpu": 4,
+      "eval_ims_per_gpu": 2,
+      "label_names": ["road", "sidewalk", "building", "wall", "fence", "pole", "traffic light", "traffic sign", "vegetation", "terrain", "sky", "person", "rider", "car", "truck", "bus", "train", "motorcycle", "bicycle"]
+    },
+    "dataset2": {
+      "n_cats": 19, 
+      "data_reader": "Bdd100k",
+      "im_root": "/cpfs01/projects-SSD/pujianxiangmuzu_SSD/pujian/mr/datasets/bdd100k",
+      "train_im_anns":"datasets/bdd100k/train.txt",
+      "val_im_anns":"datasets/bdd100k/val.txt", 
+      "ims_per_gpu": 4,
+      "eval_ims_per_gpu": 2,
+      "label_names": ["road", "sidewalk", "building", "wall", "fence", "pole", "traffic light", "traffic sign", "vegetation", "terrain", "sky", "person", "rider", "car", "truck", "bus", "train", "motorcycle", "bicycle"]
+    },
+    "dataset3": {
+      "n_cats": 26, 
+      "data_reader": "Idd",
+      "im_root": "/cpfs01/projects-SSD/pujianxiangmuzu_SSD/pujian/mr/datasets/idd",
+      "train_im_anns":"datasets/IDD/train.txt",
+      "val_im_anns":"datasets/IDD/val.txt", 
+      "ims_per_gpu": 4,
+      "eval_ims_per_gpu": 1,
+      "label_names": ["road", "drivable fallback or parking", "sidewalk", "non-drivable fallback or rail track", "person or animal", "out of roi or rider", "motorcycle", "bicycle", "autorickshaw", "car", "truck", "bus", "trailer or caravan or vehicle fallback", "curb", "wall", "fence", "guard rail", "billboard", "traffic sign", "traffic light", "polegroup or pole", "obs-str-bar-fallback", "building", "tunnel or bridge", "vegetation", "sky or fallback background"]
     },
     "n_bn": 1,
     "class_remaper": "ClassRemapOneHotLabel",
@@ -71,9 +102,9 @@
       "scales": [0.5, 2.0],
       "cropsize": [713, 713],
       "finetune": true,
-      "finetune_from": "res/clip/7_dataset_model_final.pth",
+      "finetune_from": "res/celoss/train3_seg_model_stage1_160000_81_city.pth",
       "graph_finetune": true,
-      "graph_finetune_from": "res/celoss/graph_model_150000.pth",
+      "graph_finetune_from": "res/celoss/train3_gnn_model_joint_stage.pth",
       "seg_iters": 120000,
       "gnn_iters": 40000,
       "finetune_stage1_iters": 30000,

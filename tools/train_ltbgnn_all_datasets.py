@@ -496,7 +496,7 @@ def train():
     GNN = 1
     init_gnn_stage = False
     fix_graph = False
-    train_seg_or_gnn = SEG
+    train_seg_or_gnn = GNN
     GNN_INIT = configer.get('train', 'graph_finetune')
     # GNN_INIT = True
     gnn_lr_schdr = WarmupPolyLrScheduler(gnn_optim, power=0.9,

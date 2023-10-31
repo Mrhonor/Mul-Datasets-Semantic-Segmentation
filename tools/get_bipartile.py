@@ -164,6 +164,7 @@ def find_unuse(configer, net):
     is_dist = dist.is_initialized()
     net.eval()
     dls = get_data_loader(configer, aux_mode='train', distributed=is_dist, stage=2)
+    print_bipartite(configer, n_datasets, net.bipartite_graphs)
 
     out_buckets = {}
     for i in range(0, n_datasets): 

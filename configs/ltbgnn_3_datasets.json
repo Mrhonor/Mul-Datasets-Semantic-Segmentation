@@ -20,12 +20,13 @@
       "adj_feat_dim": 128,
       "dropout_rate": 0.5,
       "unify_ratio": 0.6,
+      "GNN_type": "GSAGE",
       "threshold_value": 0.95,
       "alpha": 0.2,
       "fix_architecture_alter_iter": 0,
-      "uot_ratio": 1.25,
+      "uot_ratio": 1,
       "calc_bipartite": false,
-      "output_max_adj": false,
+      "output_max_adj": true,
       "output_softmax_and_max_adj": true,
       "with_orth": true,
       "orth_weight": 5,
@@ -83,9 +84,9 @@
     },
     "use_ema": false,
     "lr": {
-      "lr_start": 1e-3,
-      "weight_decay": 1e-5,
-      "warmup_iters": 5000,
+      "lr_start": 1e-4,
+      "weight_decay": 1e-6,
+      "warmup_iters": 1000,
       "fix_param_iters": 0,
       "max_iter": 80000,
       "init_iter": 0
@@ -108,7 +109,7 @@
       "cropsize": [512, 512]
     },
     "use_fp16": false,
-    "use_sync_bn": true,
+    "use_sync_bn": false,
     "contrast": {
       "use_contrast": true,
       "proj_dim": 512,
