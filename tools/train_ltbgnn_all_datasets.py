@@ -146,7 +146,8 @@ def set_ema_model(configer):
 
 
 
-def set_optimizer(model, configer, ratio=1):
+def set_optimizer(model, configer, lr):
+    print("lr: ", lr)
     if hasattr(model, 'get_params'):
         wd_params, nowd_params, lr_mul_wd_params, lr_mul_nowd_params = model.get_params()
         #  wd_val = cfg.weight_decay
@@ -154,8 +155,8 @@ def set_optimizer(model, configer, ratio=1):
         params_list = [
             {'params': wd_params, },
             {'params': nowd_params, 'weight_decay': wd_val},
-            {'params': lr_mul_wd_params, 'lr': ratio * configer.get('lr', 'lr_start')},
-            {'params': lr_mul_nowd_params, 'weight_decay': wd_val, 'lr': configer.get('lr', 'lr_start')},
+            {'params': lr_mul_wd_params, 'lr': lr},
+            {'params': lr_mul_nowd_params, 'weight_decay': wd_val, 'lr': lr},
         ]
     else:
         wd_params, non_wd_params = [], []
@@ -175,19 +176,19 @@ def set_optimizer(model, configer, ratio=1):
     if configer.get('optim') == 'SGD':
         optim = torch.optim.SGD(
             params_list,
-            lr=ratio * configer.get('lr', 'lr_start'),
+            lr=lr,
             momentum=0.9,
             weight_decay=configer.get('lr', 'weight_decay'),
         )
     elif configer.get('optim') == 'AdamW':
         optim = torch.optim.AdamW(
             params_list,
-            lr=ratio * configer.get('lr', 'lr_start'),
+            lr=lr,
         )
         
     return optim
     
-def set_optimizerD(model, configer, ratio=1):
+def set_optimizerD(model, configer, lr):
     if hasattr(model, 'get_discri_params'):
         wd_params, nowd_params, lr_mul_wd_params, lr_mul_nowd_params = model.get_discri_params()
         #  wd_val = cfg.weight_decay
@@ -195,8 +196,8 @@ def set_optimizerD(model, configer, ratio=1):
         params_list = [
             {'params': wd_params, },
             {'params': nowd_params, 'weight_decay': wd_val},
-            {'params': lr_mul_wd_params, 'lr': ratio * configer.get('lr', 'lr_start')},
-            {'params': lr_mul_nowd_params, 'weight_decay': wd_val, 'lr': configer.get('lr', 'lr_start')},
+            {'params': lr_mul_wd_params, 'lr': lr},
+            {'params': lr_mul_nowd_params, 'weight_decay': wd_val, 'lr': lr},
         ]
     else:
         return None
@@ -204,14 +205,14 @@ def set_optimizerD(model, configer, ratio=1):
     if configer.get('optim') == 'SGD':
         optim = torch.optim.SGD(
             params_list,
-            lr=ratio*configer.get('lr', 'lr_start'),
+            lr=lr,
             momentum=0.9,
             weight_decay=configer.get('lr', 'weight_decay'),
         )
     elif configer.get('optim') == 'AdamW':
         optim = torch.optim.AdamW(
             params_list,
-            lr=ratio*configer.get('lr', 'lr_start'),
+            lr=lr,
             weight_decay=configer.get('lr', 'weight_decay'),
         )
     
@@ -287,12 +288,12 @@ def train():
         ema_net = set_ema_model(configer=configer)
         
     contrast_losses = set_contrast_loss(configer)
-
+    # net.unify_prototype.requires_grad = True
     ## optimizer
-    optim = set_optimizer(net, configer)
-    gnn_optim = set_optimizer(graph_net, configer)
+    optim = set_optimizer(net, configer, configer.get('lr', 'seg_lr_start'))
+    gnn_optim = set_optimizer(graph_net, configer, configer.get('lr', 'gnn_lr_start'))
     if mse_or_adv == 'adv':
-        gnn_optimD = set_optimizerD(graph_net, configer)
+        gnn_optimD = set_optimizerD(graph_net, configer, configer.get('lr', 'gnn_lr_start'))
 
     ## mixed precision training
     scaler = amp.GradScaler()
@@ -487,6 +488,7 @@ def train():
             
         lr_schdr.step()
 
+
     
     contrast_warmup_iters = configer.get("lr", "warmup_iters")
     with_aux = configer.get('loss', 'with_aux')
@@ -497,6 +499,8 @@ def train():
     init_gnn_stage = False
     fix_graph = False
     train_seg_or_gnn = GNN
+    adv_out = None
+    unify_prototype = None
     GNN_INIT = configer.get('train', 'graph_finetune')
     # GNN_INIT = True
     gnn_lr_schdr = WarmupPolyLrScheduler(gnn_optim, power=0.9,
@@ -507,6 +511,48 @@ def train():
         gnn_lr_schdrD = WarmupPolyLrScheduler(gnn_optimD, power=0.9,
             max_iter=configer.get('train','gnn_iters'), warmup_iter=configer.get('lr','warmup_iters'),
             warmup_ratio=0.1, warmup='exp', last_epoch=-1,)
+    
+    
+    # with torch.no_grad():
+    #     if is_distributed():
+    #         unify_prototype, ori_bi_graphs = graph_net.module.get_optimal_matching(graph_node_features, True)
+    #         # unify_prototype, bi_graphs, adv_out = graph_net(graph_node_features)    
+    #     else:
+    #         unify_prototype, ori_bi_graphs = graph_net.get_optimal_matching(graph_node_features, True)     
+    #         # unify_prototype, bi_graphs, adv_out = graph_net(graph_node_features)     
+    #     # print(bi_graphs)
+
+    #     # print(torch.norm(unify_prototype[0][0], p=2))
+    #     unify_prototype = unify_prototype.detach()
+    #     bi_graphs = []
+    #     if len(ori_bi_graphs) == 2*n_datasets:
+    #         for j in range(0, len(ori_bi_graphs), 2):
+    #             bi_graphs.append(ori_bi_graphs[j+1].detach())
+    #     else:
+    #         bi_graphs = [bigh.detach() for bigh in ori_bi_graphs]
+    #     fix_graph = True
+    #     adv_out = None
+    #     print(len(bi_graphs))
+
+
+    #     init_gnn_stage = False
+    #     if is_distributed():
+    #         net.module.set_unify_prototype(unify_prototype, True)
+    #         net.module.set_bipartite_graphs(bi_graphs)
+    #     else:
+    #         net.set_unify_prototype(unify_prototype, True)
+    #         net.set_bipartite_graphs(bi_graphs)
+    # print_bipartite(configer, 7, bi_graphs)
+    # net.module.unify_prototype.requires_grad = True
+    
+    if is_distributed():
+        optim = set_optimizer(net.module, configer, configer.get('lr', 'seg_lr_start'))
+    else:
+        optim = set_optimizer(net, configer, configer.get('lr', 'seg_lr_start'))
+        
+    lr_schdr = WarmupPolyLrScheduler(optim, power=0.9,
+        max_iter=configer.get('train','seg_iters'), warmup_iter=configer.get('lr','warmup_iters'),
+        warmup_ratio=0.1, warmup='exp', last_epoch=-1,)
     
     total_max_iter = configer.get('lr', 'max_iter')
     configer.update(['iter'], 0)
@@ -551,11 +597,18 @@ def train():
         lb = torch.squeeze(lb, 1)
 
         if train_seg_or_gnn == SEG and alter_iter > configer.get('train', 'seg_iters'):
-            ratio =  2 * (1 - float(i) / total_max_iter / 2)
+            ratio = 1 - float(i) / total_max_iter / 2
 
-            gnn_optim = set_optimizer(graph_net, configer, ratio)
-            if mse_or_adv == 'adv':
-                gnn_optimD = set_optimizerD(graph_net, configer, ratio)
+
+            if is_distributed():
+                gnn_optim = set_optimizer(graph_net.module, configer, ratio * configer.get('lr', 'gnn_lr_start'))
+                if mse_or_adv == 'adv':
+                    gnn_optimD = set_optimizerD(graph_net.module, configer, ratio * configer.get('lr', 'gnn_lr_start'))
+            else:
+                gnn_optim = set_optimizer(graph_net, configer, ratio * configer.get('lr', 'gnn_lr_start'))
+                if mse_or_adv == 'adv':
+                    gnn_optimD = set_optimizerD(graph_net, configer, ratio * configer.get('lr', 'gnn_lr_start'))
+                
 
             alter_iter = 0
             train_seg_or_gnn = GNN
@@ -569,8 +622,47 @@ def train():
                     warmup_ratio=0.1, warmup='exp', last_epoch=-1,)
 
         elif train_seg_or_gnn == GNN and alter_iter >  configer.get('train', 'gnn_iters'):
-            ratio =  (1 - float(i) / total_max_iter / 2)
-            optim = set_optimizer(net, configer, ratio)
+            ratio =  1 - float(i) / total_max_iter / 2
+
+            with torch.no_grad():
+                if is_distributed():
+                    unify_prototype, ori_bi_graphs = graph_net.module.get_optimal_matching(graph_node_features, GNN_INIT)
+                    # unify_prototype, bi_graphs, adv_out = graph_net(graph_node_features)    
+                else:
+                    unify_prototype, ori_bi_graphs = graph_net.get_optimal_matching(graph_node_features, GNN_INIT)     
+                    # unify_prototype, bi_graphs, adv_out = graph_net(graph_node_features)     
+                # print(bi_graphs)
+
+                # print(torch.norm(unify_prototype[0][0], p=2))
+                unify_prototype = unify_prototype.detach()
+                bi_graphs = []
+                if len(ori_bi_graphs) == 2*n_datasets:
+                    for j in range(0, len(ori_bi_graphs), 2):
+                        bi_graphs.append(ori_bi_graphs[j+1].detach())
+                else:
+                    bi_graphs = [bigh.detach() for bigh in ori_bi_graphs]
+                fix_graph = True
+                adv_out = None
+                print(len(bi_graphs))
+
+
+                init_gnn_stage = False
+                if is_distributed():
+                    net.module.set_unify_prototype(unify_prototype, True)
+                    net.module.set_bipartite_graphs(bi_graphs)
+                else:
+                    net.set_unify_prototype(unify_prototype, True)
+                    net.set_bipartite_graphs(bi_graphs)
+            
+            
+            
+            if is_distributed():
+                optim = set_optimizer(net.module, configer, configer.get('lr', 'seg_lr_start'))
+                # net = set_model_dist(net.module)
+            else:
+                optim = set_optimizer(net, configer, configer.get('lr', 'seg_lr_start'))
+                
+
             alter_iter = 0
             train_seg_or_gnn = SEG
             lr_schdr = WarmupPolyLrScheduler(optim, power=0.9,
@@ -623,42 +715,16 @@ def train():
                 is_adv = False
                 graph_net.eval()
                 net.train()
-                
-                if fix_graph == False:
-                    with torch.no_grad():
-                        if is_distributed():
-                            unify_prototype, ori_bi_graphs = graph_net.module.get_optimal_matching(graph_node_features, GNN_INIT)
-                            # unify_prototype, bi_graphs, adv_out = graph_net(graph_node_features)    
-                        else:
-                            unify_prototype, ori_bi_graphs = graph_net.get_optimal_matching(graph_node_features, GNN_INIT)     
-                            # unify_prototype, bi_graphs, adv_out = graph_net(graph_node_features)     
-                        # print(bi_graphs)
 
-                        # print(torch.norm(unify_prototype[0][0], p=2))
-                        unify_prototype = unify_prototype.detach()
-                        bi_graphs = []
-                        if len(ori_bi_graphs) == 2*n_datasets:
-                            for j in range(0, len(ori_bi_graphs), 2):
-                                bi_graphs.append(ori_bi_graphs[j+1].detach())
-                        else:
-                            bi_graphs = [bigh.detach() for bigh in ori_bi_graphs]
-                        fix_graph = True
-                        adv_out = None
-                        print(len(bi_graphs))
-
-
-                        init_gnn_stage = False
-                        if is_distributed():
-                            net.module.set_unify_prototype(unify_prototype)
-                            net.module.set_bipartite_graphs(bi_graphs)
-                        else:
-                            net.set_unify_prototype(unify_prototype)
-                            net.set_bipartite_graphs(bi_graphs)
 
                 
                 seg_out = net(im)
-                seg_out['unify_prototype'] = None
-            
+                if is_distributed():
+                    bi_graphs = net.module.bipartite_graphs
+                else:
+                    bi_graphs = net.bipartite_graphs
+                
+            seg_out['unify_prototype'] = unify_prototype
             seg_out['bi_graphs'] = bi_graphs
             seg_out['adv_out'] = adv_out
                 
@@ -698,7 +764,7 @@ def train():
         if kl_loss:
             kl_loss_meter.update(kl_loss.item())
         
-        if is_adv and mse_or_adv != 'None':
+        if is_adv and adv_loss != None:
             loss_domain_meter.update(adv_loss.item())
         # loss_pre_meter.update(loss_pre.item())
         
@@ -733,7 +799,9 @@ def train():
             print("before get")
 
             if is_distributed():
-                net.module.set_unify_prototype(unify_prototype)
+                if unify_prototype != None:
+                    net.module.set_unify_prototype(unify_prototype)
+                    
                 net.module.set_bipartite_graphs(bi_graphs)
                 gnn_state = graph_net.module.state_dict()
                 seg_state = net.module.state_dict()
@@ -741,7 +809,8 @@ def train():
                     torch.save(gnn_state, gnn_save_pth)
                     torch.save(seg_state, seg_save_pth)
             else:
-                net.set_unify_prototype(unify_prototype)
+                if unify_prototype != None:
+                    net.set_unify_prototype(unify_prototype)
                 net.set_bipartite_graphs(bi_graphs)
                 gnn_state = graph_net.state_dict()
                 seg_state = net.state_dict()
@@ -824,10 +893,10 @@ def train():
     # finetune stage1
     if is_distributed():
         net.module.unify_prototype.requires_grad = True
-        optim = set_optimizer(net.module, configer)
+        optim = set_optimizer(net.module, configer, configer.get('lr', 'seg_lr_start'))
     else:
         net.unify_prototype.requires_grad = True
-        optim = set_optimizer(net, configer)
+        optim = set_optimizer(net, configer, configer.get('lr', 'seg_lr_start'))
         
 
     total_cats = 0
@@ -859,7 +928,7 @@ def train():
             else:
                 net.set_bipartite_graphs(bi_graphs) 
                           
-            optim = set_optimizer(net, configer)
+            optim = set_optimizer(net, configer, configer.get('lr', 'seg_lr_start'))
         else:
             dls = get_data_loader(configer, aux_mode='train', distributed=is_dist, stage=1)
                         

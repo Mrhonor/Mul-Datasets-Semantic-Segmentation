@@ -19,18 +19,21 @@
     "output_feat_dim": 512,
     "adj_feat_dim": 128,
     "dropout_rate": 0.5,
-    "unify_ratio": 0.4,
+    "unify_ratio": 0.8,
     "threshold_value": 0.95,
     "alpha": 0.2,
-    "fix_architecture_alter_iter": 2000,
+    "fix_architecture_alter_iter": 0,
+    "uot_ratio": 1.25,
+    "GNN_type": "GCN",
     "calc_bipartite": false,
     "output_max_adj": false,
     "output_softmax_and_max_adj": true,
-    "with_orth": true
+    "with_orth": true,
+    "orth_weight": 100,
+    "mse_or_adv": "None"
   },
   "dataset1": {
-    "n_cats": 20,
-    "eval_cats": 19,
+    "n_cats": 19,
     "data_reader": "CityScapes",
     "im_root": "/cpfs01/projects-SSD/pujianxiangmuzu_SSD/pujian/mr/datasets",
     "train_im_anns":"datasets/Cityscapes/train.txt",
@@ -39,31 +42,18 @@
     "eval_ims_per_gpu": 2,
     "label_names": ["road", "sidewalk", "building", "wall", "fence", "pole", "traffic light", "traffic sign", "vegetation", "terrain", "sky", "person", "rider", "car", "truck", "bus", "train", "motorcycle", "bicycle"]
   },
-  "dataset21": {
-    "n_cats": 89, 
-    "eval_cats": 88, 
-    "data_reader": "Mapi",
+  "dataset2": {
+    "n_cats": 64, 
+    "data_reader": "Mapiv1",
     "im_root": "/cpfs01/projects-HDD/pujianxiangmuzu_HDD/pujian/mr/datasets/mapi",
     "train_im_anns":"datasets/mapi/training.txt",
     "val_im_anns":"datasets/mapi/validation.txt", 
     "ims_per_gpu": 2,
     "eval_ims_per_gpu": 1,
-    "label_names": ["Bird", "Ground Animal", "Curb", "Fence", "Guard Rail", "Barrier", "Road Median", "Road Side", "Temporary Barrier", "Wall", "Bike Lane", "Crosswalk - Plain", "Driveway", "Parking", "Parking Aisle", "Pedestrian Area", "Rail Track", "Road", "Service Lane", "Sidewalk", "Traffic Island", "Bridge", "Building", "Garage", "Tunnel", "Person Group", "Bicyclist", "Motorcyclist", "Other Rider", "Lane Marking - Ambiguous", "Lane Marking - Arrow (Other)", "Lane Marking - Arrow (Right)", "Lane Marking - Arrow (Split Right or Straight)", "Lane Marking - Arrow (Straight)", "Lane Marking - Give Way (Row)", "Lane Marking - Give Way (Single)", "Lane Marking - Hatched (Diagonal)", "Lane Marking - Text", "Lane Marking (only) - Test", "Mountain", "Sand", "Sky", "Snow", "Terrain", "Vegetation", "Water", "Banner", "Bench", "Bike Rack", "Catch Basin", "CCTV Camera", "Fire Hydrant", "Junction Box", "Manhole", "Parking Meter", "Phone Booth", "Pothole", "Signage - Back", "Signage - Information", "Signage - Other", "Signage - Store", "Street Light", "Pole Group", "Traffic Sign Frame", "Utility Pole", "Traffic Cone", "Traffic Light - Other", "Traffic Sign - Parking", "Traffic Sign - Temporary (Back)", "Traffic Sign - Temporary (Front)", "Trash Can", "Bicycle", "Boat", "Bus", "Caravan", "Motorcycle", "On Rails", "Other Vehicle", "Trailer", "Truck", "Vehicle Group", "Wheeled Slow", "Water Valve", "Car Mount", "Dynamic", "Ego Vehicle", "Ground", "Static"]
-  },
-  "dataset2": {
-    "n_cats": 65, 
-    "eval_cats": 64, 
-    "data_reader": "Mapiv1",
-    "im_root": "/cpfs01/projects-HDD/pujianxiangmuzu_HDD/pujian/mr/datasets/mapi",
-    "train_im_anns":"datasets/mapi/training_v1.txt",
-    "val_im_anns":"datasets/mapi/validation_v1.txt", 
-    "ims_per_gpu": 3,
-    "eval_ims_per_gpu": 1,
     "label_names": ["Bird", "Ground Animal", "Curb", "Fence", "Guard Rail", "Barrier", "Wall", "Bike Lane", "Crosswalk - Plain", "Curb Cut", "Parking", "Pedestrian Area", "Rail Track", "Road", "Service Lane", "Sidewalk", "Bridge", "Building", "Tunnel", "Person", "Bicyclist", "Motorcyclist", "Other Rider", "Lane Marking - Crosswalk", "Lane Marking - General", "Mountain", "Sand", "Sky", "Snow", "Terrain", "Vegetation", "Water", "Banner", "Bench", "Bike Rack", "Billboard", "Catch Basin", "CCTV Camera", "Fire Hydrant", "Junction Box", "Manhole", "Phone Booth", "Pothole", "Street Light", "Pole", "Traffic Sign Frame", "Utility Pole", "Traffic Light", "Traffic Sign (Back)", "Traffic Sign (Front)", "Trash Can", "Bicycle", "Boat", "Bus", "Car", "Caravan", "Motorcycle", "On Rails", "Other Vehicle", "Trailer", "Truck", "Wheeled Slow", "Car Mount", "Ego Vehicle"]
   },
   "dataset3": {
-    "n_cats": 38, 
-    "eval_cats": 37, 
+    "n_cats": 37, 
     "data_reader": "Sunrgbd",
     "im_root": "/cpfs01/projects-SSD/pujianxiangmuzu_SSD/pujian/mr/datasets/",
     "train_im_anns":"datasets/sunrgbd/train.txt",
@@ -73,8 +63,7 @@
     "label_names": [ "bag", "wall", "floor", "cabinet", "bed", "chair", "sofa", "table", "door", "window", "bookshelf", "picture", "counter", "blinds", "desk", "shelves", "curtain", "dresser", "pillow", "mirror", "floor mat", "clothes", "ceiling", "books", "refridgerator", "television", "paper", "towel", "shower curtain", "box", "whiteboard", "person", "night stand", "toilet", "sink", "lamp", "bathtub"]
   },
   "dataset4": {
-    "n_cats": 20, 
-    "eval_cats": 19, 
+    "n_cats": 19, 
     "data_reader": "Bdd100k",
     "im_root": "/cpfs01/projects-SSD/pujianxiangmuzu_SSD/pujian/mr/datasets/bdd100k",
     "train_im_anns":"datasets/bdd100k/train.txt",
@@ -84,8 +73,7 @@
     "label_names": ["road", "sidewalk", "building", "wall", "fence", "pole", "traffic light", "traffic sign", "vegetation", "terrain", "sky", "person", "rider", "car", "truck", "bus", "train", "motorcycle", "bicycle"]
   },
   "dataset5": {
-    "n_cats": 27, 
-    "eval_cats": 26, 
+    "n_cats": 26, 
     "data_reader": "Idd",
     "im_root": "/cpfs01/projects-SSD/pujianxiangmuzu_SSD/pujian/mr/datasets/idd",
     "train_im_anns":"datasets/IDD/train.txt",
@@ -95,8 +83,7 @@
     "label_names": ["road", "drivable fallback or parking", "sidewalk", "non-drivable fallback or rail track", "person or animal", "out of roi or rider", "motorcycle", "bicycle", "autorickshaw", "car", "truck", "bus", "trailer or caravan or vehicle fallback", "curb", "wall", "fence", "guard rail", "billboard", "traffic sign", "traffic light", "polegroup or pole", "obs-str-bar-fallback", "building", "tunnel or bridge", "vegetation", "sky or fallback background"]
   },
   "dataset6": {
-    "n_cats": 151, 
-    "eval_cats": 150, 
+    "n_cats": 150, 
     "data_reader": "ade2016",
     "im_root": "/cpfs01/projects-HDD/pujianxiangmuzu_HDD/pujian/mr/datasets/ade/ADEChallengeData2016",
     "train_im_anns":"datasets/ADE/training.txt",
@@ -106,8 +93,7 @@
     "label_names": ["flag", "wall", "building, edifice", "sky", "floor, flooring", "tree", "ceiling", "road, route", "bed ", "windowpane, window ", "grass", "cabinet", "sidewalk, pavement", "person, individual, someone, somebody, mortal, soul", "earth, ground", "door, double door", "table", "mountain, mount", "plant, flora, plant life", "curtain, drape, drapery, mantle, pall", "chair", "car, auto, automobile, machine, motorcar", "water", "painting, picture", "sofa, couch, lounge", "shelf", "house", "sea", "mirror", "rug, carpet, carpeting", "field", "armchair", "seat", "fence, fencing", "desk", "rock, stone", "wardrobe, closet, press", "lamp", "bathtub, bathing tub, bath, tub", "railing, rail", "cushion", "base, pedestal, stand", "box", "column, pillar", "signboard, sign", "chest of drawers, chest, bureau, dresser", "counter", "sand", "sink", "skyscraper", "fireplace, hearth, open fireplace", "refrigerator, icebox", "grandstand, covered stand", "path", "stairs, steps", "runway", "case, display case, showcase, vitrine", "pool table, billiard table, snooker table", "pillow", "screen door, screen", "stairway, staircase", "river", "bridge, span", "bookcase", "blind, screen", "coffee table, cocktail table", "toilet, can, commode, crapper, pot, potty, stool, throne", "flower", "book", "hill", "bench", "countertop", "stove, kitchen stove, range, kitchen range, cooking stove", "palm, palm tree", "kitchen island", "computer, computing machine, computing device, data processor, electronic computer, information processing system", "swivel chair", "boat", "bar", "arcade machine", "hovel, hut, hutch, shack, shanty", "bus, autobus, coach, charabanc, double-decker, jitney, motorbus, motorcoach, omnibus, passenger vehicle", "towel", "light, light source", "truck, motortruck", "tower", "chandelier, pendant, pendent", "awning, sunshade, sunblind", "streetlight, street lamp", "booth, cubicle, stall, kiosk", "television receiver, television, television set, tv, tv set, idiot box, boob tube, telly, goggle box", "airplane, aeroplane, plane", "dirt track", "apparel, wearing apparel, dress, clothes", "pole", "land, ground, soil", "bannister, banister, balustrade, balusters, handrail", "escalator, moving staircase, moving stairway", "ottoman, pouf, pouffe, puff, hassock", "bottle", "buffet, counter, sideboard", "poster, posting, placard, notice, bill, card", "stage", "van", "ship", "fountain", "conveyer belt, conveyor belt, conveyer, conveyor, transporter", "canopy", "washer, automatic washer, washing machine", "plaything, toy", "swimming pool, swimming bath, natatorium", "stool", "barrel, cask", "basket, handbasket", "waterfall, falls", "tent, collapsible shelter", "bag", "minibike, motorbike", "cradle", "oven", "ball", "food, solid food", "step, stair", "tank, storage tank", "trade name, brand name, brand, marque", "microwave, microwave oven", "pot, flowerpot", "animal, animate being, beast, brute, creature, fauna", "bicycle, bike, wheel, cycle ", "lake", "dishwasher, dish washer, dishwashing machine", "screen, silver screen, projection screen", "blanket, cover", "sculpture", "hood, exhaust hood", "sconce", "vase", "traffic light, traffic signal, stoplight", "tray", "ashcan, trash can, garbage can, wastebin, ash bin, ash-bin, ashbin, dustbin, trash barrel, trash bin", "fan", "pier, wharf, wharfage, dock", "crt screen", "plate", "monitor, monitoring device", "bulletin board, notice board", "shower", "radiator", "glass, drinking glass", "clock"]
   },
   "dataset7": {
-    "n_cats": 134, 
-    "eval_cats": 133, 
+    "n_cats": 133, 
     "data_reader": "Coco_data",
     "im_root": "/cpfs01/projects-HDD/pujianxiangmuzu_HDD/pujian/mr/datasets/coco",
     "train_im_anns":"datasets/coco/train.txt",
@@ -137,24 +123,25 @@
   },
   "use_ema": false,
   "lr": {
-    "lr_start": 1.5e-3,
+    "gnn_lr_start": 1e-3,
+    "seg_lr_start": 1e-3,
     "weight_decay": 1e-5,
     "warmup_iters": 1000,
     "fix_param_iters": 0,
-    "max_iter": 900000,
+    "max_iter": 200000,
     "init_iter": 0
   },
   "train": {
     "scales": [0.5, 1.0, 2.0],
-    "cropsize": [512, 1024],
+    "cropsize": [713, 713],
     "finetune": true,
-    "finetune_from": "res/celoss/pretrain_seg_model_30000.pth",
+    "finetune_from": "res/clip/7_dataset_model_final.pth",
     "graph_finetune": false,
-    "graph_finetune_from": "res/celoss/graph_model_60000.pth",
-    "seg_iters": 90000,
-    "gnn_iters": 60000,
+    "graph_finetune_from": "res/celoss/graph_model_130000.pth",
+    "seg_iters": 60000,
+    "gnn_iters": 40000,
     "finetune_stage1_iters": 30000,
-    "finetune_stage2_iters": 60000,
+    "finetune_stage2_iters": 80000,
     "joint_train": true
   },
   "val": {
@@ -187,7 +174,7 @@
     "memory_bank": false,
     "memory_bank_size": 5000
   },
-  "res_save_pth": "res/clip/",
+  "res_save_pth": "res/celoss/",
   "network": {
     "stride": 4,
     "with_domain_adversarial": false,
