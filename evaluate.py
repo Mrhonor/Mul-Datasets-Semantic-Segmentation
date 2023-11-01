@@ -106,9 +106,14 @@ class MscEvalV0_Contrast(object):
         self.flip = flip
         self.ignore_label = ignore_label
 
+        # self.lb_map = torch.tensor(np.load('../ade_to_ade_relabel.npy')).cuda()
+        # print(self.lb_map)
+
     def __call__(self, net, dl, n_classes, dataset_id):
+        # n_classes = 118
         ## evaluate
         hist = torch.zeros(n_classes, n_classes).cuda().detach()
+        # hist = torch.zeros(118, 118).cuda().detach()
         if dist.is_initialized() and dist.get_rank() != 0:
             diter = enumerate(dl)
         else:
@@ -122,6 +127,9 @@ class MscEvalV0_Contrast(object):
             #         (N, self.num_unify_classes, H, W), dtype=torch.float32).cuda().detach()
             probs = torch.zeros(
                     (N, n_classes, H, W), dtype=torch.float32).cuda().detach()
+            # probs = torch.zeros(
+            #         (N, 150, H, W), dtype=torch.float32).cuda().detach()
+
 
             for scale in self.scales:
                 sH, sW = int(scale * H), int(scale * W)
@@ -143,6 +151,15 @@ class MscEvalV0_Contrast(object):
                             mode='bilinear', align_corners=True)
                     probs += torch.softmax(logits, dim=1)
             preds = torch.argmax(probs, dim=1)
+            # print(preds)
+            # break
+            # preds[preds==0] = 95
+            # preds = self.lb_map[preds]
+            # one_hot = F.one_hot(preds, num_classes=150).float()
+            # bi_part = torch.load('../ade_to_ade_relabel.pt').cuda()
+            # re = torch.einsum('abcd,de->abce', one_hot, bi_part)
+            # preds = torch.argmax(re, dim=-1)
+            
 
 
             # if dataset_id == CAM_ID:
@@ -155,6 +172,10 @@ class MscEvalV0_Contrast(object):
                 label.cpu().numpy()[keep.cpu().numpy()] * n_classes + preds.cpu().numpy()[keep.cpu().numpy()],
                 minlength=n_classes ** 2
             )).cuda().view(n_classes, n_classes)
+            # hist += torch.tensor(np.bincount(
+            #     label.cpu().numpy()[keep.cpu().numpy()] * 118 + preds.cpu().numpy()[keep.cpu().numpy()],
+            #     minlength=118 ** 2
+            # )).cuda().view(118, 118)
                 
         if dist.is_initialized():
             dist.all_reduce(hist, dist.ReduceOp.SUM)

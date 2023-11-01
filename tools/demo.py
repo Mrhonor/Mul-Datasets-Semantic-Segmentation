@@ -22,10 +22,10 @@ np.random.seed(123)
 # args
 parse = argparse.ArgumentParser()
 
-parse.add_argument('--weight_path', type=str, default='res/celoss/train3_seg_model_80000.pth',)
+parse.add_argument('--weight_path', type=str, default='res/clip/7_dataset_model_final.pth',)
 parse.add_argument('--gnn_weight_path', type=str, default='res/celoss/train3_graph_model_80000.pth',)
-parse.add_argument('--config', dest='config', type=str, default='configs/ltbgnn_3_datasets.json',)
-parse.add_argument('--img_path', dest='img_path', type=str, default='img/053471_leftImg8bit.png',)
+parse.add_argument('--config', dest='config', type=str, default='configs/ade20k_mseg.json',)
+parse.add_argument('--img_path', dest='img_path', type=str, default='img/ADE_train_00000001.jpg',)
 args = parse.parse_args()
 # cfg = set_cfg_from_file(args.config)
 configer = Configer(configs=args.config)
@@ -659,9 +659,12 @@ class E2EModel(torch.nn.Module):
         self.net.load_state_dict(state, strict=False)
         self.net.eval()
         self.net.aux_mode='pred'
-        self.net.aux_mode='uni'
+        # self.net.aux_mode='uni'
         # self.net.train()
         self.net.cuda()
+        bi_graphs = [torch.load('../ade_to_ade_relabel.pt').T.cuda()]
+    
+        self.net.set_bipartite_graphs(bi_graphs)
         # with open('camvid_mapping.txt', 'r') as f:
         #     lines = f.readlines()
 
@@ -703,7 +706,7 @@ class E2EModel(torch.nn.Module):
         x = x.sub_(self.mean).div_(self.std).clone()
         # out = self.net(x)[0]
         # x = torch.cat((x,x), dim=0)
-        out = self.net(x.cuda(), dataset=2)
+        out = self.net(x.cuda(), dataset=0)
         return out
     
 ## mean: [0.3038, 0.3383, 0.3034] std: [0.2071, 0.2088, 0.2090]    
@@ -762,5 +765,5 @@ for i in range(1):
     # print((time() - t0) * 1000)
 
 # cv2.imwrite('./res1.jpg', pred1)
-cv2.imwrite('./res.bmp', pred2)
+cv2.imwrite('./res2.bmp', out2)
 # cv2.imwrite('./test.jpg', pred1)

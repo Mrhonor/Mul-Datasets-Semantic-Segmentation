@@ -19,7 +19,7 @@
       "output_feat_dim": 512,
       "adj_feat_dim": 128,
       "dropout_rate": 0.5,
-      "unify_ratio": 0.6,
+      "unify_ratio": 0.8,
       "GNN_type": "GSAGE",
       "threshold_value": 0.95,
       "alpha": 0.2,

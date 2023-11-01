@@ -861,12 +861,14 @@ class CrossDatasetsCELoss_AdvGNN(nn.Module):
         
         loss = None
         adv_loss = None
+        orth_loss = None
         if unify_prototype is not None and not init_gnn_stage:
             logits = torch.einsum('bchw, nc -> bnhw', logits, unify_prototype)
         # print("logits_max : {}, logits_min : {}".format(torch.max(logits), torch.min(logits)))
         
         if is_adv and self.with_orth:
-            loss = self.orth_weight * self.similarity_dsb(unify_prototype)
+            orth_loss = self.orth_weight * self.similarity_dsb(unify_prototype)
+            loss = orth_loss
         
         for i in range(0, self.n_datasets):
 
@@ -959,7 +961,7 @@ class CrossDatasetsCELoss_AdvGNN(nn.Module):
                 adv_loss = self.MSE_loss(adv_out['ADV1'][1], adv_out['ADV1'][0]) + self.MSE_loss(adv_out['ADV2'][1], adv_out['ADV2'][0]) + self.MSE_loss(adv_out['ADV3'][1], adv_out['ADV3'][0])
                 loss = loss + self.adv_loss_weight * adv_loss
                 
-        return loss, adv_loss
+        return loss, orth_loss
     
 class CrossDatasetsCELoss_AdvGNN_Only(nn.Module):
     def __init__(self, configer=None):

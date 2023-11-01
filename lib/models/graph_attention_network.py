@@ -31,7 +31,7 @@ class GSAGE(nn.Module):
         self.gc1 = GraphSAGEConvolution(infeat, outfeat)
 
     def forward(self, x, adj):
-        x = torch.tanh(self.gc1(x, adj)+x)
+        x = torch.tanh(self.gc1(x, adj))
         return x
 
     def aggregation(self, x, adj):
@@ -1125,8 +1125,8 @@ class Learnable_Topology_BGNN(nn.Module):
                 
                 return feat_out[self.total_cats:], self.sep_bipartite_graphs_by_km(non_norm_adj_mI_after)
             else:
-                return feat_out[self.total_cats:], self.sep_bipartite_graphs(non_norm_adj_mI)
-                # return feat_out[self.total_cats:], self.sep_bipartite_graphs_by_uot(non_norm_adj_mI)
+                # return feat_out[self.total_cats:], self.sep_bipartite_graphs(non_norm_adj_mI)
+                return feat_out[self.total_cats:], self.sep_bipartite_graphs_by_uot(non_norm_adj_mI)
                 # return feat_out[self.total_cats:], self.sep_bipartite_graphs_by_km(non_norm_adj_mI)
         else:
             return feat_out[self.total_cats:], self.pretrain_bipartite_graphs(x.is_cuda)
@@ -1299,30 +1299,31 @@ class Learnable_Topology_BGNN(nn.Module):
 
     def get_params(self):
         def add_param_to_list(mod, wd_params, nowd_params):
-            for param in mod.parameters():
-                if param.requires_grad == False:
-                    continue
-                
-                if param.dim() == 1:
-                    nowd_params.append(param)
-                elif param.dim() == 4 or param.dim() == 2:
-                    wd_params.append(param)
-                else:
-                    nowd_params.append(param)
-                    # print(param.dim())
-                    # print(param)
-                    # print(name)
+            # for param in mod.parameters():
+            if param.requires_grad == False:
+                return
+                # continue
+            
+            if param.dim() == 1:
+                nowd_params.append(param)
+            elif param.dim() == 4 or param.dim() == 2:
+                wd_params.append(param)
+            else:
+                nowd_params.append(param)
+                print(param.dim())
+                # print(param)
+                print(name)
 
         wd_params, nowd_params, lr_mul_wd_params, lr_mul_nowd_params = [], [], [], []
-        for name, child in self.named_children():
-            if 'netD' in name:
-                continue
-            elif 'head' in name or 'aux' in name:
-                add_param_to_list(child, lr_mul_wd_params, lr_mul_nowd_params)
+        # for name, child in self.named_children():
+        for name, param in self.named_parameters():
+            
+            if 'head' in name or 'aux' in name:
+                add_param_to_list(param, lr_mul_wd_params, lr_mul_nowd_params)
             else:
-                add_param_to_list(child, wd_params, nowd_params)
+                add_param_to_list(param, wd_params, nowd_params)
         return wd_params, nowd_params, lr_mul_wd_params, lr_mul_nowd_params
-
+    
     def get_discri_params(self):
         def add_param_to_list(mod, wd_params, nowd_params):
             for param in mod.parameters():

@@ -305,12 +305,13 @@ class HRNet_W48(nn.Module):
         self.configer = configer
         self.aux_mode = self.configer.get('aux_mode')
         self.n_bn = self.configer.get('n_bn')
-        self.num_unify_classes = self.configer.get('num_unify_classes')
+        self.num_unify_classes = self.configer.get('dataset1', 'n_cats')
         self.n_datasets = self.configer.get('n_datasets')
         self.backbone = HRNetBackbone_ori(configer)
         self.proj_dim = self.configer.get('contrast', 'proj_dim')
         self.full_res_stem = self.configer.get('hrnet', 'full_res_stem')
         self.num_prototype = self.configer.get('contrast', 'num_prototype')
+        self.output_feat_dim = self.configer.get('GNN', 'output_feat_dim')
         
         
         if self.full_res_stem:
@@ -320,30 +321,16 @@ class HRNet_W48(nn.Module):
 
         # extra added layers
         in_channels = 720  # 48 + 96 + 192 + 384
-        self.cls_head = nn.Sequential(
-            nn.Conv2d(in_channels, in_channels, kernel_size=3, stride=1, padding=1),
-            ModuleHelper.BNReLU(in_channels, bn_type=self.configer.get('network', 'bn_type')),
-            nn.Dropout2d(0.10),
-            nn.Conv2d(in_channels, self.num_unify_classes, kernel_size=1, stride=1, padding=0, bias=False)
-        )
+        self.cls_head = ProjectionHeadOri(dim_in=in_channels, proj_dim=self.output_feat_dim, bn_type=self.configer.get('network', 'bn_type'))
 
-        self.use_contrast = self.configer.get('contrast', 'use_contrast')
-        if self.use_contrast:
-            self.proj_head = ProjectionHeadOri(dim_in=in_channels, proj_dim=self.proj_dim, bn_type=self.configer.get('network', 'bn_type'))
-            
-        self.prototypes = nn.Parameter(torch.zeros(self.num_unify_classes, self.proj_dim),
-                                       requires_grad=False)
 
-        trunc_normal_(self.prototypes, std=0.02)
-        # self.init_weights()    
+        self.unify_prototype = nn.Parameter(torch.zeros(self.num_unify_classes, self.proj_dim),
+                                       requires_grad=True)
+
+        trunc_normal_(self.unify_prototype, std=0.02)
+        self.init_weights()    
        
-        self.with_memory_bank = self.configer.get('contrast', 'memory_bank')
-        if self.with_memory_bank:
-            self.memory_bank_size = self.configer.get('contrast', 'memory_bank_size')
-            self.register_buffer("memory_bank", torch.randn(self.num_unify_classes, self.memory_bank_size, self.proj_dim))
-            self.memory_bank = nn.functional.normalize(self.memory_bank, p=2, dim=2)
-            self.register_buffer("memory_bank_ptr", torch.zeros(self.num_unify_classes, dtype=torch.long))
-            self.register_buffer("memory_bank_init", torch.zeros(self.num_unify_classes, dtype=torch.bool))
+        
 
     def forward(self, x_, dataset=0):
         x = self.backbone(x_)
@@ -355,17 +342,18 @@ class HRNet_W48(nn.Module):
         feat4 = F.interpolate(x[3], size=(h, w), mode="bilinear", align_corners=True)
 
         feats = torch.cat([feat1, feat2, feat3, feat4], 1)
-        out = self.cls_head(feats)
-        out = F.interpolate(out, size=(x_.size(2), x_.size(3)), mode="bilinear", align_corners=True)
+        emb = self.cls_head(feats)
+        # out = F.interpolate(out, size=(x_.size(2), x_.size(3)), mode="bilinear", align_corners=True)
+        # emb = self.proj_head(feats)
+        logits = torch.einsum('bchw, nc -> bnhw', emb, self.unify_prototype)
         if self.aux_mode == 'train':
-            emb = None
-            if self.use_contrast:
-                emb = self.proj_head(feats)
-            return {"seg": out, 'embed': emb}
+            return {"seg": logits}
         elif self.aux_mode == 'eval':
-            return out
+            return logits
         elif self.aux_mode == 'pred':
-            pred = out.argmax(dim=1)
+            logits = F.interpolate(logits, size=(logits.size(2)*4, logits.size(3)*4), mode="bilinear", align_corners=True)
+
+            pred = logits.argmax(dim=1)
             return pred
         else:
             raise NotImplementedError
@@ -399,26 +387,29 @@ class HRNet_W48(nn.Module):
 
     def get_params(self):
         def add_param_to_list(mod, wd_params, nowd_params):
-            for param in mod.parameters():
-                if param.requires_grad == False:
-                    continue
-                
-                if param.dim() == 1:
-                    nowd_params.append(param)
-                elif param.dim() == 4:
-                    wd_params.append(param)
-                else:
-                    nowd_params.append(param)
-                    # print(param.dim())
-                    # print(param)
-                    print(name)
+            # for param in mod.parameters():
+            if param.requires_grad == False:
+                return
+                # continue
+            
+            if param.dim() == 1:
+                nowd_params.append(param)
+            elif param.dim() == 4 or param.dim() == 2:
+                wd_params.append(param)
+            else:
+                nowd_params.append(param)
+                print(param.dim())
+                # print(param)
+                print(name)
 
         wd_params, nowd_params, lr_mul_wd_params, lr_mul_nowd_params = [], [], [], []
-        for name, child in self.named_children():
+        # for name, child in self.named_children():
+        for name, param in self.named_parameters():
+            
             if 'head' in name or 'aux' in name:
-                add_param_to_list(child, lr_mul_wd_params, lr_mul_nowd_params)
+                add_param_to_list(param, lr_mul_wd_params, lr_mul_nowd_params)
             else:
-                add_param_to_list(child, wd_params, nowd_params)
+                add_param_to_list(param, wd_params, nowd_params)
         return wd_params, nowd_params, lr_mul_wd_params, lr_mul_nowd_params
 
     def PrototypesUpdate(self, new_proto):
@@ -613,7 +604,7 @@ class HRNet_W48_GNN(nn.Module):
         trunc_normal_(self.unify_prototype, std=0.02)
             
         self.init_weights()    
-        # self.get_encode_lb_vec()
+        self.get_encode_lb_vec()
 
 
     def forward(self, x_, dataset=0):
@@ -642,6 +633,7 @@ class HRNet_W48_GNN(nn.Module):
             
             # logits = torch.einsum('bchw, nc -> bnhw', emb, self.unify_prototype[cur_cat:cur_cat+self.datasets_cats[dataset]])   
             logits = torch.einsum('bchw, nc -> bnhw', emb, self.unify_prototype)
+            # return logits
             remap_logits = torch.einsum('bchw, nc -> bnhw', logits, self.bipartite_graphs[dataset])
             return remap_logits
         elif self.aux_mode == 'pred':
@@ -743,17 +735,17 @@ class HRNet_W48_GNN(nn.Module):
                     bi_graphs[2*i], requires_grad=False
                     )
         else:
-            print("bi_graphs len:", len(bi_graphs))
+            # print("bi_graphs len:", len(bi_graphs))
             for i in range(0, self.n_datasets):
-                print("i: ", i)
+                # print("i: ", i)
                 self.bipartite_graphs[i] = nn.Parameter(
                     bi_graphs[i], requires_grad=False
                     )
             
         
     def set_unify_prototype(self, unify_prototype, grad=False):
-        self.unify_prototype = nn.Parameter(unify_prototype,
-                                requires_grad=grad)
+        self.unify_prototype.data = unify_prototype
+        self.unify_prototype.requires_grad=grad
         
     def get_encode_lb_vec(self):
         text_feature_vecs = []
@@ -767,6 +759,6 @@ class HRNet_W48_GNN(nn.Module):
                 text_feature_vecs.append(text_features)
                 
         text_feature_vecs = torch.cat(text_feature_vecs, dim=0)
-        self.unify_prototype = nn.Parameter(text_feature_vecs,
-                        requires_grad=False)
+        self.unify_prototype.data = text_feature_vecs
+        self.unify_prototype.requires_grad=False
                 

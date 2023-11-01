@@ -10,7 +10,7 @@ from lib.cityscapes_cv2 import CityScapes, CityScapesIm
 from lib.a2d2_lb_cv2 import A2D2Data
 from lib.a2d2_cv2 import A2D2Data_L
 from lib.ADE20K import ade20k
-from lib.ade2016_data import ade2016
+from lib.ade2016_data import ade2016, ade2016_mseg
 from lib.bdd100k_data import Bdd100k
 from lib.idd_cv2 import Idd
 from lib.Mapi import Mapi, Mapiv1
