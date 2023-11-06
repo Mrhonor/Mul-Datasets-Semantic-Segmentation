@@ -604,7 +604,7 @@ class HRNet_W48_GNN(nn.Module):
         trunc_normal_(self.unify_prototype, std=0.02)
             
         self.init_weights()    
-        self.get_encode_lb_vec()
+        # self.get_encode_lb_vec()
 
 
     def forward(self, x_, dataset=0):

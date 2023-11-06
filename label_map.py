@@ -1,20 +1,3 @@
-#!/usr/bin/python
-# -*- encoding: utf-8 -*-
-
-import os
-import os.path as osp
-import json
-
-import torch
-from torch.utils.data import Dataset, DataLoader
-import torch.distributed as dist
-import cv2
-import numpy as np
-
-import lib.transform_cv2 as T
-from lib.base_dataset import BaseDataset, BaseDatasetIm
-
-
 labels_info = [
 {"name": "person", "id": 1, "trainId": 0},
 {"name": "bicycle", "id": 2, "trainId": 1},
@@ -151,6 +134,31 @@ labels_info = [
 {"name": "rug-merged", "id": 200, "trainId": 132},
 {"name": "unlabeled", "id":0, "trainId": 255},
 ]
+
+
+class_names = []
+
+tb = []
+with open('coco-panoptic-133_to_coco-panoptic-133-relabeled.tsv', 'r') as tsvfile:
+    for line in tsvfile:
+        fields = line.strip().split('\t')
+        tb.append(fields)
+        
+for i in range(1, len(tb)):
+    if tb[i][1] not in class_names:
+        class_names.append(tb[i][1])
+        
+print(class_names)
+print(len(class_names))
+
+for i in range(1, len(tb)):
+    for j in range(len(labels_info)):
+        if tb[i][0] == labels_info[j]['name']:
+            labels_info[j]['trainId'] = class_names.index(tb[i][1])
+
+print(labels_info)
+
+
 mseg_labels_info = [{'name': 'person', 'id': 1, 'trainId': 79},
 {'name': 'bicycle', 'id': 2, 'trainId': 108},
 {'name': 'car', 'id': 3, 'trainId': 109},
@@ -285,96 +293,3 @@ mseg_labels_info = [{'name': 'person', 'id': 1, 'trainId': 79},
 {'name': 'wall-other-merged', 'id': 199, 'trainId': 119},
 {'name': 'rug-merged', 'id': 200, 'trainId': 106},
 {'name': 'unlabeled', 'id': 0, 'trainId': 255}]
-
-# labels_info_train = labels_info
-
-# labels_info_train = labels_info_eval
-## CityScapes -> {unify class1, unify class2, ...}
-# Wall -> {Wall, fence}
-
-class Coco_data(BaseDataset):
-    '''
-    '''
-    def __init__(self, dataroot, annpath, trans_func=None, mode='train'):
-        super(Coco_data, self).__init__(
-                dataroot, annpath, trans_func, mode)
-            
-            
-        mode = 'eval'
-    
-        self.n_cats = 133
-        if mode=='train':
-            self.n_cats = 134
-        
-        self.lb_ignore = -1
-        # self.lb_ignore = 255
-        self.lb_map = np.arange(256).astype(np.uint8)
-        
-        self.labels_info = labels_info
-            
-        for el in self.labels_info:
-            if mode=='train' and el['trainId'] == 255:
-                self.lb_map[el['id']] = 134
-            else:
-                self.lb_map[el['id']] = el['trainId']
-
-        self.to_tensor = T.ToTensor(
-            mean=(0.3038, 0.3383, 0.3034), # city, rgb
-            std=(0.2071, 0.2088, 0.2090),
-        )
-
-        # self.to_tensor = T.ToTensor(
-        #     mean=(0.3257, 0.3690, 0.3223), # city, rgb
-        #     std=(0.2112, 0.2148, 0.2115),
-        # )
-
-class Coco_data_mseg(BaseDataset):
-    '''
-    '''
-    def __init__(self, dataroot, annpath, trans_func=None, mode='train'):
-        super(Coco_data_mseg, self).__init__(
-                dataroot, annpath, trans_func, mode)
-            
-            
-
-        self.n_cats = 122
-
-        self.lb_ignore = -1
-        # self.lb_ignore = 255
-        self.lb_map = np.arange(256).astype(np.uint8)
-        
-        self.labels_info = mseg_labels_info
-            
-        for el in self.labels_info:
-            self.lb_map[el['id']] = el['trainId']
-
-        self.to_tensor = T.ToTensor(
-            mean=(0.3038, 0.3383, 0.3034), # city, rgb
-            std=(0.2071, 0.2088, 0.2090),
-        )
-
-        # self.to_tensor = T.ToTensor(
-        #     mean=(0.3257, 0.3690, 0.3223), # city, rgb
-        #     std=(0.2112, 0.2148, 0.2115),
-        # )
-
-
-## Only return img without label
-class Coco_dataIm(BaseDatasetIm):
-    '''
-    '''
-    def __init__(self, dataroot, annpath, trans_func=None, mode='train'):
-        super(Coco_data, self).__init__(
-                dataroot, annpath, trans_func, mode)
-        self.n_cats = 133
-        self.lb_ignore = -1
-        self.lb_map = np.arange(256).astype(np.uint8)
-        for el in self.labels_info:
-            self.lb_map[el['id']] = el['trainId']
-
-        self.to_tensor = T.ToTensor(
-            mean=(0.3257, 0.3690, 0.3223), # city, rgb
-            std=(0.2112, 0.2148, 0.2115),
-        )
-
-

@@ -19,6 +19,8 @@ import lib.transform_cv2 as T
 import torch.nn.functional as F
 import random
 import pickle
+from tqdm import tqdm
+import torch.distributed as dist
 
 def get_img_for_everyclass(configer, dataset_id=None):
     n_datasets = configer.get("n_datasets")
@@ -27,7 +29,7 @@ def get_img_for_everyclass(configer, dataset_id=None):
     for i in range(1, n_datasets + 1):
         num_classes.append(configer.get("dataset" + str(i), "n_cats"))
 
-    dls = get_data_loader(configer, aux_mode='ret_path', distributed=False)
+    dls = get_data_loader(configer, aux_mode='ret_path', distributed=False, stage=2)
 
     img_lists = []
     lb_lists  = []
@@ -46,8 +48,13 @@ def get_img_for_everyclass(configer, dataset_id=None):
         for label_id in range(0, num_classes[i]):
             this_img_lists.append([])
             this_lb_lists.append([])
-            
-        for im, lb, lbpth in dls[i]:
+
+        if dist.is_initialized() and dist.get_rank() != 0:
+            diter = dls[i]
+        else:
+            diter = tqdm(dls[i])
+        for im, lb, lbpth in diter:
+
             im = im[0]
             lb = lb.squeeze()
             for label_id in range(0, num_classes[i]):

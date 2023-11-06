@@ -9,7 +9,7 @@
       "full_res_stem": false
     },
     "GNN": {
-      "model_name": "learnable_topology_BGAT",
+      "model_name": "learnable_topology_BGNN",
       "nfeat": 1024,
       "nfeat_out": 512,
       "nfeat_adj": 256,
@@ -84,7 +84,9 @@
     },
     "use_ema": false,
     "lr": {
-      "lr_start": 1e-4,
+      "lr_start":5e-4,
+      "gnn_lr_start": 5e-4,
+      "seg_lr_start": 1e-3,
       "weight_decay": 1e-6,
       "warmup_iters": 1000,
       "fix_param_iters": 0,
@@ -109,7 +111,7 @@
       "cropsize": [512, 512]
     },
     "use_fp16": false,
-    "use_sync_bn": false,
+    "use_sync_bn": true,
     "contrast": {
       "use_contrast": true,
       "proj_dim": 512,

@@ -498,7 +498,7 @@ def train():
     GNN = 1
     init_gnn_stage = False
     fix_graph = False
-    train_seg_or_gnn = GNN
+    train_seg_or_gnn = SEG
     adv_out = None
     unify_prototype = None
     GNN_INIT = configer.get('train', 'graph_finetune')
@@ -513,42 +513,51 @@ def train():
             warmup_ratio=0.1, warmup='exp', last_epoch=-1,)
     
     
-    # with torch.no_grad():
-    #     if is_distributed():
-    #         unify_prototype, ori_bi_graphs = graph_net.module.get_optimal_matching(graph_node_features, True)
-    #         # unify_prototype, bi_graphs, adv_out = graph_net(graph_node_features)    
-    #     else:
-    #         unify_prototype, ori_bi_graphs = graph_net.get_optimal_matching(graph_node_features, True)     
-    #         # unify_prototype, bi_graphs, adv_out = graph_net(graph_node_features)     
-    #     # print(bi_graphs)
+    with torch.no_grad():
+        if is_distributed():
+            unify_prototype, ori_bi_graphs = graph_net.module.get_optimal_matching(graph_node_features, True)
+            # unify_prototype, bi_graphs, adv_out = graph_net(graph_node_features)    
+        else:
+            unify_prototype, ori_bi_graphs = graph_net.get_optimal_matching(graph_node_features, True)     
+            # unify_prototype, bi_graphs, adv_out = graph_net(graph_node_features)     
+        # print(bi_graphs)
 
-    #     # print(torch.norm(unify_prototype[0][0], p=2))
-    #     unify_prototype = unify_prototype.detach()
-    #     bi_graphs = []
-    #     if len(ori_bi_graphs) == 2*n_datasets:
-    #         for j in range(0, len(ori_bi_graphs), 2):
-    #             bi_graphs.append(ori_bi_graphs[j+1].detach())
-    #     else:
-    #         bi_graphs = [bigh.detach() for bigh in ori_bi_graphs]
-    #     fix_graph = True
-    #     adv_out = None
-    #     print(len(bi_graphs))
+        # print(torch.norm(unify_prototype[0][0], p=2))
+        unify_prototype = unify_prototype.detach()
+        new_bi_graphs = []
+        if len(ori_bi_graphs) == 2*n_datasets:
+            for j in range(0, len(ori_bi_graphs), 2):
+                new_bi_graphs.append(ori_bi_graphs[j+1].detach())
+        else:
+            new_bi_graphs = [bigh.detach() for bigh in ori_bi_graphs]
+        fix_graph = True
+        adv_out = None
+        _, ori_bi_graphs, _, _ = graph_net(graph_node_features)
+        bi_graphs = []
+        if len(ori_bi_graphs) == 2*n_datasets:
+            for j in range(0, len(ori_bi_graphs), 2):
+                bi_graphs.append(ori_bi_graphs[j+1].detach())
+        else:
+            bi_graphs = [bigh.detach() for bigh in ori_bi_graphs]
 
 
-    #     init_gnn_stage = False
-    #     if is_distributed():
-    #         net.module.set_unify_prototype(unify_prototype, True)
-    #         net.module.set_bipartite_graphs(bi_graphs)
-    #     else:
-    #         net.set_unify_prototype(unify_prototype, True)
-    #         net.set_bipartite_graphs(bi_graphs)
+        init_gnn_stage = False
+        if is_distributed():
+            net.module.set_unify_prototype(unify_prototype, True)
+            net.module.set_bipartite_graphs(bi_graphs)
+        else:
+            net.set_unify_prototype(unify_prototype, True)
+            net.set_bipartite_graphs(bi_graphs)
     # print_bipartite(configer, 7, bi_graphs)
-    # net.module.unify_prototype.requires_grad = True
+
     
     if is_distributed():
         optim = set_optimizer(net.module, configer, configer.get('lr', 'seg_lr_start'))
+        if train_seg_or_gnn == SEG:    
+            net.module.unify_prototype.requires_grad = True
     else:
         optim = set_optimizer(net, configer, configer.get('lr', 'seg_lr_start'))
+        net.unify_prototype.requires_grad = True
         
     lr_schdr = WarmupPolyLrScheduler(optim, power=0.9,
         max_iter=configer.get('train','seg_iters'), warmup_iter=configer.get('lr','warmup_iters'),
@@ -576,6 +585,7 @@ def train():
 
                 
             except StopIteration:
+                print(f"datasets{j+1}:stop iter")
                 dl_iters[j] = iter(dls[j])
                 im, lb = next(dl_iters[j])
                 while torch.min(lb) == 255:
@@ -599,15 +609,30 @@ def train():
         if train_seg_or_gnn == SEG and alter_iter > configer.get('train', 'seg_iters'):
             ratio = 1 - float(i) / total_max_iter / 2
 
+            # if is_distributed():
+            #     _, ori_ema_bi_graphs = graph_net.module.get_optimal_matching(graph_node_features, GNN_INIT)
+            #     # unify_prototype, bi_graphs, adv_out = graph_net(graph_node_features)    
+            # else:
+            #     _, ori_ema_bi_graphs = graph_net.get_optimal_matching(graph_node_features, GNN_INIT)     
+            #     # unify_prototype, bi_graphs, adv_out = graph_net(graph_node_features)     
+            # # print(bi_graphs)
 
-            if is_distributed():
-                gnn_optim = set_optimizer(graph_net.module, configer, ratio * configer.get('lr', 'gnn_lr_start'))
-                if mse_or_adv == 'adv':
-                    gnn_optimD = set_optimizerD(graph_net.module, configer, ratio * configer.get('lr', 'gnn_lr_start'))
-            else:
-                gnn_optim = set_optimizer(graph_net, configer, ratio * configer.get('lr', 'gnn_lr_start'))
-                if mse_or_adv == 'adv':
-                    gnn_optimD = set_optimizerD(graph_net, configer, ratio * configer.get('lr', 'gnn_lr_start'))
+            # # print(torch.norm(unify_prototype[0][0], p=2))
+            # ema_bi_graphs = []
+            # if len(ori_ema_bi_graphs) == 2*n_datasets:
+            #     for j in range(0, len(ori_ema_bi_graphs), 2):
+            #         ema_bi_graphs.append(ori_ema_bi_graphs[j+1].detach())
+            # else:
+            #     ema_bi_graphs = [bigh.detach() for bigh in ori_ema_bi_graphs]
+
+            # if is_distributed():
+            #     gnn_optim = set_optimizer(graph_net.module, configer, ratio * configer.get('lr', 'gnn_lr_start'))
+            #     if mse_or_adv == 'adv':
+            #         gnn_optimD = set_optimizerD(graph_net.module, configer, ratio * configer.get('lr', 'gnn_lr_start'))
+            # else:
+            gnn_optim = set_optimizer(graph_net, configer, ratio * configer.get('lr', 'gnn_lr_start'))
+            if mse_or_adv == 'adv':
+                gnn_optimD = set_optimizerD(graph_net, configer, ratio * configer.get('lr', 'gnn_lr_start'))
                 
 
             alter_iter = 0
@@ -625,6 +650,8 @@ def train():
             ratio =  1 - float(i) / total_max_iter / 2
 
             with torch.no_grad():
+                graph_net.eval()
+                
                 if is_distributed():
                     unify_prototype, ori_bi_graphs = graph_net.module.get_optimal_matching(graph_node_features, GNN_INIT)
                     # unify_prototype, bi_graphs, adv_out = graph_net(graph_node_features)    
@@ -635,16 +662,23 @@ def train():
 
                 # print(torch.norm(unify_prototype[0][0], p=2))
                 unify_prototype = unify_prototype.detach()
-                bi_graphs = []
+                new_bi_graphs = []
                 if len(ori_bi_graphs) == 2*n_datasets:
                     for j in range(0, len(ori_bi_graphs), 2):
-                        bi_graphs.append(ori_bi_graphs[j+1].detach())
+                        new_bi_graphs.append(ori_bi_graphs[j+1].detach())
                 else:
-                    bi_graphs = [bigh.detach() for bigh in ori_bi_graphs]
+                    new_bi_graphs = [bigh.detach() for bigh in ori_bi_graphs]
+                    
+                # _, ori_ema_bi_graphs, _, _ = graph_net(graph_node_features)
+                # ema_bi_graphs = []
+                # if len(ori_ema_bi_graphs) == 2*n_datasets:
+                #     for j in range(0, len(ori_ema_bi_graphs), 2):
+                #         ema_bi_graphs.append(ori_ema_bi_graphs[j+1].detach())
+                # else:
+                #     ema_bi_graphs = [bigh.detach() for bigh in ori_ema_bi_graphs]
+                
                 fix_graph = True
                 adv_out = None
-                print(len(bi_graphs))
-
 
                 init_gnn_stage = False
                 if is_distributed():
@@ -708,6 +742,18 @@ def train():
                         seg_out = net(im)
 
                 unify_prototype, bi_graphs, adv_out, _ = graph_net(graph_node_features)
+
+                if configer.get("GNN", "ema_graph") == True:
+                    if new_bi_graphs.shape(0) == 2*len(bi_graphs):
+                        temp_bg = []
+                        for j in range(0, len(bi_graphs)):
+                            temp_bg.append(ori_bi_graphs[j])
+                            temp_bg.append(ori_bi_graphs[j])
+                        bi_graphs = temp_bg
+                            
+                    bi_graphs = [configer.get("GNN", "ema_graph_rate") * bg + (1 - configer.get("GNN", "ema_graph_rate")) * nbg for bg, nbg  in zip(bi_graphs, new_bi_graphs)] 
+                else:
+                    bi_graphs = new_bi_graphs
                 # if i % 50 == 0:
                 #     print(torch.norm(unify_prototype[0][0], p=2))
                 seg_out['unify_prototype'] = unify_prototype
@@ -715,8 +761,16 @@ def train():
                 is_adv = False
                 graph_net.eval()
                 net.train()
-
-
+                unify_prototype = None
+                adv_out = None
+                if configer.get("GNN", "ema_graph") == True:
+                    this_bi_graphs = [configer.get("GNN", "ema_graph_rate") * bg + (1 - configer.get("GNN", "ema_graph_rate")) * nbg for bg, nbg  in zip(bi_graphs, new_bi_graphs)] 
+                    if is_distributed():
+                        net.module.set_bipartite_graphs(this_bi_graphs)
+                    else:
+                        net.set_bipartite_graphs(this_bi_graphs)
+                        
+                    
                 
                 seg_out = net(im)
                 if is_distributed():
@@ -792,7 +846,7 @@ def train():
                 loss_pre_meter, loss_aux_meters, loss_contrast_meter, loss_domain_meter, kl_loss_meter)
             
 
-        if (i + 1) % 5000 == 0:
+        if (i + 1) % 10000 == 0:
             seg_save_pth = osp.join(configer.get('res_save_pth'), 'seg_model_{}.pth'.format(i+1))
             gnn_save_pth = osp.join(configer.get('res_save_pth'), 'graph_model_{}.pth'.format(i+1))
             logger.info('\nsave seg_models to {}, gnn_models to {}'.format(seg_save_pth, gnn_save_pth))

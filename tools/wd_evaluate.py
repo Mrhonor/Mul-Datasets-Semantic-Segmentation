@@ -28,7 +28,7 @@ def parse_args():
     parse.add_argument('--local_rank', dest='local_rank', type=int, default=-1,)
     parse.add_argument('--port', dest='port', type=int, default=16854,)
     parse.add_argument('--finetune_from', type=str, default=None,)
-    parse.add_argument('--config', dest='config', type=str, default='configs/ade20k_mseg.json',)
+    parse.add_argument('--config', dest='config', type=str, default='configs/mapi_mseg.json',)
     return parse.parse_args()
 
 # 使用绝对路径
@@ -50,7 +50,6 @@ def set_model(configer):
         #     del state[f'bipartite_graphs.{i}']
         net.load_state_dict(state, strict=False)
 
-        
     if configer.get('use_sync_bn'): 
         net = nn.SyncBatchNorm.convert_sync_batchnorm(net)
     net.cuda()
@@ -70,7 +69,6 @@ def set_graph_model(configer):
         
         net.load_state_dict(state, strict=False)
 
-    
         
     if configer.get('use_sync_bn'): 
         net = nn.SyncBatchNorm.convert_sync_batchnorm(net)
@@ -97,7 +95,7 @@ def eval_wd():
     #         bi_graph[i, id] = 1
     # bi_graphs.append(bi_graph)
     
-    bi_graphs = [torch.load('../ade_to_ade_relabel.pt').T.cuda()]
+    # bi_graphs = [torch.load('../ade_to_ade_relabel.pt').T.cuda()]
     
     # graph_net = set_graph_model(configer=configer)
     # graph_node_features = gen_graph_node_feature(configer).cuda()
@@ -107,7 +105,7 @@ def eval_wd():
 
     # # net.get_encode_lb_vec()
     # # net.set_unify_prototype(unify_prototype)
-    net.set_bipartite_graphs(bi_graphs)
+    # net.set_bipartite_graphs(bi_graphs)
     heads, mious = eval_model_contrast(configer, net)
     logger.info(tabulate([mious, ], headers=heads, tablefmt='orgtbl'))
     

@@ -98,19 +98,20 @@ class MscEvalV0(object):
 
 class MscEvalV0_Contrast(object):
 
-    def __init__(self, configer, scales=(0.5, ), flip=False, ignore_label=255):
+    def __init__(self, configer, scales=(0.5, ), flip=False, ignore_label=255, ori_scales=False):
         self.configer = configer
         # self.num_unify_classes = self.configer.get('num_unify_classes')
         # self.class_Remaper = ClassRemap(configer=self.configer)
         self.scales = scales
         self.flip = flip
         self.ignore_label = ignore_label
+        self.ori_scales = ori_scales
 
-        # self.lb_map = torch.tensor(np.load('../ade_to_ade_relabel.npy')).cuda()
+        # self.lb_map = torch.tensor(np.load('mapi_relabel.npy')).cuda()
         # print(self.lb_map)
 
     def __call__(self, net, dl, n_classes, dataset_id):
-        # n_classes = 118
+        # n_classes = 43
         ## evaluate
         hist = torch.zeros(n_classes, n_classes).cuda().detach()
         # hist = torch.zeros(118, 118).cuda().detach()
@@ -125,13 +126,14 @@ class MscEvalV0_Contrast(object):
             size = label.size()[-2:]
             # probs = torch.zeros(
             #         (N, self.num_unify_classes, H, W), dtype=torch.float32).cuda().detach()
-            probs = torch.zeros(
-                    (N, n_classes, H, W), dtype=torch.float32).cuda().detach()
+            probs = None
             # probs = torch.zeros(
             #         (N, 150, H, W), dtype=torch.float32).cuda().detach()
 
 
             for scale in self.scales:
+
+                
                 sH, sW = int(scale * H), int(scale * W)
                 sH, sW = get_round_size((sH, sW))
                 im_sc = F.interpolate(imgs, size=(sH, sW),
@@ -140,8 +142,22 @@ class MscEvalV0_Contrast(object):
                 im_sc = im_sc.cuda()
                 
                 logits = net(im_sc, dataset=dataset_id)
-                logits = F.interpolate(logits, size=size,
-                        mode='bilinear', align_corners=True)
+                N, _, lH, lW = logits.shape
+                if self.ori_scales:
+                    logits = F.interpolate(logits, size=size,
+                            mode='bilinear', align_corners=True)
+                    if probs is None:
+                        probs = torch.zeros(
+                            (N, n_classes, H, W), dtype=torch.float32).cuda().detach()
+                else:
+                    label = F.interpolate(label.float().unsqueeze(1), size=(lH, lW),
+                            mode='nearest').squeeze(1).long()
+                    if probs is None:
+                        probs = torch.zeros(
+                            (N, n_classes, lH, lW), dtype=torch.float32).cuda().detach()
+                    # label = F.interpolate()
+                
+
                 probs += torch.softmax(logits, dim=1)
                 if self.flip:
                     im_sc = torch.flip(im_sc, dims=(3, ))
@@ -151,10 +167,19 @@ class MscEvalV0_Contrast(object):
                             mode='bilinear', align_corners=True)
                     probs += torch.softmax(logits, dim=1)
             preds = torch.argmax(probs, dim=1)
+            # print("pred before:",torch.max(preds))
+
             # print(preds)
             # break
             # preds[preds==0] = 95
             # preds = self.lb_map[preds]
+            # preds[preds == 255] = 0
+            # print("pred:",torch.max(preds))
+            # label[label == 255] = 0
+            # print("label:",torch.max(label))
+            # print("label min:",torch.min(label))
+            
+
             # one_hot = F.one_hot(preds, num_classes=150).float()
             # bi_part = torch.load('../ade_to_ade_relabel.pt').cuda()
             # re = torch.einsum('abcd,de->abce', one_hot, bi_part)
@@ -167,6 +192,8 @@ class MscEvalV0_Contrast(object):
             # preds = self.class_Remaper.ReverseSegRemap(preds, dataset_id)
 
             keep = label != self.ignore_label
+            
+            # print(np.max(label.cpu().numpy()[keep.cpu().numpy()]))
 
             hist += torch.tensor(np.bincount(
                 label.cpu().numpy()[keep.cpu().numpy()] * n_classes + preds.cpu().numpy()[keep.cpu().numpy()],

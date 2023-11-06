@@ -13,9 +13,9 @@ from lib.ADE20K import ade20k
 from lib.ade2016_data import ade2016, ade2016_mseg
 from lib.bdd100k_data import Bdd100k
 from lib.idd_cv2 import Idd
-from lib.Mapi import Mapi, Mapiv1
+from lib.Mapi import Mapi, Mapiv1, Mapiv1_mseg
 from lib.sunrgbd import Sunrgbd
-from lib.coco_data import Coco_data
+from lib.coco_data import Coco_data, Coco_data_mseg
 from lib.a2d2_city_dataset import A2D2CityScapes
 from lib.CamVid_lb import CamVid
 from lib.WD2 import wd2
@@ -83,9 +83,11 @@ def get_data_loader(configer, aux_mode='eval', distributed=True, stage=None):
     elif mode == 'ret_path':
         trans_func = TransformationVal()
         batchsize = [1 for i in range(1, n_datasets+1)]
-        annpath = []
-        for i in range(1, n_datasets+1):
-            annpath.append(configer.get('dataset'+str(i), 'train_im_anns'))
+        if stage != None:
+            annpath = [configer.get('dataset'+str(i), 'train_im_anns').replace('.txt', f'_{stage}.txt') for i in range(1, n_datasets+1)]
+            print(annpath)
+        else:
+            annpath = [configer.get('dataset'+str(i), 'train_im_anns') for i in range(1, n_datasets+1)]
             
         imroot = [configer.get('dataset'+str(i), 'im_root') for i in range(1, n_datasets+1)]
         data_reader = [configer.get('dataset'+str(i), 'data_reader') for i in range(1, n_datasets+1)]
