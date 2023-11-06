@@ -152,6 +152,8 @@ def set_optimizer(model, configer):
             {'params': lr_mul_wd_params, 'lr': configer.get('lr', 'lr_start')},
             {'params': lr_mul_nowd_params, 'weight_decay': wd_val, 'lr': configer.get('lr', 'lr_start')},
         ]
+    elif hasattr(model, 'get_optim_params'):
+        params_list = model.get_optim_params()
     else:
         wd_params, non_wd_params = [], []
         for name, param in model.named_parameters():

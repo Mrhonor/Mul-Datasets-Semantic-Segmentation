@@ -34,7 +34,7 @@ from tensorboardX import SummaryWriter
 
 from lib.module.gen_graph_node_feature import gen_graph_node_feature
 from tools.get_bipartile import print_bipartite, find_unuse
-
+import clip
 
 ## fix all random seeds
 #  torch.manual_seed(123)
@@ -283,6 +283,19 @@ def train():
     ## model
     net = set_model(configer=configer)
     graph_net = set_graph_model(configer=configer)
+    if configer.get('lr', 'init_iter') > 0:
+        text_feature_vecs = []
+        with torch.no_grad():
+            clip_model, _ = clip.load("ViT-B/32", device="cuda")
+            for i in range(0, n_datasets):
+                lb_name = configer.get("dataset"+str(i+1), "label_names")
+                lb_name = [f'a photo of {name} from dataset {i+1}.' for name in lb_name]
+                text = clip.tokenize(lb_name).cuda()
+                text_features = clip_model.encode_text(text).type(torch.float32)
+                text_feature_vecs.append(text_features)
+                
+        text_feature_vecs = torch.cat(text_feature_vecs, dim=0)
+        net.set_unify_prototype(text_feature_vecs, False)
     
     if use_ema:
         ema_net = set_ema_model(configer=configer)
@@ -341,7 +354,7 @@ def train():
     # if finetune:
     #     fix_param_iters = configer.get('lr', 'fix_param_iters')
     #     net.switch_require_grad_state(False)
-    # bi_graphs = graph_net.pretrain_bipartite_graphs(True)
+    bi_graphs = graph_net.pretrain_bipartite_graphs(True)
     ## ddp training
     if is_distributed():
         net = set_model_dist(net)
@@ -408,7 +421,6 @@ def train():
 
             seg_out = {}
             is_adv = False
-            fix_graph = True
             adv_out = None
             net.train()
 

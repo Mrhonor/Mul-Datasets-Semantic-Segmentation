@@ -1,0 +1,200 @@
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+from itertools import chain
+import warnings
+
+from lib.module.util import _BNReluConv, upsample
+from lib.models.resnet_pyramid import resnet18
+from timm.models.layers import trunc_normal_
+
+class SemsegModel(nn.Module):
+    def __init__(self, configer, num_inst_classes=None, use_bn=True, k=1, bias=True,
+                 loss_ret_additional=False, upsample_logits=True, logit_class=_BNReluConv,
+                 multiscale_factors=(.5, .75, 1.5, 2.)):
+        super(SemsegModel, self).__init__()
+        self.configer = configer
+        self.aux_mode = self.configer.get('aux_mode')
+        self.n_datasets = configer.get("n_datasets")
+        self.backbone = resnet18(pretrained=True,
+                    pyramid_levels=3,
+                    k_upsample=3,
+                    k_bneck=1,
+                    output_stride=4,
+                    efficient=True)
+        self.total_cats = 0
+        self.datasets_cats = []
+        for i in range(0, self.n_datasets):
+            self.datasets_cats.append(self.configer.get('dataset'+str(i+1), 'n_cats'))
+            self.total_cats += self.datasets_cats[i]
+        
+        self.output_feat_dim = self.configer.get('GNN', 'output_feat_dim')
+        self.max_num_unify_class = int(self.configer.get('GNN', 'unify_ratio') * self.total_cats)
+        
+        self.logits = logit_class(self.backbone.num_features, self.output_feat_dim, batch_norm=use_bn, k=k, bias=bias) 
+        self.bipartite_graphs = nn.ParameterList([])
+        for i in range(0, self.n_datasets):
+            self.bipartite_graphs.append(nn.Parameter(
+                torch.zeros(self.configer.get('dataset'+str(i+1), 'n_cats'), self.max_num_unify_class), requires_grad=False
+                ))
+            
+        self.unify_prototype = nn.Parameter(torch.zeros(self.max_num_unify_class, self.output_feat_dim),
+                                requires_grad=False)
+        trunc_normal_(self.unify_prototype, std=0.02)
+        
+        self.num_classes = self.max_num_unify_class
+        # self.logits = logit_class(self.backbone.num_features, self.num_classes, batch_norm=use_bn, k=k, bias=bias)
+        if num_inst_classes is not None:
+            raise NotImplementedError
+            # self.border_logits = _BNReluConv(self.backbone.num_features, num_inst_classes, batch_norm=use_bn,
+            #                                  k=k, bias=bias)
+        self.criterion = None
+        self.loss_ret_additional = loss_ret_additional
+        self.img_req_grad = loss_ret_additional
+        self.upsample_logits = upsample_logits
+        self.multiscale_factors = multiscale_factors
+
+    def forward(self, image, dataset=0):
+        features, _ = self.backbone(image)
+        features = self.logits.forward(features)
+        if self.aux_mode == 'train':
+            if self.training:
+                logits = torch.einsum('bchw, nc -> bnhw', features, self.unify_prototype)
+                return {'seg':logits}
+            else:
+                return {'seg':features}
+        elif self.aux_mode == 'eval':
+            # logits = torch.einsum('bchw, nc -> bnhw', emb, self.unify_prototype[cur_cat:cur_cat+self.datasets_cats[dataset]])   
+            logits = torch.einsum('bchw, nc -> bnhw', features, self.unify_prototype)
+            # return logits
+            remap_logits = torch.einsum('bchw, nc -> bnhw', logits, self.bipartite_graphs[dataset])
+            return remap_logits
+        elif self.aux_mode == 'pred':
+            logits = torch.einsum('bchw, nc -> bnhw', features, self.unify_prototype)
+            # logits = torch.einsum('bchw, nc -> bnhw', logits, self.bipartite_graphs[dataset][:self.datasets_cats[dataset]-1])
+            logits = torch.einsum('bchw, nc -> bnhw', logits, self.bipartite_graphs[dataset])
+            logits = F.interpolate(logits, size=(logits.size(2)*4, logits.size(3)*4), mode="bilinear", align_corners=True)
+            
+            pred = logits.argmax(dim=1)
+            
+            return pred
+        elif self.aux_mode == 'clip':
+            cur_cat=0
+            for i in range(0, dataset):
+                cur_cat += self.datasets_cats[i]
+            
+            logits = torch.einsum('bchw, nc -> bnhw', features, self.unify_prototype[cur_cat:cur_cat+self.datasets_cats[dataset]])   
+            return logits
+        elif self.aux_mode == 'uni_eval':
+            logits = torch.einsum('bchw, nc -> bnhw', features, self.unify_prototype)
+            return logits
+        elif self.aux_mode == 'unseen':
+            logits = torch.einsum('bchw, nc -> bnhw', features, self.unify_prototype)
+
+            max_index = torch.argmax(logits, dim=1)
+            temp = torch.eye(logits.size(1)).cuda()
+            one_hot = temp[max_index]
+            remap_logits = torch.einsum('bhwc, nc -> bnhw', one_hot, self.bipartite_graphs[dataset])
+            return remap_logits
+            
+        else:
+            logits = torch.einsum('bchw, nc -> bnhw', features, self.unify_prototype)
+            # logits = torch.einsum('bchw, nc -> bnhw', logits, self.bipartite_graphs[dataset])
+            logits = F.interpolate(logits, size=(logits.size(2)*4, logits.size(3)*4), mode="bilinear", align_corners=True)
+            
+            pred = logits.argmax(dim=1)
+            
+            return pred
+
+    def forward_down(self, image, target_size, image_size):
+        return self.backbone.forward_down(image), target_size, image_size
+
+    def forward_up(self, feats, target_size, image_size):
+        feats, additional = self.backbone.forward_up(feats)
+        features = upsample(feats, target_size)
+        logits = self.logits.forward(features)
+        logits = upsample(logits, image_size)
+        return logits, additional
+
+    def prepare_data(self, batch, image_size, device=torch.device('cuda'), img_key='image'):
+        if image_size is None:
+            image_size = batch['target_size']
+        warnings.warn(f'Image requires grad: {self.img_req_grad}', UserWarning)
+        image = batch[img_key].detach().requires_grad_(self.img_req_grad).to(device)
+        return {
+            'image': image,
+            'image_size': image_size,
+            'target_size': batch.get('target_size_feats')
+        }
+
+    def do_forward(self, batch, image_size=None):
+        data = self.prepare_data(batch, image_size)
+        logits, additional = self.forward(**data)
+        additional['model'] = self
+        additional = {**additional, **data}
+        return logits, additional
+
+    def loss(self, batch):
+        assert self.criterion is not None
+        labels = batch['labels'].cuda()
+        logits, additional = self.do_forward(batch, image_size=labels.shape[-2:])
+        if self.loss_ret_additional:
+            return self.criterion(logits, labels, batch=batch, additional=additional), additional
+        return self.criterion(logits, labels, batch=batch, additional=additional)
+
+    def random_init_params(self):
+        params = [self.backbone.random_init_params()]
+        if self.unify_prototype.require_grad:
+            return params.append(self.unify_prototype)        
+        # self.logits.parameters(), 
+        # if hasattr(self, 'border_logits'):
+        #     params += [self.border_logits.parameters()]
+        return chain(*(params))
+
+    def fine_tune_params(self):
+        return self.backbone.fine_tune_params()
+
+    def ms_forward(self, batch, image_size=None):
+        image_size = batch.get('target_size', image_size if image_size is not None else batch['image'].shape[-2:])
+        ms_logits = None
+        pyramid = [batch['image'].cuda()]
+        pyramid += [
+            F.interpolate(pyramid[0], scale_factor=sf, mode=self.backbone.pyramid_subsample,
+                          align_corners=self.backbone.align_corners) for sf in self.multiscale_factors
+        ]
+        for image in pyramid:
+            batch['image'] = image
+            logits, additional = self.do_forward(batch, image_size=image_size)
+            if ms_logits is None:
+                ms_logits = torch.zeros(logits.size()).to(logits.device)
+            ms_logits += F.softmax(logits, dim=1)
+        batch['image'] = pyramid[0].cpu()
+        return ms_logits / len(pyramid), {}
+    
+    def set_bipartite_graphs(self, bi_graphs):
+        
+        if len(bi_graphs) == 2 * self.n_datasets:
+            for i in range(0, self.n_datasets):
+                self.bipartite_graphs[i] = nn.Parameter(
+                    bi_graphs[2*i], requires_grad=False
+                    )
+        else:
+            # print("bi_graphs len:", len(bi_graphs))
+            for i in range(0, self.n_datasets):
+                # print("i: ", i)
+                self.bipartite_graphs[i] = nn.Parameter(
+                    bi_graphs[i], requires_grad=False
+                    )
+                
+    def set_unify_prototype(self, unify_prototype, grad=False):
+        self.unify_prototype.data = unify_prototype
+        self.unify_prototype.requires_grad=grad
+        
+    def get_optim_params(self):
+        fine_tune_factor = 4
+        optim_params = [
+            {'params': self.random_init_params(), 'lr': self.configer.get('lr', 'seg_lr_start'), 'weight_decay': self.configer.get('lr', 'weight_decay')},
+            {'params': self.fine_tune_params(), 'lr': self.configer.get('lr', 'seg_lr_start') / fine_tune_factor,
+            'weight_decay': self.configer.get('lr', 'weight_decay') / fine_tune_factor},
+        ]
+        return optim_params
