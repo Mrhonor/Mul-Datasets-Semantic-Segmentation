@@ -58,7 +58,7 @@ def parse_args():
     parse.add_argument('--local_rank', dest='local_rank', type=int, default=-1,)
     parse.add_argument('--port', dest='port', type=int, default=16854,)
     parse.add_argument('--finetune_from', type=str, default=None,)
-    parse.add_argument('--config', dest='config', type=str, default='configs/ltbgnn_7_datasets_2.json',)
+    parse.add_argument('--config', dest='config', type=str, default='configs/ltbgnn_7_datasets_snp.json',)
     return parse.parse_args()
 
 # 使用绝对路径
@@ -302,6 +302,7 @@ def train():
         
     contrast_losses = set_contrast_loss(configer)
     # net.unify_prototype.requires_grad = True
+    
     ## optimizer
     optim = set_optimizer(net, configer, configer.get('lr', 'seg_lr_start'))
     gnn_optim = set_optimizer(graph_net, configer, configer.get('lr', 'gnn_lr_start'))
@@ -328,6 +329,14 @@ def train():
     lr_schdr = WarmupPolyLrScheduler(optim, power=0.9,
         max_iter=configer.get('lr','init_iter'), warmup_iter=configer.get('lr','warmup_iters'),
         warmup_ratio=0.1, warmup='exp', last_epoch=-1,)
+
+    if configer.get('train', 'finetune'):
+        state = torch.load(configer.get('train', 'finetune_from'))
+        net.load_state_dict(torch.load(configer.get('train', 'finetune_from'), map_location='cpu'), strict=False)
+        if 'optimizer_state_dict' in state.keys():
+            optim.load_state_dict(state['optimizer_state_dict'])
+        if 'scheduler_state_dict' in state.keys():
+            lr_schdr.load_state_dict(state['scheduler_state_dict'])
 
     # 两个数据集分别处理
     # 使用迭代器读取数据
@@ -362,8 +371,8 @@ def train():
 
     # bi_graphs = None
     
-    
-    for i in range(0, configer.get('lr','init_iter')):
+    start_i = 10000
+    for i in range(start_i, configer.get('lr','init_iter')):
         configer.plus_one('iter')
 
         ims = []
@@ -468,6 +477,12 @@ def train():
             else:
                 seg_state = net.state_dict()
                 torch.save(seg_state, seg_save_pth)
+                
+            torch.save({
+                'model_state_dict': seg_state,
+                'optimizer_state_dict': optim.state_dict(),
+                'scheduler_state_dict': lr_schdr.state_dict(),
+            }, seg_save_pth)
 
             if use_dataset_aux_head and i < aux_iter:
                 eval_model_func = eval_model_aux
