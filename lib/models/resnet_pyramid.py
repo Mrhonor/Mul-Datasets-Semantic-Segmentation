@@ -195,11 +195,11 @@ class MulBNBlock(nn.Module):
         self.configer = configer
         self.n_datasets = configer.get("n_datasets")
         self.conv1 = convkxk(inplanes, planes, stride)
-        self.bn1 = nn.ModuleList([nn.ModuleList([bn_class(planes) for _ in range(levels)]) for _ in range(n_datasets)])
+        self.bn1 = nn.ModuleList([nn.ModuleList([bn_class(planes) for _ in range(n_datasets)]) for _ in range(levels)])
         self.relu_inp = nn.ReLU(inplace=True)
         self.relu = nn.ReLU(inplace=False)
         self.conv2 = convkxk(planes, planes)
-        self.bn2 = nn.ModuleList([nn.ModuleList([bn_class(planes) for _ in range(levels)]) for _ in range(n_datasets)])
+        self.bn2 = nn.ModuleList([nn.ModuleList([bn_class(planes) for _ in range(n_datasets)]) for _ in range(levels)])
         self.downsample = downsample
         self.stride = stride
         self.efficient = efficient
@@ -224,7 +224,7 @@ class MulBNBlock(nn.Module):
 
     def _load_from_state_dict(self, state_dict, prefix, local_metadata, strict,
                               missing_keys, unexpected_keys, error_msgs):
-        super(BasicBlock, self)._load_from_state_dict(state_dict, prefix, local_metadata, False, missing_keys,
+        super(MulBNBlock, self)._load_from_state_dict(state_dict, prefix, local_metadata, False, missing_keys,
                                                       unexpected_keys, error_msgs)
         missing_keys = []
         unexpected_keys = []
@@ -400,11 +400,12 @@ class ResNet_mulbn(nn.Module):
     def _make_layer(self, block, planes, blocks, stride=1, bn_class=nn.BatchNorm2d):
         downsample = None
         if stride != 1 or self.inplanes != planes * block.expansion:
-            downsample = nn.Sequential(
-                nn.Conv2d(self.inplanes, planes * block.expansion,
-                          kernel_size=1, stride=stride, bias=False),
-                bn_class(planes * block.expansion),
-            )
+            # downsample = nn.Sequential(
+            #     nn.Conv2d(self.inplanes, planes * block.expansion,
+            #               kernel_size=1, stride=stride, bias=False),
+            #     bn_class(planes * block.expansion),
+            # )
+            downsample = ConvBN(self.inplanes, planes * block.expansion, ks=1, stride=stride, n_bn=self.n_datasets)
 
         layers = []
         layers.append(block(self.inplanes, planes, stride, downsample, self.efficient, bn_class=bn_class,
@@ -423,7 +424,7 @@ class ResNet_mulbn(nn.Module):
         self.n_datasets = self.configer.get("n_datasets")
         self.inplanes = 64
         self.efficient = efficient
-        super(ResNet, self).__init__()
+        super(ResNet_mulbn, self).__init__()
         self.conv1 = nn.Conv2d(3, 64, kernel_size=7, stride=2, padding=3, bias=False)
         bn_class = nn.BatchNorm2d if use_bn else Identity
         # self.register_buffer('img_mean', torch.tensor(mean).view(1, -1, 1, 1))
@@ -438,7 +439,10 @@ class ResNet_mulbn(nn.Module):
         self.align_corners = align_corners
         self.pyramid_subsample = pyramid_subsample
 
-        self.bn1 = nn.ModuleList([bn_class(64) for _ in range(pyramid_levels)])
+        self.bn1 = nn.ModuleList([nn.ModuleList([bn_class(64) for _ in range(self.n_datasets)]) for _ in range(pyramid_levels)])
+        self.affine_weight = nn.Parameter(torch.empty(64))
+        self.affine_bias = nn.Parameter(torch.empty(64))
+        
         self.relu = nn.ReLU(inplace=True)
         self.maxpool = nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
         bottlenecks = []
@@ -492,28 +496,36 @@ class ResNet_mulbn(nn.Module):
     def fine_tune_params(self):
         return chain(*[f.parameters() for f in self.fine_tune])
 
-    def forward_resblock(self, x, layers, idx):
+    def forward_resblock(self, x, layers, idx, dataset_id):
         skip = None
         for l in layers:
-            x = l(x) if not isinstance(l, BasicBlock) else l(x, idx)
+            x = l(x) if not isinstance(l, MulBNBlock) else l(x, idx, dataset_id)
             if isinstance(x, tuple):
                 x, skip = x
         return x, skip
 
-    def forward_down(self, image, skips, idx=-1):
+    def forward_down(self, image, skips, dataset_id, idx=-1):
         x = self.conv1(image)
-        x = self.bn1[idx](x)
+        feat_list = [None] * len(dataset_id)
+        for i in set(dataset_id.cpu.numpy()):
+            feat_ = self.bn[idx][i](x[dataset_id == i])
+            feat_ = feat_ * self.affine_weight.reshape(1,-1,1,1) + self.affine_bias.reshape(1,-1,1,1) 
+            feat_list[dataset_id == i] = feat_
+        feat_list = [feat[None] for feat in feat_list]
+        x = torch.cat(feat_list, dim=0)
+
+        # x = self.bn1[idx](x)
         x = self.relu(x)
         x = self.maxpool(x)
 
         features = []
-        x, skip = self.forward_resblock(x, self.layer1, idx)
+        x, skip = self.forward_resblock(x, self.layer1, idx, dataset_id)
         features += [skip]
-        x, skip = self.forward_resblock(x, self.layer2, idx)
+        x, skip = self.forward_resblock(x, self.layer2, idx, dataset_id)
         features += [skip]
-        x, skip = self.forward_resblock(x, self.layer3, idx)
+        x, skip = self.forward_resblock(x, self.layer3, idx, dataset_id)
         features += [skip]
-        x, skip = self.forward_resblock(x, self.layer4, idx)
+        x, skip = self.forward_resblock(x, self.layer4, idx, dataset_id)
         features += [skip]
 
         skip_feats = [b(f) for b, f in zip(self.upsample_bottlenecks, reversed(features))]
@@ -523,7 +535,7 @@ class ResNet_mulbn(nn.Module):
 
         return skips
 
-    def forward(self, image):
+    def forward(self, image, dataset_id):
         # if isinstance(self.bn1[0], nn.BatchNorm2d):
         #     if hasattr(self, 'img_scale'):
         #         image /= self.img_scale
@@ -541,7 +553,7 @@ class ResNet_mulbn(nn.Module):
         skips = [[] for _ in range(self.num_skip_levels)]
         additional = {'pyramid': pyramid}
         for idx, p in enumerate(pyramid):
-            skips = self.forward_down(p, skips, idx=idx)
+            skips = self.forward_down(p, skips, dataset_id, idx=idx)
         skips = skips[::-1]
         x = skips[0][0]
         if self.detach_upsample_in:
@@ -552,7 +564,7 @@ class ResNet_mulbn(nn.Module):
 
     def _load_from_state_dict(self, state_dict, prefix, local_metadata, strict,
                               missing_keys, unexpected_keys, error_msgs):
-        super(ResNet, self)._load_from_state_dict(state_dict, prefix, local_metadata, strict, missing_keys,
+        super(ResNet_mulbn, self)._load_from_state_dict(state_dict, prefix, local_metadata, strict, missing_keys,
                                                   unexpected_keys, error_msgs)
         for bn in self.bn1:
             bn._load_from_state_dict(state_dict, prefix + 'bn1.', local_metadata, strict, missing_keys, unexpected_keys,
@@ -573,7 +585,7 @@ def resnet18_mulbn(pretrained=True, **kwargs):
     Args:
         pretrained (bool): If True, returns a model pre-trained on ImageNet
     """
-    model = ResNet_mulbn(BasicBlock, [2, 2, 2, 2], **kwargs)
+    model = ResNet_mulbn(MulbNBlock, [2, 2, 2, 2], **kwargs)
     if pretrained:
         model.load_state_dict(model_zoo.load_url(model_urls['resnet18']), strict=False)
     return model

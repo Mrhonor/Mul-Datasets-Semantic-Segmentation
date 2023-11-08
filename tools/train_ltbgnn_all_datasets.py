@@ -94,7 +94,7 @@ def set_model(configer):
         # del state['unify_prototype']
         # for i in range(0, configer.get('n_datasets')):
         #     del state[f'bipartite_graphs.{i}']
-        net.load_state_dict(state, strict=False)
+        net.load_state_dict(state['model_state_dict'], strict=False)
 
         
     if configer.get('use_sync_bn'): 
@@ -332,7 +332,7 @@ def train():
 
     if configer.get('train', 'finetune'):
         state = torch.load(configer.get('train', 'finetune_from'))
-        net.load_state_dict(torch.load(configer.get('train', 'finetune_from'), map_location='cpu'), strict=False)
+        # net.load_state_dict(torch.load(configer.get('train', 'finetune_from'), map_location='cpu'), strict=False)
         if 'optimizer_state_dict' in state.keys():
             optim.load_state_dict(state['optimizer_state_dict'])
         if 'scheduler_state_dict' in state.keys():
@@ -371,7 +371,7 @@ def train():
 
     # bi_graphs = None
     
-    start_i = 10000
+    start_i = 30000
     for i in range(start_i, configer.get('lr','init_iter')):
         configer.plus_one('iter')
 
