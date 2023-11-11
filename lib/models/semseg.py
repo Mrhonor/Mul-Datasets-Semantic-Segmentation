@@ -3,6 +3,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from itertools import chain
 import warnings
+import numpy as np
 
 from lib.module.util import _BNReluConv, upsample
 from lib.models.resnet_pyramid import resnet18, resnet18_mulbn
@@ -12,7 +13,7 @@ class ConvBNReLU(nn.Module):
     def __init__(self, in_chan, out_chan, ks=3, stride=1, padding=1,
                  dilation=1, groups=1, bias=False, n_bn=1):
         ## n_bn bn层数量，对应混合的数据集数量
-        super(ConvBN, self).__init__()
+        super(ConvBNReLU, self).__init__()
         self.conv = nn.Conv2d(
                 in_chan, out_chan, kernel_size=ks, stride=stride,
                 padding=padding, dilation=dilation,
@@ -27,12 +28,13 @@ class ConvBNReLU(nn.Module):
     def forward(self, x, dataset_id):
         feat = self.conv(x)
         feat_list = [None] * len(dataset_id)
-        for i in set(dataset_id.cpu.numpy()):
-            feat_ = self.bn[i](x[dataset_id == i])
+        for i in set(dataset_id.cpu().numpy()):
+            feat_ = self.bn[i](feat[dataset_id == i])
             feat_ = feat_ * self.affine_weight.reshape(1,-1,1,1) + self.affine_bias.reshape(1,-1,1,1) 
-            feat_ = self.relu(feat_)
-            feat_list[dataset_id == i] = feat_
-        feat_list = [feat[None] for feat in feat_list]
+            j = 0
+            for index, val in enumerate(dataset_id):
+                if val == i:
+                    feat_list[index] = feat_[j][None]
         feat = torch.cat(feat_list, dim=0)
         return feat
 
@@ -44,7 +46,7 @@ class SemsegModel_mulbn(nn.Module):
         self.configer = configer
         self.aux_mode = self.configer.get('aux_mode')
         self.n_datasets = configer.get("n_datasets")
-        self.backbone = resnet18_mulbn(pretrained=True,
+        self.backbone = resnet18_mulbn(configer, pretrained=True,
                     pyramid_levels=3,
                     k_upsample=3,
                     k_bneck=1,
@@ -81,6 +83,8 @@ class SemsegModel_mulbn(nn.Module):
         self.img_req_grad = loss_ret_additional
         self.upsample_logits = upsample_logits
         self.multiscale_factors = multiscale_factors
+
+        self.init_weights()
 
     def forward(self, image, dataset_id, dataset=0):
         features, _ = self.backbone(image, dataset_id)
@@ -226,6 +230,27 @@ class SemsegModel_mulbn(nn.Module):
             'weight_decay': self.configer.get('lr', 'weight_decay') / fine_tune_factor},
         ]
         return optim_params
+    
+    def init_weights(self):
+        for name, module in self.named_modules():
+            if isinstance(module, (nn.Conv2d, nn.Linear)):
+                nn.init.kaiming_normal_(module.weight, mode='fan_out')
+                if not module.bias is None: nn.init.constant_(module.bias, 0)
+            # elif isinstance(module, nn.modules.batchnorm._BatchNorm):
+            #     if hasattr(module, 'last_bn') and module.last_bn:
+            #         nn.init.zeros_(module.weight)
+            #     else:
+            #         nn.init.ones_(module.weight)
+            #     nn.init.zeros_(module.bias)
+        for name, param in self.named_parameters():
+            if name.find('affine_weight') != -1:
+                if hasattr(param, 'last_bn') and param.last_bn:
+                    nn.init.zeros_(param)
+                else:
+                    nn.init.ones_(param)
+            elif name.find('affine_bias') != -1:
+                nn.init.zeros_(param)
+                    
     
     
     
