@@ -371,7 +371,7 @@ def train():
 
     # bi_graphs = None
     
-    start_i = 30000
+    start_i = 310000
     for i in range(start_i, configer.get('lr','init_iter')):
         configer.plus_one('iter')
 

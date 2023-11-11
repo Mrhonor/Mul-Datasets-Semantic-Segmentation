@@ -138,7 +138,7 @@
     "scales": [0.5, 1.0, 2.0],
     "cropsize": [768, 768],
     "finetune": true,
-    "finetune_from": "res/celoss/clip_model_20000.pth",
+    "finetune_from": "res/celoss/clip_model_310000.pth",
     "graph_finetune": false,
     "graph_finetune_from": "res/celoss/train6_12u_graph_model_100000.pth",
     "seg_iters": 100000,
