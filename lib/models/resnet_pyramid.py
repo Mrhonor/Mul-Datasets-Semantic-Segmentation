@@ -209,19 +209,19 @@ class MulBNBlock(nn.Module):
         self.efficient = efficient
         self.num_levels = levels
                 
-        self.affine_weight1 = nn.Parameter(torch.empty(planes))
-        self.affine_bias1 = nn.Parameter(torch.empty(planes))
+        self.affine_weight1 = nn.ParameterList([nn.Parameter(torch.empty(planes)) for _ in range(levels)])
+        self.affine_bias1 = nn.ParameterList([nn.Parameter(torch.empty(planes)) for _ in range(levels)])
                 
-        self.affine_weight2 = nn.Parameter(torch.empty(planes))
-        self.affine_bias2 = nn.Parameter(torch.empty(planes))
+        self.affine_weight2 = nn.ParameterList([nn.Parameter(torch.empty(planes)) for _ in range(levels)])
+        self.affine_bias2 = nn.ParameterList([nn.Parameter(torch.empty(planes)) for _ in range(levels)])
 
         
 
     def forward(self, x, level, dataset_id):
         residual = x
 
-        bn_1 = _mulbn_function_factory(self.conv1, self.bn1[level], self.affine_weight1, self.affine_bias1, self.relu_inp)
-        bn_2 = _mulbn_function_factory(self.conv2, self.bn2[level], self.affine_weight2, self.affine_bias2)
+        bn_1 = _mulbn_function_factory(self.conv1, self.bn1[level], self.affine_weight1[level], self.affine_bias1[level], self.relu_inp)
+        bn_2 = _mulbn_function_factory(self.conv2, self.bn2[level], self.affine_weight2[level], self.affine_bias2[level])
 
         out = do_efficient_fwd_mulbn(bn_1, x, self.efficient, dataset_id)
         out = do_efficient_fwd_mulbn(bn_2, out, self.efficient, dataset_id)
@@ -451,8 +451,8 @@ class ResNet_mulbn(nn.Module):
         self.pyramid_subsample = pyramid_subsample
 
         self.bn1 = nn.ModuleList([nn.ModuleList([bn_class(64, affine=False) for _ in range(self.n_datasets)]) for _ in range(pyramid_levels)])
-        self.affine_weight = nn.Parameter(torch.empty(64))
-        self.affine_bias = nn.Parameter(torch.empty(64))
+        self.affine_weight = nn.ParameterList([nn.Parameter(torch.empty(64)) for _ in range(pyramid_levels)])
+        self.affine_bias = nn.ParameterList([nn.Parameter(torch.empty(64)) for _ in range(pyramid_levels)])
         
         self.relu = nn.ReLU(inplace=True)
         self.maxpool = nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
@@ -525,7 +525,7 @@ class ResNet_mulbn(nn.Module):
         feat_list = [None] * len(dataset_id)
         for i in set(dataset_id.cpu().numpy()):
             feat_ = self.bn1[idx][i](x[dataset_id == i])
-            feat_ = feat_ * self.affine_weight.reshape(1,-1,1,1) + self.affine_bias.reshape(1,-1,1,1) 
+            feat_ = feat_ * self.affine_weight[idx].reshape(1,-1,1,1) + self.affine_bias[idx].reshape(1,-1,1,1) 
             j = 0
             for index, val in enumerate(dataset_id):
                 if val == i:
