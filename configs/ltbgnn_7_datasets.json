@@ -31,7 +31,7 @@
     "with_orth": true,
     "orth_weight": 10,
     "mse_or_adv": "None",
-    "ema_graph": false,
+    "ema_graph": true,
     "ema_graph_rate": 0.999    
   },
   "dataset1": {
@@ -131,7 +131,7 @@
     "weight_decay": 1e-5,
     "warmup_iters": 4000,
     "fix_param_iters": 0,
-    "max_iter": 0,
+    "max_iter": 200000,
     "init_iter": 0
   },
   "train": {

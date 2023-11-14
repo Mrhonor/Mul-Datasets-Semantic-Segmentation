@@ -27,16 +27,20 @@ class ConvBNReLU(nn.Module):
 
     def forward(self, x, dataset_id):
         feat = self.conv(x)
-        feat_list = [None] * len(dataset_id)
-        for i in set(dataset_id.cpu().numpy()):
-            feat_ = self.bn[i](feat[dataset_id == i])
-            feat_ = feat_ * self.affine_weight.reshape(1,-1,1,1) + self.affine_bias.reshape(1,-1,1,1) 
-            j = 0
-            for index, val in enumerate(dataset_id):
-                if val == i:
-                    feat_list[index] = feat_[j][None]
+        feat_list = []
+        cur_pos = 0
+        for i in range(0, len(dataset_id)):
+            if dataset_id[i] != dataset_id[cur_pos]:
+                feat_ = self.bn[dataset_id[cur_pos]](feat[cur_pos:i])
+                feat_list.append(feat_)
+                cur_pos = i
+        feat_ = self.bn[dataset_id[cur_pos]](feat[cur_pos:])
+        feat_list.append(feat_)
         feat = torch.cat(feat_list, dim=0)
+        feat = feat * self.affine_weight.reshape(1,-1,1,1) + self.affine_bias.reshape(1,-1,1,1) 
+        feat = self.relu(feat)
         return feat
+
 
 class SemsegModel_mulbn(nn.Module):
     def __init__(self, configer, num_inst_classes=None, use_bn=True, k=1, bias=True,
@@ -175,7 +179,7 @@ class SemsegModel_mulbn(nn.Module):
         return self.criterion(logits, labels, batch=batch, additional=additional)
 
     def random_init_params(self):
-        params = [self.backbone.random_init_params()]
+        params = [self.backbone.random_init_params(), self.logits.parameters()]
         if self.unify_prototype.require_grad:
             return params.append(self.unify_prototype)        
         # self.logits.parameters(), 

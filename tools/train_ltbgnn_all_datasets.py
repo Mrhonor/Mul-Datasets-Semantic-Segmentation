@@ -28,7 +28,7 @@ from lib.loss.loss_cross_datasets import CrossDatasetsLoss, CrossDatasetsCELoss,
 from lib.class_remap import ClassRemap
 
 from tools.configer import Configer
-from evaluate import eval_model_contrast, eval_model_aux, eval_model, eval_model_contrast_single
+from evaluate import eval_model_contrast, eval_model_aux, eval_model, eval_model_contrast_single, eval_model_mulbn
 
 from tensorboardX import SummaryWriter
 
@@ -287,19 +287,19 @@ def train():
     ## model
     net = set_model(configer=configer)
     graph_net = set_graph_model(configer=configer)
-    # if configer.get('lr', 'init_iter') > 0:
-    #     text_feature_vecs = []
-    #     with torch.no_grad():
-    #         clip_model, _ = clip.load("ViT-B/32", device="cuda")
-    #         for i in range(0, n_datasets):
-    #             lb_name = configer.get("dataset"+str(i+1), "label_names")
-    #             lb_name = [f'a photo of {name} from dataset {i+1}.' for name in lb_name]
-    #             text = clip.tokenize(lb_name).cuda()
-    #             text_features = clip_model.encode_text(text).type(torch.float32)
-    #             text_feature_vecs.append(text_features)
+    if configer.get('lr', 'init_iter') > 0:
+        text_feature_vecs = []
+        with torch.no_grad():
+            clip_model, _ = clip.load("ViT-B/32", device="cuda")
+            for i in range(0, n_datasets):
+                lb_name = configer.get("dataset"+str(i+1), "label_names")
+                lb_name = [f'a photo of {name} from dataset {i+1}.' for name in lb_name]
+                text = clip.tokenize(lb_name).cuda()
+                text_features = clip_model.encode_text(text).type(torch.float32)
+                text_feature_vecs.append(text_features)
                 
-    #     text_feature_vecs = torch.cat(text_feature_vecs, dim=0)
-    #     net.set_unify_prototype(text_feature_vecs, False)
+        text_feature_vecs = torch.cat(text_feature_vecs, dim=0)
+        net.set_unify_prototype(text_feature_vecs, False)
     
     if use_ema:
         ema_net = set_ema_model(configer=configer)
@@ -489,11 +489,7 @@ def train():
                 'scheduler_state_dict': lr_schdr.state_dict(),
             }, seg_save_pth)
 
-            if use_dataset_aux_head and i < aux_iter:
-                eval_model_func = eval_model_aux
-            else:
-                # eval_model = eval_model_contrast
-                eval_model_func = eval_model_contrast
+            eval_model_func = eval_model_mulbn
 
             optim.zero_grad()
             if is_distributed():
@@ -780,7 +776,17 @@ def train():
                     with torch.no_grad():
                         seg_out = net(im)
 
-                unify_prototype, bi_graphs, adv_out, _ = graph_net(graph_node_features)
+                new_unify_prototype, bi_graphs, adv_out, _ = graph_net(graph_node_features)
+                if unify_prototype == None:
+                    if is_distributed():
+                        net_proto = net.module.unify_prototype.detach()
+                    else:
+                        net_proto = net.unify_prototype.detach()    
+                    
+                    unify_prototype = configer.get("GNN", "ema_graph_rate") * net_proto + (1 - configer.get("GNN", "ema_graph_rate")) * new_unify_prototype
+                else:
+                    unify_prototype = configer.get("GNN", "ema_graph_rate") * unify_prototype.detach() + (1 - configer.get("GNN", "ema_graph_rate")) * new_unify_prototype
+                    
 
                 # if configer.get("GNN", "ema_graph") == True:
                 #     if len(new_bi_graphs) == 2*len(bi_graphs):
