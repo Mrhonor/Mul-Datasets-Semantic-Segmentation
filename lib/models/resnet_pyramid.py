@@ -37,18 +37,34 @@ class ConvBN(nn.Module):
         
 
     def forward(self, x, dataset_id):
-        ## TODO 此处可以优化，不同数据集的图像过卷积层可以拼接到一起，过BN层再分离
         feat = self.conv(x)
-        feat_list = [None] * len(dataset_id)
-        for i in set(dataset_id.cpu().numpy()):
-            feat_ = self.bn[i](feat[dataset_id == i])
-            feat_ = feat_ * self.affine_weight.reshape(1,-1,1,1) + self.affine_bias.reshape(1,-1,1,1) 
-            j = 0
-            for index, val in enumerate(dataset_id):
-                if val == i:
-                    feat_list[index] = feat_[j][None]
+        feat_list = []
+        cur_pos = 0
+        for i in range(0, len(dataset_id)):
+            if dataset_id[i] != dataset_id[cur_pos]:
+                feat_ = self.bn[dataset_id[cur_pos]](feat[cur_pos:i])
+                feat_list.append(feat_)
+                cur_pos = i
+        feat_ = self.bn[dataset_id[cur_pos]](feat[cur_pos:])
+        feat_list.append(feat_)
         feat = torch.cat(feat_list, dim=0)
+        feat = feat * self.affine_weight.reshape(1,-1,1,1) + self.affine_bias.reshape(1,-1,1,1) 
         return feat
+        
+
+        
+        ## TODO 此处可以优化，不同数据集的图像过卷积层可以拼接到一起，过BN层再分离
+        # feat = self.conv(x)
+        # feat_list = [None] * len(dataset_id)
+        # for i in set(dataset_id.cpu().numpy()):
+        #     feat_ = self.bn[i](feat[dataset_id == i])
+        #     feat_ = feat_ * self.affine_weight.reshape(1,-1,1,1) + self.affine_bias.reshape(1,-1,1,1) 
+        #     j = 0
+        #     for index, val in enumerate(dataset_id):
+        #         if val == i:
+        #             feat_list[index] = feat_[j][None]
+        # feat = torch.cat(feat_list, dim=0)
+        # return feat
         
         # if len(other_x) != 0:
         #     batch_size = [x.shape[0]]
@@ -100,16 +116,17 @@ def _bn_function_factory(conv, norm, relu=None):
 def _mulbn_function_factory(conv, norm, affine_weight, affine_bias, relu=None):
     def bn_function(x, dataset_id):
         feat = conv(x)
-        feat_list = [None] * len(dataset_id)
-        for i in set(dataset_id.cpu().numpy()):
-            feat_ = norm[i](feat[dataset_id == i])
-            feat_ = feat_ * affine_weight.reshape(1,-1,1,1) + affine_bias.reshape(1,-1,1,1) 
-            j = 0
-            for index, val in enumerate(dataset_id):
-                if val == i:
-                    feat_list[index] = feat_[j][None]
+        feat_list = []
+        cur_pos = 0
+        for i in range(0, len(dataset_id)):
+            if dataset_id[i] != dataset_id[cur_pos]:
+                feat_ = norm[dataset_id[cur_pos]](feat[cur_pos:i])
+                feat_list.append(feat_)
+                cur_pos = i
+        feat_ = norm[dataset_id[cur_pos]](feat[cur_pos:])
+        feat_list.append(feat_)
         feat = torch.cat(feat_list, dim=0)
-        
+        feat = feat * affine_weight.reshape(1,-1,1,1) + affine_bias.reshape(1,-1,1,1) 
         return feat
         
         # x = norm(conv(x))
@@ -128,11 +145,11 @@ def do_efficient_fwd(block, x, efficient):
         return block(x)
     
 def do_efficient_fwd_mulbn(block, x, efficient, dataset_id):
-    # # return block(x)
-    # if efficient and x.requires_grad:
-    #     return cp.checkpoint(block, x, dataset_id)
-    # else:
-    return block(x, dataset_id)
+    # return block(x)
+    if efficient and x.requires_grad:
+        return cp.checkpoint(block, x, dataset_id)
+    else:
+        return block(x, dataset_id)
 
 
 class Identity(nn.Module):
@@ -490,7 +507,7 @@ class ResNet_mulbn(nn.Module):
              for i, ts in enumerate(target_sizes)])
         self.detach_upsample_in = detach_upsample_in
 
-        self.random_init = [self.upsample_bottlenecks, self.upsample_blends]
+        self.random_init = [self.upsample_bottlenecks, self.upsample_blends, self.affine_weight, self.affine_bias]
 
         self.features = num_features
 
@@ -521,19 +538,31 @@ class ResNet_mulbn(nn.Module):
         return x, skip
 
     def forward_down(self, image, skips, dataset_id, idx=-1):
-        x = self.conv1(image)
-        feat_list = [None] * len(dataset_id)
-        for i in set(dataset_id.cpu().numpy()):
-            feat_ = self.bn1[idx][i](x[dataset_id == i])
-            feat_ = feat_ * self.affine_weight[idx].reshape(1,-1,1,1) + self.affine_bias[idx].reshape(1,-1,1,1) 
-            j = 0
-            for index, val in enumerate(dataset_id):
-                if val == i:
-                    feat_list[index] = feat_[j][None]
+        # x = self.conv1(image)
+        # feat_list = [None] * len(dataset_id)
+        # for i in set(dataset_id.cpu().numpy()):
+        #     feat_ = self.bn1[idx][i](x[dataset_id == i])
+        #     feat_ = feat_ * self.affine_weight[idx].reshape(1,-1,1,1) + self.affine_bias[idx].reshape(1,-1,1,1) 
+        #     j = 0
+        #     for index, val in enumerate(dataset_id):
+        #         if val == i:
+        #             feat_list[index] = feat_[j][None]
+        # feat = torch.cat(feat_list, dim=0)
+        feat = self.conv1(image)
+        feat_list = []
+        cur_pos = 0
+        for i in range(0, len(dataset_id)):
+            if dataset_id[i] != dataset_id[cur_pos]:
+                feat_ = self.bn1[idx][dataset_id[cur_pos]](feat[cur_pos:i])
+                feat_list.append(feat_)
+                cur_pos = i
+        feat_ = self.bn1[idx][dataset_id[cur_pos]](feat[cur_pos:])
+        feat_list.append(feat_)
         feat = torch.cat(feat_list, dim=0)
+        feat = feat * self.affine_weight[idx].reshape(1,-1,1,1) + self.affine_bias[idx].reshape(1,-1,1,1) 
 
         # x = self.bn1[idx](x)
-        x = self.relu(x)
+        x = self.relu(feat)
         x = self.maxpool(x)
 
         features = []

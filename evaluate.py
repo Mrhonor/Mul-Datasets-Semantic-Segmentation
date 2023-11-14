@@ -141,7 +141,6 @@ class MscEvalV0_Contrast(object):
 
                 im_sc = im_sc.cuda()
                 
-                # logits = net(im_sc, dataset_id * torch.ones(N, dtype=torch.long), dataset=dataset_id)
                 logits = net(im_sc, dataset=dataset_id)
                 N, _, lH, lW = logits.shape
                 if self.ori_scales:
@@ -168,29 +167,6 @@ class MscEvalV0_Contrast(object):
                             mode='bilinear', align_corners=True)
                     probs += torch.softmax(logits, dim=1)
             preds = torch.argmax(probs, dim=1)
-            # print("pred before:",torch.max(preds))
-
-            # print(preds)
-            # break
-            # preds[preds==0] = 95
-            # preds = self.lb_map[preds]
-            # preds[preds == 255] = 0
-            # print("pred:",torch.max(preds))
-            # label[label == 255] = 0
-            # print("label:",torch.max(label))
-            # print("label min:",torch.min(label))
-            
-
-            # one_hot = F.one_hot(preds, num_classes=150).float()
-            # bi_part = torch.load('../ade_to_ade_relabel.pt').cuda()
-            # re = torch.einsum('abcd,de->abce', one_hot, bi_part)
-            # preds = torch.argmax(re, dim=-1)
-            
-
-
-            # if dataset_id == CAM_ID:
-                # CityScapes数据集一一对应不需要逆映射
-            # preds = self.class_Remaper.ReverseSegRemap(preds, dataset_id)
 
             keep = label != self.ignore_label
             
@@ -212,6 +188,97 @@ class MscEvalV0_Contrast(object):
         miou = np.nanmean(ious.detach().cpu().numpy())
         return miou.item()
 
+class MscEvalV0_mulbn(object):
+
+    def __init__(self, configer, scales=(0.5, ), flip=False, ignore_label=255, ori_scales=False):
+        self.configer = configer
+        # self.num_unify_classes = self.configer.get('num_unify_classes')
+        # self.class_Remaper = ClassRemap(configer=self.configer)
+        self.scales = scales
+        self.flip = flip
+        self.ignore_label = ignore_label
+        self.ori_scales = ori_scales
+
+        # self.lb_map = torch.tensor(np.load('mapi_relabel.npy')).cuda()
+        # print(self.lb_map)
+
+    def __call__(self, net, dl, n_classes, dataset_id):
+        # n_classes = 43
+        ## evaluate
+        hist = torch.zeros(n_classes, n_classes).cuda().detach()
+        # hist = torch.zeros(118, 118).cuda().detach()
+        if dist.is_initialized() and dist.get_rank() != 0:
+            diter = enumerate(dl)
+        else:
+            diter = enumerate(tqdm(dl))
+        for i, (imgs, label) in diter:
+            N, _, H, W = label.shape
+
+            label = label.squeeze(1).cuda()
+            size = label.size()[-2:]
+            # probs = torch.zeros(
+            #         (N, self.num_unify_classes, H, W), dtype=torch.float32).cuda().detach()
+            probs = None
+            # probs = torch.zeros(
+            #         (N, 150, H, W), dtype=torch.float32).cuda().detach()
+
+
+            for scale in self.scales:
+
+                
+                sH, sW = int(scale * H), int(scale * W)
+                sH, sW = get_round_size((sH, sW))
+                im_sc = F.interpolate(imgs, size=(sH, sW),
+                        mode='bilinear', align_corners=True)
+
+                im_sc = im_sc.cuda()
+                
+                logits = net(im_sc, dataset_id * torch.ones(N, dtype=torch.long), dataset=dataset_id)
+                N, _, lH, lW = logits.shape
+                if self.ori_scales:
+                    logits = F.interpolate(logits, size=size,
+                            mode='bilinear', align_corners=True)
+                    if probs is None:
+                        probs = torch.zeros(
+                            (N, n_classes, H, W), dtype=torch.float32).cuda().detach()
+                else:
+                    label = F.interpolate(label.float().unsqueeze(1), size=(lH, lW),
+                            mode='nearest').squeeze(1).long()
+                    if probs is None:
+                        probs = torch.zeros(
+                            (N, n_classes, lH, lW), dtype=torch.float32).cuda().detach()
+                    # label = F.interpolate()
+                
+
+                probs += torch.softmax(logits, dim=1)
+                if self.flip:
+                    im_sc = torch.flip(im_sc, dims=(3, ))
+                    logits = net(im_sc, dataset=dataset_id)
+                    logits = torch.flip(logits, dims=(3, ))
+                    logits = F.interpolate(logits, size=size,
+                            mode='bilinear', align_corners=True)
+                    probs += torch.softmax(logits, dim=1)
+            preds = torch.argmax(probs, dim=1)
+
+            keep = label != self.ignore_label
+            
+            # print(np.max(label.cpu().numpy()[keep.cpu().numpy()]))
+
+            hist += torch.tensor(np.bincount(
+                label.cpu().numpy()[keep.cpu().numpy()] * n_classes + preds.cpu().numpy()[keep.cpu().numpy()],
+                minlength=n_classes ** 2
+            )).cuda().view(n_classes, n_classes)
+            # hist += torch.tensor(np.bincount(
+            #     label.cpu().numpy()[keep.cpu().numpy()] * 118 + preds.cpu().numpy()[keep.cpu().numpy()],
+            #     minlength=118 ** 2
+            # )).cuda().view(118, 118)
+                
+        if dist.is_initialized():
+            dist.all_reduce(hist, dist.ReduceOp.SUM)
+        ious = hist.diag() / (hist.sum(dim=0) + hist.sum(dim=1) - hist.diag())
+        print(ious)
+        miou = np.nanmean(ious.detach().cpu().numpy())
+        return miou.item()
 
 class MscEvalV0_AutoLink(object):
 
@@ -759,6 +826,45 @@ def eval_model_contrast(configer, net):
     logger = logging.getLogger()
 
     single_scale = MscEvalV0_Contrast(configer, (0.5, ), False)
+    
+    for i in range(0, configer.get('n_datasets')):
+        # mIOU = single_scale(net, dls[i], configer.get('dataset'+str(i+1), "eval_cats"), i)
+        mIOU = single_scale(net, dls[i], configer.get('dataset'+str(i+1), "n_cats"), i)
+        mious.append(mIOU)
+    
+
+    heads.append('single_scale')
+    # mious.append(mIOU_cam)
+    # mious.append(mIOU_city)
+    # mious.append(mIOU_a2d2)
+    # logger.info('Cam single mIOU is: %s\nCityScapes single mIOU is: %s\n A2D2 single mIOU is: %s\n', mIOU_cam, mIOU_city, mIOU_a2d2)
+    # logger.info('Cam single mIOU is: %s\nCityScapes single mIOU is: %s\n', mIOU_cam, mIOU_city)
+
+    net.aux_mode = org_aux
+    return heads, mious
+
+@torch.no_grad()
+def eval_model_mulbn(configer, net):
+    org_aux = net.aux_mode
+    net.aux_mode = 'eval'
+
+    is_dist = dist.is_initialized()
+    
+    # cfg_city = set_cfg_from_file(configer.get('dataset1'))
+    # cfg_cam  = set_cfg_from_file(configer.get('dataset2'))
+
+    n_datasets = configer.get("n_datasets")
+
+    # dl_cam = get_data_loader(cfg_cam, mode='val', distributed=is_dist)
+    dls = get_data_loader(configer, aux_mode='eval', distributed=is_dist)
+    # dl_city = get_data_loader(configer, aux_mode='eval', distributed=is_dist)[0]
+    net.eval()
+    # net.train()
+
+    heads, mious = [], []
+    logger = logging.getLogger()
+
+    single_scale = MscEvalV0_mulbn(configer, (0.5, ), False)
     
     for i in range(0, configer.get('n_datasets')):
         # mIOU = single_scale(net, dls[i], configer.get('dataset'+str(i+1), "eval_cats"), i)
