@@ -287,19 +287,19 @@ def train():
     ## model
     net = set_model(configer=configer)
     graph_net = set_graph_model(configer=configer)
-    # if configer.get('lr', 'init_iter') > 0:
-    #     text_feature_vecs = []
-    #     with torch.no_grad():
-    #         clip_model, _ = clip.load("ViT-B/32", device="cuda")
-    #         for i in range(0, n_datasets):
-    #             lb_name = configer.get("dataset"+str(i+1), "label_names")
-    #             lb_name = [f'a photo of {name} from dataset {i+1}.' for name in lb_name]
-    #             text = clip.tokenize(lb_name).cuda()
-    #             text_features = clip_model.encode_text(text).type(torch.float32)
-    #             text_feature_vecs.append(text_features)
+    if configer.get('lr', 'init_iter') > 0:
+        text_feature_vecs = []
+        with torch.no_grad():
+            clip_model, _ = clip.load("ViT-B/32", device="cuda")
+            for i in range(0, n_datasets):
+                lb_name = configer.get("dataset"+str(i+1), "label_names")
+                lb_name = [f'a photo of {name} from dataset {i+1}.' for name in lb_name]
+                text = clip.tokenize(lb_name).cuda()
+                text_features = clip_model.encode_text(text).type(torch.float32)
+                text_feature_vecs.append(text_features)
                 
-    #     text_feature_vecs = torch.cat(text_feature_vecs, dim=0)
-    #     net.set_unify_prototype(text_feature_vecs, False)
+        text_feature_vecs = torch.cat(text_feature_vecs, dim=0)
+        net.set_unify_prototype(text_feature_vecs, False)
     
     if use_ema:
         ema_net = set_ema_model(configer=configer)
@@ -309,15 +309,15 @@ def train():
     
     ## optimizer
     optim = set_optimizer(net, configer, configer.get('lr', 'seg_lr_start'))
-    gnn_optim = set_optimizer(graph_net, configer, configer.get('lr', 'gnn_lr_start'))
-    if mse_or_adv == 'adv':
-        gnn_optimD = set_optimizerD(graph_net, configer, configer.get('lr', 'gnn_lr_start'))
+    # gnn_optim = set_optimizer(graph_net, configer, configer.get('lr', 'gnn_lr_start'))
+    # if mse_or_adv == 'adv':
+    #     gnn_optimD = set_optimizerD(graph_net, configer, configer.get('lr', 'gnn_lr_start'))
 
     ## mixed precision training
     scaler = amp.GradScaler()
 
-    ori_graph_node_features = gen_graph_node_feature(configer)
-    graph_node_features = ori_graph_node_features.cuda()
+    # ori_graph_node_features = gen_graph_node_feature(configer)
+    # graph_node_features = ori_graph_node_features.cuda()
 
     ## meters
     time_meter, loss_meter, loss_pre_meter, loss_aux_meters, loss_contrast_meter, loss_domain_meter, kl_loss_meter = set_meters(configer)
@@ -378,10 +378,10 @@ def train():
     start_i = 0
     for i in range(start_i, configer.get('lr','init_iter')):
         configer.plus_one('iter')
+        # print("1")
 
-        ims = []
-        lbs = []    
         for j in range(0,len(dl_iters)):
+
             try:
                 im, lb = next(dl_iters[j])
                 if not im.size()[0] == configer.get('dataset'+str(j+1), 'ims_per_gpu'):
@@ -401,66 +401,66 @@ def train():
                     im, lb = next(dl_iters[j])
                     
             
-            ims.append(im)
-            lbs.append(lb)
+
+                    
+            # im = torch.cat(ims, dim=0)
+            # lb = torch.cat(lbs, dim=0)
+
+            im = im.cuda()
+            lb = lb.cuda()
+
+            dataset_lbs = j*torch.ones(lb.shape[0], dtype=torch.int)
+            dataset_lbs = dataset_lbs.cuda()
+            # print(dataset_lbs)
+
+            lb = torch.squeeze(lb, 1)
+
+            # net.eval()
+            # with torch.no_grad():
+            #     seg_out = net(im)
+
+            optim.zero_grad()
+            with amp.autocast(enabled=configer.get('use_fp16')):
+                ## 修改为多数据集模式
                 
-        im = torch.cat(ims, dim=0)
-        lb = torch.cat(lbs, dim=0)
-
-        im = im.cuda()
-        lb = lb.cuda()
-
-        dataset_lbs = torch.cat([i*torch.ones(this_lb.shape[0], dtype=torch.int) for i,this_lb in enumerate(lbs)], dim=0)
-        dataset_lbs = dataset_lbs.cuda()
-        # print(dataset_lbs)
-
-        lb = torch.squeeze(lb, 1)
-
-        # net.eval()
-        # with torch.no_grad():
-        #     seg_out = net(im)
-
-        optim.zero_grad()
-        with amp.autocast(enabled=configer.get('use_fp16')):
-            ## 修改为多数据集模式
-            
-            if train_aux:
-                train_aux = False
-                if is_distributed():
-                    net.module.set_train_dataset_aux(False)
-                else:
-                    net.set_train_dataset_aux(False)    
-            
-
-            seg_out = {}
-            is_adv = False
-            adv_out = None
-            net.train()
-
-            seg_out = net(im, dataset_lbs)
-            seg_out['unify_prototype'] = None
-            
-            seg_out['bi_graphs'] = bi_graphs
-            seg_out['adv_out'] = adv_out
+                if train_aux:
+                    train_aux = False
+                    if is_distributed():
+                        net.module.set_train_dataset_aux(False)
+                    else:
+                        net.set_train_dataset_aux(False)    
                 
-            backward_loss, adv_loss = contrast_losses(seg_out, lb, dataset_lbs, is_adv, False)
+
+                seg_out = {}
+                is_adv = False
+                adv_out = None
+                net.train()
+
+                seg_out = net(im, dataset_lbs)
+                seg_out['unify_prototype'] = None
+                
+                seg_out['bi_graphs'] = bi_graphs
+                seg_out['adv_out'] = adv_out
+                    
+                backward_loss, adv_loss = contrast_losses(seg_out, lb, dataset_lbs, is_adv, False)
+                # print(backward_loss)
+                kl_loss = None
+                loss_seg = backward_loss
+                loss_aux = None
+
+            scaler.scale(backward_loss).backward()
             # print(backward_loss)
-            kl_loss = None
-            loss_seg = backward_loss
-            loss_aux = None
-
-        scaler.scale(backward_loss).backward()
-        # print(backward_loss)
-        scaler.step(optim)
-        
-        scaler.update()
-        torch.cuda.synchronize()       
+            scaler.step(optim)
+            
+            scaler.update()
+            torch.cuda.synchronize()       
 
 
-        # print('synchronize')
-        time_meter.update()
-        loss_meter.update(backward_loss.item())
-    
+            # print('synchronize')
+            time_meter.update()
+            loss_meter.update(backward_loss.item())
+            lr_schdr.step()
+            
         ## print training log message
         if (i + 1) % 100 == 0:
             # writer.add_scalars("loss",{"seg":loss_pre_meter.getWoErase(),"contrast":loss_contrast_meter.getWoErase(), "domain":loss_domain_meter.getWoErase()},configer.get("iter")+1)
@@ -518,7 +518,7 @@ def train():
                 net.aux_mode = 'train'
         
             
-        lr_schdr.step()
+            
 
 
     

@@ -6,6 +6,7 @@ from itertools import chain
 import torch.utils.checkpoint as cp
 from collections import defaultdict
 from math import log2
+import numpy as np
 
 from lib.module.util import _UpsampleBlend
 
@@ -39,11 +40,13 @@ class ConvBN(nn.Module):
         ## TODO 此处可以优化，不同数据集的图像过卷积层可以拼接到一起，过BN层再分离
         feat = self.conv(x)
         feat_list = [None] * len(dataset_id)
-        for i in set(dataset_id.cpu.numpy()):
-            feat_ = self.bn[i](x[dataset_id == i])
+        for i in set(dataset_id.cpu().numpy()):
+            feat_ = self.bn[i](feat[dataset_id == i])
             feat_ = feat_ * self.affine_weight.reshape(1,-1,1,1) + self.affine_bias.reshape(1,-1,1,1) 
-            feat_list[dataset_id == i] = feat_
-        feat_list = [feat[None] for feat in feat_list]
+            j = 0
+            for index, val in enumerate(dataset_id):
+                if val == i:
+                    feat_list[index] = feat_[j][None]
         feat = torch.cat(feat_list, dim=0)
         return feat
         
@@ -98,14 +101,13 @@ def _mulbn_function_factory(conv, norm, affine_weight, affine_bias, relu=None):
     def bn_function(x, dataset_id):
         feat = conv(x)
         feat_list = [None] * len(dataset_id)
-        for i in set(dataset_id.cpu.numpy()):
-            feat_ = norm[i](x[dataset_id == i])
+        for i in set(dataset_id.cpu().numpy()):
+            feat_ = norm[i](feat[dataset_id == i])
             feat_ = feat_ * affine_weight.reshape(1,-1,1,1) + affine_bias.reshape(1,-1,1,1) 
-            if relu is not None:
-                feat_ = relu(feat_)
-            
-            feat_list[dataset_id == i] = feat_
-        feat_list = [feat[None] for feat in feat_list]
+            j = 0
+            for index, val in enumerate(dataset_id):
+                if val == i:
+                    feat_list[index] = feat_[j][None]
         feat = torch.cat(feat_list, dim=0)
         
         return feat
@@ -126,11 +128,11 @@ def do_efficient_fwd(block, x, efficient):
         return block(x)
     
 def do_efficient_fwd_mulbn(block, x, efficient, dataset_id):
-    # return block(x)
-    if efficient and x.requires_grad:
-        return cp.checkpoint(block, x, dataset_id)
-    else:
-        return block(x, dataset_id)
+    # # return block(x)
+    # if efficient and x.requires_grad:
+    #     return cp.checkpoint(block, x, dataset_id)
+    # else:
+    return block(x, dataset_id)
 
 
 class Identity(nn.Module):
@@ -195,28 +197,37 @@ class MulBNBlock(nn.Module):
         self.configer = configer
         self.n_datasets = configer.get("n_datasets")
         self.conv1 = convkxk(inplanes, planes, stride)
-        self.bn1 = nn.ModuleList([nn.ModuleList([bn_class(planes) for _ in range(n_datasets)]) for _ in range(levels)])
+        # print('inplanes:', inplanes)
+        # print('planes:', planes)
+        self.bn1 = nn.ModuleList([nn.ModuleList([bn_class(planes, affine=False) for _ in range(self.n_datasets)]) for _ in range(levels)])
         self.relu_inp = nn.ReLU(inplace=True)
         self.relu = nn.ReLU(inplace=False)
         self.conv2 = convkxk(planes, planes)
-        self.bn2 = nn.ModuleList([nn.ModuleList([bn_class(planes) for _ in range(n_datasets)]) for _ in range(levels)])
+        self.bn2 = nn.ModuleList([nn.ModuleList([bn_class(planes, affine=False) for _ in range(self.n_datasets)]) for _ in range(levels)])
         self.downsample = downsample
         self.stride = stride
         self.efficient = efficient
         self.num_levels = levels
+                
+        self.affine_weight1 = nn.Parameter(torch.empty(planes))
+        self.affine_bias1 = nn.Parameter(torch.empty(planes))
+                
+        self.affine_weight2 = nn.Parameter(torch.empty(planes))
+        self.affine_bias2 = nn.Parameter(torch.empty(planes))
+
+        
 
     def forward(self, x, level, dataset_id):
         residual = x
 
-        bn_1 = _mulbn_function_factory(self.conv1, self.bn1[level], self.relu_inp)
-        bn_2 = _mulbn_function_factory(self.conv2, self.bn2[level])
+        bn_1 = _mulbn_function_factory(self.conv1, self.bn1[level], self.affine_weight1, self.affine_bias1, self.relu_inp)
+        bn_2 = _mulbn_function_factory(self.conv2, self.bn2[level], self.affine_weight2, self.affine_bias2)
 
         out = do_efficient_fwd_mulbn(bn_1, x, self.efficient, dataset_id)
         out = do_efficient_fwd_mulbn(bn_2, out, self.efficient, dataset_id)
 
         if self.downsample is not None:
             residual = self.downsample(x, dataset_id)
-
         out += residual
         relu = self.relu(out)
 
@@ -405,14 +416,14 @@ class ResNet_mulbn(nn.Module):
             #               kernel_size=1, stride=stride, bias=False),
             #     bn_class(planes * block.expansion),
             # )
-            downsample = ConvBN(self.inplanes, planes * block.expansion, ks=1, stride=stride, n_bn=self.n_datasets)
+            downsample = ConvBN(self.inplanes, planes * block.expansion, ks=1, stride=stride, padding=0, n_bn=self.n_datasets)
 
         layers = []
-        layers.append(block(self.inplanes, planes, stride, downsample, self.efficient, bn_class=bn_class,
+        layers.append(block(self.configer, self.inplanes, planes, stride, downsample, self.efficient, bn_class=bn_class,
                             levels=self.pyramid_levels))
         self.inplanes = planes * block.expansion
         for i in range(1, blocks):
-            layers.append(block(self.inplanes, planes, bn_class=bn_class, levels=self.pyramid_levels, efficient=self.efficient))
+            layers.append(block(self.configer, self.inplanes, planes, bn_class=bn_class, levels=self.pyramid_levels, efficient=self.efficient))
 
         return nn.Sequential(*layers)
 
@@ -439,7 +450,7 @@ class ResNet_mulbn(nn.Module):
         self.align_corners = align_corners
         self.pyramid_subsample = pyramid_subsample
 
-        self.bn1 = nn.ModuleList([nn.ModuleList([bn_class(64) for _ in range(self.n_datasets)]) for _ in range(pyramid_levels)])
+        self.bn1 = nn.ModuleList([nn.ModuleList([bn_class(64, affine=False) for _ in range(self.n_datasets)]) for _ in range(pyramid_levels)])
         self.affine_weight = nn.Parameter(torch.empty(64))
         self.affine_bias = nn.Parameter(torch.empty(64))
         
@@ -486,9 +497,14 @@ class ResNet_mulbn(nn.Module):
         for m in self.modules():
             if isinstance(m, nn.Conv2d):
                 nn.init.kaiming_normal_(m.weight, mode='fan_out', nonlinearity='relu')
-            elif isinstance(m, nn.BatchNorm2d):
-                nn.init.constant_(m.weight, 1)
-                nn.init.constant_(m.bias, 0)
+            # elif isinstance(m, nn.BatchNorm2d):
+            #     nn.init.constant_(m.weight, 1)
+            #     nn.init.constant_(m.bias, 0)
+        for name, param in self.named_parameters():
+            if name.find('affine_weight') != -1:
+                nn.init.ones_(param)
+            elif name.find('affine_bias') != -1:
+                nn.init.zeros_(param)
 
     def random_init_params(self):
         return chain(*[f.parameters() for f in self.random_init])
@@ -507,12 +523,14 @@ class ResNet_mulbn(nn.Module):
     def forward_down(self, image, skips, dataset_id, idx=-1):
         x = self.conv1(image)
         feat_list = [None] * len(dataset_id)
-        for i in set(dataset_id.cpu.numpy()):
-            feat_ = self.bn[idx][i](x[dataset_id == i])
+        for i in set(dataset_id.cpu().numpy()):
+            feat_ = self.bn1[idx][i](x[dataset_id == i])
             feat_ = feat_ * self.affine_weight.reshape(1,-1,1,1) + self.affine_bias.reshape(1,-1,1,1) 
-            feat_list[dataset_id == i] = feat_
-        feat_list = [feat[None] for feat in feat_list]
-        x = torch.cat(feat_list, dim=0)
+            j = 0
+            for index, val in enumerate(dataset_id):
+                if val == i:
+                    feat_list[index] = feat_[j][None]
+        feat = torch.cat(feat_list, dim=0)
 
         # x = self.bn1[idx](x)
         x = self.relu(x)
@@ -580,12 +598,12 @@ def resnet18(pretrained=True, **kwargs):
         model.load_state_dict(model_zoo.load_url(model_urls['resnet18']), strict=False)
     return model
 
-def resnet18_mulbn(pretrained=True, **kwargs):
+def resnet18_mulbn(configer, pretrained=True, **kwargs):
     """Constructs a mul-bn ResNet-18 model.
     Args:
         pretrained (bool): If True, returns a model pre-trained on ImageNet
     """
-    model = ResNet_mulbn(MulbNBlock, [2, 2, 2, 2], **kwargs)
+    model = ResNet_mulbn(configer, MulBNBlock, [2, 2, 2, 2], **kwargs)
     if pretrained:
         model.load_state_dict(model_zoo.load_url(model_urls['resnet18']), strict=False)
     return model

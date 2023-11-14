@@ -16,7 +16,7 @@ from lib.class_remap import ClassRemap, ClassRemapOneHotLabel
 from lib.prototype_learning import prototype_learning, KmeansProtoLearning
 from lib.module.kmeans import kmeans
 from einops import rearrange, repeat, einsum
-
+import logging
 
 def LabelToOneHot(LabelVector, nClass, ignore_index=-1):
     
@@ -858,14 +858,14 @@ class CrossDatasetsCELoss_AdvGNN(nn.Module):
             if adv_out['ADV1'][0].is_cuda:
                 label_real = label_real.cuda()
                 label_fake = label_fake.cuda()
-        
+        # logger = logging.getLogger()
         loss = None
         adv_loss = None
         orth_loss = None
         if unify_prototype is not None and not init_gnn_stage:
             logits = torch.einsum('bchw, nc -> bnhw', logits, unify_prototype)
         # print("logits_max : {}, logits_min : {}".format(torch.max(logits), torch.min(logits)))
-        
+        # logger.info('logit min: {}, logits max:{}'.format(torch.min(logits), torch.max(logits)))
         if is_adv and self.with_orth:
             orth_loss = self.orth_weight * self.similarity_dsb(unify_prototype)
             loss = orth_loss
@@ -891,6 +891,7 @@ class CrossDatasetsCELoss_AdvGNN(nn.Module):
             # print("i : {}, a_max : {}, a_min : {}".format(i, torch.max(a), torch.min(a)))
 
                 
+            
             # print(torch.sum(bi_graphs[i]))
             if not init_gnn_stage:
                 if is_adv and self.with_softmax_and_max and self.with_max_adj:
@@ -906,6 +907,12 @@ class CrossDatasetsCELoss_AdvGNN(nn.Module):
                 else:
                     celoss = CELoss(remap_logits, target[dataset_ids==i])
                     if torch.isnan(celoss):
+                        print("NaN celoss found in datasets :", i)
+                        print(target[dataset_ids==i].shape)
+                        # for j in range(0, self.n_datasets):
+                        print("min index:", torch.min(target[dataset_ids==i]))
+                    elif torch.isinf(celoss):
+                        print(torch.max(remap_logits))
                         print("NaN celoss found in datasets :", i)
                         print(target[dataset_ids==i].shape)
                         # for j in range(0, self.n_datasets):

@@ -8,7 +8,7 @@ from .bisenetv2_contrast_wn import BiSeNetV2_Contrast_WN
 from .bisenetv2_contrast_bn import BiSeNetV2_Contrast_BN
 from .HRNetv2 import HRNet_W48_CONTRAST, HRNet_W48, HRNet_W48_CLIP, HRNet_W48_GNN
 from .graph_attention_network import GAT, Learnable_Topology_GAT, Learnable_Topology_BGNN, Self_Attention_GNN, Learnable_Topology_BGAT
-from .semseg import SemsegModel
+from .semseg import SemsegModel, SemsegModel_mulbn
 
 model_factory = {
     'bisenetv1': BiSeNetV1,
@@ -29,4 +29,5 @@ model_factory = {
     # 'learnable_topology_BGNN_2': Learnable_Topology_BGNN_2,
     'self_attention_GNN': Self_Attention_GNN,
     'snp_rn18': SemsegModel,
+    'snp_rn18_mulbn': SemsegModel_mulbn,
 }
