@@ -525,7 +525,7 @@ def train():
     alter_iter = 0
     SEG = 0
     GNN = 1
-    init_gnn_stage = False
+    init_gnn_stage = True
     fix_graph = False
     train_seg_or_gnn = GNN
     adv_out = None
@@ -604,7 +604,7 @@ def train():
     for i in range(starti, configer.get('lr','max_iter') + starti):
         configer.plus_one('iter')
         alter_iter += 1
-        if i > 5000:
+        if train_seg_or_gnn == GNN and alter_iter > 10000:
             init_gnn_stage = False
 
         ims = []
@@ -643,7 +643,7 @@ def train():
 
         if train_seg_or_gnn == SEG and alter_iter > configer.get('train', 'seg_iters'):
             ratio = 1 - float(i) / total_max_iter / 2
-
+            init_gnn_stage = True
             # if is_distributed():
             #     _, ori_ema_bi_graphs = graph_net.module.get_optimal_matching(graph_node_features, GNN_INIT)
             #     # unify_prototype, bi_graphs, adv_out = graph_net(graph_node_features)    
@@ -683,7 +683,7 @@ def train():
 
         elif train_seg_or_gnn == GNN and alter_iter >  configer.get('train', 'gnn_iters'):
             ratio =  1 - float(i) / total_max_iter / 2
-
+            
             with torch.no_grad():
                 graph_net.eval()
                 
@@ -766,17 +766,19 @@ def train():
                 GNN_INIT = True
                 graph_net.train()
                 net.eval()
-                
+                unify_prototype, bi_graphs, adv_out, _ = graph_net(graph_node_features)                
                 if init_gnn_stage:    
                     if is_distributed():
                         seg_out['seg'] = net.module.unify_prototype.detach()
+                        seg_out['pretrain_bipart_graph'] = net.module.bipartite_graphs.detached()
                     else:
                         seg_out['seg'] = net.unify_prototype.detach()
+                        seg_out['pretrain_bipart_graph'] = net.bipartite_graphs.detached()
+                    seg_out['adj'] = adv_out
                 else:
                     with torch.no_grad():
                         seg_out = net(im)
 
-                unify_prototype, bi_graphs, adv_out, _ = graph_net(graph_node_features)
                 # if unify_prototype == None:
                 #     if is_distributed():
                 #         net_proto = net.module.unify_prototype.detach()
@@ -827,7 +829,7 @@ def train():
             seg_out['bi_graphs'] = bi_graphs
             seg_out['adv_out'] = adv_out
                 
-            backward_loss, adv_loss = contrast_losses(seg_out, lb, dataset_lbs, is_adv, init_gnn_stage)
+            backward_loss, adv_loss, graph_loss, mse_loss = contrast_losses(seg_out, lb, dataset_lbs, is_adv, init_gnn_stage)
             # print(backward_loss)
             kl_loss = None
             loss_seg = backward_loss
@@ -860,11 +862,11 @@ def train():
         # print('synchronize')
         time_meter.update()
         loss_meter.update(backward_loss.item())
-        if kl_loss:
-            kl_loss_meter.update(kl_loss.item())
+        if graph_loss:
+            kl_loss_meter.update(graph_loss.item())
         
-        if is_adv and adv_loss != None:
-            loss_domain_meter.update(adv_loss.item())
+        if mse_loss:
+            loss_domain_meter.update(mse_loss.item())
         # loss_pre_meter.update(loss_pre.item())
         
         if not use_dataset_aux_head or i > aux_iter:
