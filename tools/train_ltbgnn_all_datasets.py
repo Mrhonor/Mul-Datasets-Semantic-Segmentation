@@ -58,7 +58,7 @@ def parse_args():
     parse.add_argument('--local_rank', dest='local_rank', type=int, default=-1,)
     parse.add_argument('--port', dest='port', type=int, default=16854,)
     parse.add_argument('--finetune_from', type=str, default=None,)
-    parse.add_argument('--config', dest='config', type=str, default='configs/ltbgnn_7_datasets_snp.json',)
+    parse.add_argument('--config', dest='config', type=str, default='configs/ltbgnn_7_datasets.json',)
     return parse.parse_args()
 
 # 使用绝对路径
@@ -776,16 +776,16 @@ def train():
                     with torch.no_grad():
                         seg_out = net(im)
 
-                new_unify_prototype, bi_graphs, adv_out, _ = graph_net(graph_node_features)
-                if unify_prototype == None:
-                    if is_distributed():
-                        net_proto = net.module.unify_prototype.detach()
-                    else:
-                        net_proto = net.unify_prototype.detach()    
+                unify_prototype, bi_graphs, adv_out, _ = graph_net(graph_node_features)
+                # if unify_prototype == None:
+                #     if is_distributed():
+                #         net_proto = net.module.unify_prototype.detach()
+                #     else:
+                #         net_proto = net.unify_prototype.detach()    
                     
-                    unify_prototype = configer.get("GNN", "ema_graph_rate") * net_proto + (1 - configer.get("GNN", "ema_graph_rate")) * new_unify_prototype
-                else:
-                    unify_prototype = configer.get("GNN", "ema_graph_rate") * unify_prototype.detach() + (1 - configer.get("GNN", "ema_graph_rate")) * new_unify_prototype
+                #     unify_prototype = configer.get("GNN", "ema_graph_rate") * net_proto + (1 - configer.get("GNN", "ema_graph_rate")) * new_unify_prototype
+                # else:
+                #     unify_prototype = configer.get("GNN", "ema_graph_rate") * unify_prototype.detach() + (1 - configer.get("GNN", "ema_graph_rate")) * new_unify_prototype
                     
 
                 # if configer.get("GNN", "ema_graph") == True:

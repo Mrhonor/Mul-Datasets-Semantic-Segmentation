@@ -37,17 +37,17 @@
   "dataset1": {
     "n_cats": 19,
     "data_reader": "CityScapes",
-    "im_root": "/home1/marong/datasets",
+    "im_root": "D:/Study/code/datasets",
     "train_im_anns":"datasets/Cityscapes/train.txt",
     "val_im_anns":"datasets/Cityscapes/val.txt", 
     "ims_per_gpu": 1,
-    "eval_ims_per_gpu": 2,
+    "eval_ims_per_gpu": 1,
     "label_names": ["road", "sidewalk", "building", "wall", "fence", "pole", "traffic light", "traffic sign", "vegetation", "terrain", "sky", "person", "rider", "car", "truck", "bus", "train", "motorcycle", "bicycle"]
   },
   "dataset12": {
     "n_cats": 64, 
     "data_reader": "Mapiv1",
-    "im_root": "/home1/marong/datasets/mapi",
+    "im_root": "D:/Study/code/datasets/mapi",
     "train_im_anns":"datasets/mapi/training.txt",
     "val_im_anns":"datasets/mapi/validation.txt", 
     "ims_per_gpu": 1,
@@ -57,7 +57,7 @@
   "dataset3": {
     "n_cats": 37, 
     "data_reader": "Sunrgbd",
-    "im_root": "/home1/marong/datasets/",
+    "im_root": "D:/Study/code/datasets/",
     "train_im_anns":"datasets/sunrgbd/train.txt",
     "val_im_anns":"datasets/sunrgbd/test.txt", 
     "ims_per_gpu": 1,
@@ -67,17 +67,17 @@
   "dataset4": {
     "n_cats": 19, 
     "data_reader": "Bdd100k",
-    "im_root": "/home1/marong/datasets/bdd100k",
+    "im_root": "D:/Study/code/datasets/bdd100k",
     "train_im_anns":"datasets/bdd100k/train.txt",
     "val_im_anns":"datasets/bdd100k/val.txt", 
     "ims_per_gpu": 1,
-    "eval_ims_per_gpu": 2,
+    "eval_ims_per_gpu": 1,
     "label_names": ["road", "sidewalk", "building", "wall", "fence", "pole", "traffic light", "traffic sign", "vegetation", "terrain", "sky", "person", "rider", "car", "truck", "bus", "train", "motorcycle", "bicycle"]
   },
   "dataset5": {
     "n_cats": 26, 
     "data_reader": "Idd",
-    "im_root": "/home1/marong/datasets/idd",
+    "im_root": "D:/Study/code/datasets/idd",
     "train_im_anns":"datasets/IDD/train.txt",
     "val_im_anns":"datasets/IDD/val.txt", 
     "ims_per_gpu": 1,
@@ -87,17 +87,17 @@
   "dataset6": {
     "n_cats": 150, 
     "data_reader": "ade2016",
-    "im_root": "/home1/marong/datasets/ADEChallengeData2016",
+    "im_root": "D:/Study/code/datasets/ADEChallengeData2016",
     "train_im_anns":"datasets/ADE/training.txt",
     "val_im_anns":"datasets/ADE/validation.txt", 
-    "ims_per_gpu": 2,
+    "ims_per_gpu": 1,
     "eval_ims_per_gpu": 1,
     "label_names": ["flag", "wall", "building, edifice", "sky", "floor, flooring", "tree", "ceiling", "road, route", "bed ", "windowpane, window ", "grass", "cabinet", "sidewalk, pavement", "person, individual, someone, somebody, mortal, soul", "earth, ground", "door, double door", "table", "mountain, mount", "plant, flora, plant life", "curtain, drape, drapery, mantle, pall", "chair", "car, auto, automobile, machine, motorcar", "water", "painting, picture", "sofa, couch, lounge", "shelf", "house", "sea", "mirror", "rug, carpet, carpeting", "field", "armchair", "seat", "fence, fencing", "desk", "rock, stone", "wardrobe, closet, press", "lamp", "bathtub, bathing tub, bath, tub", "railing, rail", "cushion", "base, pedestal, stand", "box", "column, pillar", "signboard, sign", "chest of drawers, chest, bureau, dresser", "counter", "sand", "sink", "skyscraper", "fireplace, hearth, open fireplace", "refrigerator, icebox", "grandstand, covered stand", "path", "stairs, steps", "runway", "case, display case, showcase, vitrine", "pool table, billiard table, snooker table", "pillow", "screen door, screen", "stairway, staircase", "river", "bridge, span", "bookcase", "blind, screen", "coffee table, cocktail table", "toilet, can, commode, crapper, pot, potty, stool, throne", "flower", "book", "hill", "bench", "countertop", "stove, kitchen stove, range, kitchen range, cooking stove", "palm, palm tree", "kitchen island", "computer, computing machine, computing device, data processor, electronic computer, information processing system", "swivel chair", "boat", "bar", "arcade machine", "hovel, hut, hutch, shack, shanty", "bus, autobus, coach, charabanc, double-decker, jitney, motorbus, motorcoach, omnibus, passenger vehicle", "towel", "light, light source", "truck, motortruck", "tower", "chandelier, pendant, pendent", "awning, sunshade, sunblind", "streetlight, street lamp", "booth, cubicle, stall, kiosk", "television receiver, television, television set, tv, tv set, idiot box, boob tube, telly, goggle box", "airplane, aeroplane, plane", "dirt track", "apparel, wearing apparel, dress, clothes", "pole", "land, ground, soil", "bannister, banister, balustrade, balusters, handrail", "escalator, moving staircase, moving stairway", "ottoman, pouf, pouffe, puff, hassock", "bottle", "buffet, counter, sideboard", "poster, posting, placard, notice, bill, card", "stage", "van", "ship", "fountain", "conveyer belt, conveyor belt, conveyer, conveyor, transporter", "canopy", "washer, automatic washer, washing machine", "plaything, toy", "swimming pool, swimming bath, natatorium", "stool", "barrel, cask", "basket, handbasket", "waterfall, falls", "tent, collapsible shelter", "bag", "minibike, motorbike", "cradle", "oven", "ball", "food, solid food", "step, stair", "tank, storage tank", "trade name, brand name, brand, marque", "microwave, microwave oven", "pot, flowerpot", "animal, animate being, beast, brute, creature, fauna", "bicycle, bike, wheel, cycle ", "lake", "dishwasher, dish washer, dishwashing machine", "screen, silver screen, projection screen", "blanket, cover", "sculpture", "hood, exhaust hood", "sconce", "vase", "traffic light, traffic signal, stoplight", "tray", "ashcan, trash can, garbage can, wastebin, ash bin, ash-bin, ashbin, dustbin, trash barrel, trash bin", "fan", "pier, wharf, wharfage, dock", "crt screen", "plate", "monitor, monitoring device", "bulletin board, notice board", "shower", "radiator", "glass, drinking glass", "clock"]
   },
   "dataset2": {
     "n_cats": 133, 
     "data_reader": "Coco_data",
-    "im_root": "/home1/marong/datasets/coco",
+    "im_root": "D:/Study/code/datasets/coco",
     "train_im_anns":"datasets/coco/train.txt",
     "val_im_anns":"datasets/coco/val.txt", 
     "ims_per_gpu": 1,
