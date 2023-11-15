@@ -844,6 +844,46 @@ def eval_model_contrast(configer, net):
     return heads, mious
 
 @torch.no_grad()
+def eval_model_dsg(configer, net):
+    org_aux = net.aux_mode
+    net.aux_mode = 'eval'
+
+    is_dist = dist.is_initialized()
+    
+    # cfg_city = set_cfg_from_file(configer.get('dataset1'))
+    # cfg_cam  = set_cfg_from_file(configer.get('dataset2'))
+
+    n_datasets = configer.get("n_datasets")
+
+    # dl_cam = get_data_loader(cfg_cam, mode='val', distributed=is_dist)
+    dls = get_data_loader(configer, aux_mode='train', distributed=is_dist, stage=2)
+    # dl_city = get_data_loader(configer, aux_mode='eval', distributed=is_dist)[0]
+    net.eval()
+    # net.train()
+
+    heads, mious = [], []
+    logger = logging.getLogger()
+
+    single_scale = MscEvalV0_Contrast(configer, (0.5, ), False)
+    
+    for i in range(0, configer.get('n_datasets')):
+        # mIOU = single_scale(net, dls[i], configer.get('dataset'+str(i+1), "eval_cats"), i)
+        mIOU = single_scale(net, dls[i], configer.get('dataset'+str(i+1), "n_cats"), i)
+        mious.append(mIOU)
+    
+
+    heads.append('single_scale')
+    # mious.append(mIOU_cam)
+    # mious.append(mIOU_city)
+    # mious.append(mIOU_a2d2)
+    # logger.info('Cam single mIOU is: %s\nCityScapes single mIOU is: %s\n A2D2 single mIOU is: %s\n', mIOU_cam, mIOU_city, mIOU_a2d2)
+    # logger.info('Cam single mIOU is: %s\nCityScapes single mIOU is: %s\n', mIOU_cam, mIOU_city)
+
+    net.aux_mode = org_aux
+    return heads, mious
+
+
+@torch.no_grad()
 def eval_model_mulbn(configer, net):
     org_aux = net.aux_mode
     net.aux_mode = 'eval'

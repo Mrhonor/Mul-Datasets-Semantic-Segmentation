@@ -30,7 +30,7 @@ class ConvBN(nn.Module):
                 in_chan, out_chan, kernel_size=ks, stride=stride,
                 padding=padding, dilation=dilation,
                 groups=groups, bias=bias)
-        self.bn = nn.ModuleList([nn.BatchNorm2d(out_chan, affine=False) for i in range(0, n_bn)])
+        self.bn = nn.ModuleList([nn.BatchNorm2d(out_chan, affine=True) for i in range(0, n_bn)])
         ## 采用共享的affine parameter
         self.affine_weight = nn.Parameter(torch.empty(out_chan))
         self.affine_bias = nn.Parameter(torch.empty(out_chan))
@@ -48,7 +48,7 @@ class ConvBN(nn.Module):
         feat_ = self.bn[dataset_id[cur_pos]](feat[cur_pos:])
         feat_list.append(feat_)
         feat = torch.cat(feat_list, dim=0)
-        feat = feat * self.affine_weight.reshape(1,-1,1,1) + self.affine_bias.reshape(1,-1,1,1) 
+        # feat = feat * self.affine_weight.reshape(1,-1,1,1) + self.affine_bias.reshape(1,-1,1,1) 
         return feat
         
 
@@ -126,7 +126,7 @@ def _mulbn_function_factory(conv, norm, affine_weight, affine_bias, relu=None):
         feat_ = norm[dataset_id[cur_pos]](feat[cur_pos:])
         feat_list.append(feat_)
         feat = torch.cat(feat_list, dim=0)
-        feat = feat * affine_weight.reshape(1,-1,1,1) + affine_bias.reshape(1,-1,1,1) 
+        # feat = feat * affine_weight.reshape(1,-1,1,1) + affine_bias.reshape(1,-1,1,1) 
         return feat
         
         # x = norm(conv(x))
@@ -216,11 +216,11 @@ class MulBNBlock(nn.Module):
         self.conv1 = convkxk(inplanes, planes, stride)
         # print('inplanes:', inplanes)
         # print('planes:', planes)
-        self.bn1 = nn.ModuleList([nn.ModuleList([bn_class(planes, affine=False) for _ in range(self.n_datasets)]) for _ in range(levels)])
+        self.bn1 = nn.ModuleList([nn.ModuleList([bn_class(planes, affine=True) for _ in range(self.n_datasets)]) for _ in range(levels)])
         self.relu_inp = nn.ReLU(inplace=True)
         self.relu = nn.ReLU(inplace=False)
         self.conv2 = convkxk(planes, planes)
-        self.bn2 = nn.ModuleList([nn.ModuleList([bn_class(planes, affine=False) for _ in range(self.n_datasets)]) for _ in range(levels)])
+        self.bn2 = nn.ModuleList([nn.ModuleList([bn_class(planes, affine=True) for _ in range(self.n_datasets)]) for _ in range(levels)])
         self.downsample = downsample
         self.stride = stride
         self.efficient = efficient
@@ -467,7 +467,7 @@ class ResNet_mulbn(nn.Module):
         self.align_corners = align_corners
         self.pyramid_subsample = pyramid_subsample
 
-        self.bn1 = nn.ModuleList([nn.ModuleList([bn_class(64, affine=False) for _ in range(self.n_datasets)]) for _ in range(pyramid_levels)])
+        self.bn1 = nn.ModuleList([nn.ModuleList([bn_class(64, affine=True) for _ in range(self.n_datasets)]) for _ in range(pyramid_levels)])
         self.affine_weight = nn.ParameterList([nn.Parameter(torch.empty(64)) for _ in range(pyramid_levels)])
         self.affine_bias = nn.ParameterList([nn.Parameter(torch.empty(64)) for _ in range(pyramid_levels)])
         
@@ -559,7 +559,7 @@ class ResNet_mulbn(nn.Module):
         feat_ = self.bn1[idx][dataset_id[cur_pos]](feat[cur_pos:])
         feat_list.append(feat_)
         feat = torch.cat(feat_list, dim=0)
-        feat = feat * self.affine_weight[idx].reshape(1,-1,1,1) + self.affine_bias[idx].reshape(1,-1,1,1) 
+        # feat = feat * self.affine_weight[idx].reshape(1,-1,1,1) + self.affine_bias[idx].reshape(1,-1,1,1) 
 
         # x = self.bn1[idx](x)
         x = self.relu(feat)
