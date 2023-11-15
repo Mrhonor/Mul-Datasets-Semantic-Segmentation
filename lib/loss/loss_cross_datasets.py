@@ -815,7 +815,7 @@ class CrossDatasetsCELoss_AdvGNN(nn.Module):
         self.advloss = nn.BCELoss()
         self.adv_loss_weight = self.configer.get('loss', 'adv_loss_weight')
         
-        self.MSE_loss = torch.nn.MSELoss(reduction = 'sum')
+        self.MSE_loss = torch.nn.MSELoss()
 
         self.orth_weight = self.configer.get('GNN', 'orth_weight')
     
@@ -862,6 +862,8 @@ class CrossDatasetsCELoss_AdvGNN(nn.Module):
         loss = None
         adv_loss = None
         orth_loss = None
+        graph_loss = None
+        mse_loss = None
         if unify_prototype is not None and not init_gnn_stage:
             logits = torch.einsum('bchw, nc -> bnhw', logits, unify_prototype)
         # print("logits_max : {}, logits_min : {}".format(torch.max(logits), torch.min(logits)))
@@ -926,10 +928,11 @@ class CrossDatasetsCELoss_AdvGNN(nn.Module):
             if init_gnn_stage and adj_matrix is not None:
                 needed_adj = adj_matrix[:self.total_cats, :self.total_cats]
                 needed_adj = needed_adj.contiguous().view(-1)
+                graph_loss = 100 * self.MSE_loss(needed_adj, pretrain_bipart_graph.view(-1))
                 if loss is None:
-                    loss = self.MSE_loss(needed_adj, pretrain_bipart_graph.view(-1))
+                    loss = graph_loss
                 else:
-                    loss += self.MSE_loss(needed_adj, pretrain_bipart_graph.view(-1))
+                    loss += graph_loss
 
 
             if is_adv and self.with_spa:
@@ -950,11 +953,11 @@ class CrossDatasetsCELoss_AdvGNN(nn.Module):
                 print("NaN value found in datasets :", i)
               
         if init_gnn_stage:
-            
+            mse_loss = 100 * self.MSE_loss(unify_prototype, logits)
             if loss is None:
-                loss = 0.1 * self.MSE_loss(unify_prototype, logits)
+                loss = mse_loss
             else:
-                loss = loss + 0.1 * self.MSE_loss(unify_prototype, logits)
+                loss = loss + mse_loss
         
         if is_adv:  
             if self.mse_or_adv == 'adv':
@@ -968,7 +971,7 @@ class CrossDatasetsCELoss_AdvGNN(nn.Module):
                 adv_loss = self.MSE_loss(adv_out['ADV1'][1], adv_out['ADV1'][0]) + self.MSE_loss(adv_out['ADV2'][1], adv_out['ADV2'][0]) + self.MSE_loss(adv_out['ADV3'][1], adv_out['ADV3'][0])
                 loss = loss + self.adv_loss_weight * adv_loss
                 
-        return loss, orth_loss
+        return loss, orth_loss, graph_loss, mse_loss
     
 class CrossDatasetsCELoss_AdvGNN_Only(nn.Module):
     def __init__(self, configer=None):
