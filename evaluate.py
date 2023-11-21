@@ -142,6 +142,7 @@ class MscEvalV0_Contrast(object):
                 im_sc = im_sc.cuda()
                 
                 logits = net(im_sc, dataset=dataset_id)
+                # logits = net(dataset_id, im_sc)
                 N, _, lH, lW = logits.shape
                 if self.ori_scales:
                     logits = F.interpolate(logits, size=size,

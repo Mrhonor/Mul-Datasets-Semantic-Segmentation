@@ -351,7 +351,7 @@ def train():
     dsg_flag = [GO for _ in range(n_datasets)]
     dsg_max_miou = [0 for _ in range(n_datasets)]
     dsg_index = [0 for _ in range(n_datasets)]
-    
+    unify_prototype = None
     ## train loop
     # for it, (im, lb) in enumerate(dl):
     starti = 0
@@ -477,63 +477,63 @@ def train():
                 i, 0, 0, configer.get('lr', 'max_iter')+starti, lr, time_meter, loss_meter,
                 loss_pre_meter, loss_aux_meters, loss_contrast_meter, loss_domain_meter, kl_loss_meter)
             
-        if (i + 1) % 2000 == 0:
-            if is_distributed():
-                if unify_prototype != None:
-                    net.module.set_unify_prototype(unify_prototype)
+        # if (i + 1) % 2000 == 0:
+        #     if is_distributed():
+        #         if unify_prototype != None:
+        #             net.module.set_unify_prototype(unify_prototype)
                     
-                net.module.set_bipartite_graphs(bi_graphs)
-                gnn_state = graph_net.module.state_dict()
-                seg_state = net.module.state_dict()
-            else:
-                if unify_prototype != None:
-                    net.set_unify_prototype(unify_prototype)
-                net.set_bipartite_graphs(bi_graphs)
+        #         net.module.set_bipartite_graphs(bi_graphs)
+        #         gnn_state = graph_net.module.state_dict()
+        #         seg_state = net.module.state_dict()
+        #     else:
+        #         if unify_prototype != None:
+        #             net.set_unify_prototype(unify_prototype)
+        #         net.set_bipartite_graphs(bi_graphs)
 
-            # if fix_graph == False:
+        #     # if fix_graph == False:
             
 
-            eval_model_func = eval_model_dsg
+        #     eval_model_func = eval_model_dsg
 
-            optim.zero_grad()
-            gnn_optim.zero_grad()
-            if mse_or_adv == 'adv':
-                gnn_optimD.zero_grad()
+        #     optim.zero_grad()
+        #     gnn_optim.zero_grad()
+        #     if mse_or_adv == 'adv':
+        #         gnn_optimD.zero_grad()
             
-            if is_distributed():
-                torch.cuda.empty_cache()
-                heads, mious = eval_model_func(configer, net.module)
-            else:
-                heads, mious = eval_model_func(configer, net)
+        #     if is_distributed():
+        #         torch.cuda.empty_cache()
+        #         heads, mious = eval_model_func(configer, net.module)
+        #     else:
+        #         heads, mious = eval_model_func(configer, net)
                 
-            # writer.add_scalars("mious",{"Cityscapes":mious[CITY_ID],"Camvid":mious[CAM_ID]},configer.get("iter")+1)
-            # writer.export_scalars_to_json(osp.join(configer.get('res_save_pth'), str(time())+'_writer.json'))
-            logger.info(tabulate([mious, ], headers=heads, tablefmt='orgtbl'))
-            net.train()
+        #     # writer.add_scalars("mious",{"Cityscapes":mious[CITY_ID],"Camvid":mious[CAM_ID]},configer.get("iter")+1)
+        #     # writer.export_scalars_to_json(osp.join(configer.get('res_save_pth'), str(time())+'_writer.json'))
+        #     logger.info(tabulate([mious, ], headers=heads, tablefmt='orgtbl'))
+        #     net.train()
             
-            if is_distributed():
-                net.module.aux_mode = 'train'
-            else:
-                net.aux_mode = 'train'
+        #     if is_distributed():
+        #         net.module.aux_mode = 'train'
+        #     else:
+        #         net.aux_mode = 'train'
                 
-            for i in range(n_datasets):
-                if dsg_flag[i] == GO:
-                    if mious[i] > dsg_max_miou[i]:
-                        if mious[i] - dsg_max_miou[i] < 0.005:
-                            dsg_index[i] += 1
-                            if dsg_index[i] > 1:
-                                dsg_flag[i] = STOP
-                                print(f'dataset {i} STOP')
-                        else:
-                            dsg_index[i] = 0
-                        dsg_max_miou[i] = mious[i]
-                    else:
-                        dsg_index[i] = 0
-                else:
-                    if mious[i] - dsg_max_miou < -0.01:
-                        dsg_flag[i] = GO
-                        dsg_index[i] = 0
-                        print(f'dataset {i} GO')
+        #     for i in range(n_datasets):
+        #         if dsg_flag[i] == GO:
+        #             if mious[i] > dsg_max_miou[i]:
+        #                 if mious[i] - dsg_max_miou[i] < 0.005:
+        #                     dsg_index[i] += 1
+        #                     if dsg_index[i] > 1:
+        #                         dsg_flag[i] = STOP
+        #                         print(f'dataset {i} STOP')
+        #                 else:
+        #                     dsg_index[i] = 0
+        #                 dsg_max_miou[i] = mious[i]
+        #             else:
+        #                 dsg_index[i] = 0
+        #         else:
+        #             if mious[i] - dsg_max_miou < -0.01:
+        #                 dsg_flag[i] = GO
+        #                 dsg_index[i] = 0
+        #                 print(f'dataset {i} GO')
 
         if (i + 1) % 10000 == 0:
             seg_save_pth = osp.join(configer.get('res_save_pth'), 'clip_model_{}.pth'.format(i+1))
@@ -553,7 +553,7 @@ def train():
                 'scheduler_state_dict': lr_schdr.state_dict(),
             }, seg_save_pth)
 
-            eval_model_func = eval_model_mulbn
+            eval_model_func = eval_model_contrast
 
             optim.zero_grad()
             if is_distributed():
@@ -589,11 +589,17 @@ def train():
     alter_iter = 0
     SEG = 0
     GNN = 1
-    init_gnn_stage = True
+    init_gnn_stage = False
     fix_graph = False
     train_seg_or_gnn = GNN
     adv_out = None
-    unify_prototype = None
+    if is_distributed():
+        ori_unify_prototype = net.module.unify_prototype.detach()
+        ori_bi_graphs = net.module.bipartite_graphs
+    else:
+        ori_unify_prototype = net.unify_prototype.detach()
+        ori_bi_graphs = net.bipartite_graphs
+        
     GNN_INIT = configer.get('train', 'graph_finetune')
     # GNN_INIT = True
     gnn_lr_schdr = WarmupPolyLrScheduler(gnn_optim, power=0.9,
@@ -849,28 +855,24 @@ def train():
                         seg_out = net(im)
 
                 
-                # if unify_prototype == None:
-                #     if is_distributed():
-                #         net_proto = net.module.unify_prototype.detach()
-                #     else:
-                #         net_proto = net.unify_prototype.detach()    
+
+
                     
-                #     unify_prototype = configer.get("GNN", "ema_graph_rate") * net_proto + (1 - configer.get("GNN", "ema_graph_rate")) * new_unify_prototype
-                # else:
-                #     unify_prototype = configer.get("GNN", "ema_graph_rate") * unify_prototype.detach() + (1 - configer.get("GNN", "ema_graph_rate")) * new_unify_prototype
                     
 
-                # if configer.get("GNN", "ema_graph") == True:
-                #     if len(new_bi_graphs) == 2*len(bi_graphs):
-                #         temp_bg = []
-                #         for j in range(0, len(bi_graphs)):
-                #             temp_bg.append(bi_graphs[j])
-                #             temp_bg.append(bi_graphs[j])
-                #         bi_graphs = temp_bg
+                if configer.get("GNN", "ema_graph") == True and alter_iter < 10000:
+                    if len(bi_graphs) == 2*len(ori_bi_graphs):
+                        temp_bg = []
+                        for j in range(0, len(ori_bi_graphs)):
+                            temp_bg.append(ori_bi_graphs[j])
+                            temp_bg.append(ori_bi_graphs[j])
+                        ori_bi_graphs = temp_bg
                             
-                #     bi_graphs = [configer.get("GNN", "ema_graph_rate") * bg + (1 - configer.get("GNN", "ema_graph_rate")) * nbg for bg, nbg  in zip(bi_graphs, new_bi_graphs)] 
-                # else:
-                #     bi_graphs = new_bi_graphs
+                    bi_graphs = [configer.get("GNN", "ema_graph_rate") * bg + (1 - configer.get("GNN", "ema_graph_rate")) * nbg for bg, nbg  in zip(ori_bi_graphs, bi_graphs)] 
+                    ori_bi_graphs = [b.detach() for b in bi_graphs]
+                    unify_prototype = configer.get("GNN", "ema_graph_rate") * ori_unify_prototype + (1 - configer.get("GNN", "ema_graph_rate")) * unify_prototype
+                    ori_unify_prototype = unify_prototype.detach()
+                    
                 # if i % 50 == 0:
                 #     print(torch.norm(unify_prototype[0][0], p=2))
                 seg_out['unify_prototype'] = unify_prototype
@@ -899,7 +901,7 @@ def train():
             seg_out['bi_graphs'] = bi_graphs
             seg_out['adv_out'] = adv_out
                 
-            backward_loss, adv_loss, graph_loss, mse_loss = contrast_losses(seg_out, lb, dataset_lbs, is_adv, init_gnn_stage)
+            backward_loss, adv_loss = contrast_losses(seg_out, lb, dataset_lbs, is_adv, init_gnn_stage)
             # print(backward_loss)
             kl_loss = None
             loss_seg = backward_loss
@@ -932,11 +934,11 @@ def train():
         # print('synchronize')
         time_meter.update()
         loss_meter.update(backward_loss.item())
-        if graph_loss:
-            kl_loss_meter.update(graph_loss.item())
+        # if graph_loss:
+        #     kl_loss_meter.update(graph_loss.item())
         
-        if mse_loss:
-            loss_domain_meter.update(mse_loss.item())
+        # if mse_loss:
+        #     loss_domain_meter.update(mse_loss.item())
         # loss_pre_meter.update(loss_pre.item())
         
         if not use_dataset_aux_head or i > aux_iter:
@@ -1015,7 +1017,7 @@ def train():
                     else:
                         dsg_index[i] = 0
                 else:
-                    if mious[i] - dsg_max_miou < -0.01:
+                    if mious[i] - dsg_max_miou[i] < -0.01:
                         dsg_flag[i] = GO
                         dsg_index[i] = 0
                         print(f'dataset {i} GO')
