@@ -5,7 +5,7 @@ from itertools import chain
 import warnings
 import numpy as np
 
-from lib.module.util import _BNReluConv, upsample
+from lib.module.util import _BNReluConv, upsample, BNReLUConv
 from lib.models.resnet_pyramid import resnet18, resnet18_mulbn
 from timm.models.layers import trunc_normal_
 
@@ -42,6 +42,7 @@ class ConvBNReLU(nn.Module):
         return feat
 
 
+
 class SemsegModel_mulbn(nn.Module):
     def __init__(self, configer, num_inst_classes=None, use_bn=True, k=1, bias=True,
                  loss_ret_additional=False, upsample_logits=True,
@@ -65,7 +66,7 @@ class SemsegModel_mulbn(nn.Module):
         self.output_feat_dim = self.configer.get('GNN', 'output_feat_dim')
         self.max_num_unify_class = int(self.configer.get('GNN', 'unify_ratio') * self.total_cats)
         
-        self.logits = ConvBNReLU(self.backbone.num_features, self.output_feat_dim, bias=True, n_bn=self.n_datasets) 
+        self.logits = BNReLUConv(self.backbone.num_features, self.output_feat_dim, ks=1, padding=0, bias=True, n_bn=self.n_datasets) 
         self.bipartite_graphs = nn.ParameterList([])
         for i in range(0, self.n_datasets):
             self.bipartite_graphs.append(nn.Parameter(

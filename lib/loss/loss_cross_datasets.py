@@ -926,13 +926,30 @@ class CrossDatasetsCELoss_AdvGNN(nn.Module):
                         loss = loss + (dataset_ids==i).sum() * celoss
 
             if init_gnn_stage and adj_matrix is not None:
-                needed_adj = adj_matrix[:self.total_cats, :self.total_cats]
-                needed_adj = needed_adj.contiguous().view(-1)
-                graph_loss = 100 * self.MSE_loss(needed_adj, pretrain_bipart_graph.view(-1))
+                cur_cat = 0
+                for i in range(0, self.n_datasets):
+
+                    cur_cat += self.n_cats[i]
+                    # print(adj_matrix.keys())
+                    # print(adj_matrix)
+                    needed_adj = adj_matrix[cur_cat-self.n_cats[i]:cur_cat, self.total_cats:]
+                    # needed_adj = needed_adj.contiguous().view(-1)
+                    if graph_loss is None:
+                        graph_loss = 10 * self.MSE_loss(needed_adj, pretrain_bipart_graph[i])
+                    else:
+                        graph_loss += 10 * self.MSE_loss(needed_adj, pretrain_bipart_graph[i])
+                        
                 if loss is None:
                     loss = graph_loss
                 else:
                     loss += graph_loss
+                # needed_adj = adj_matrix[:self.total_cats, :self.total_cats]
+                # needed_adj = needed_adj.contiguous().view(-1)
+                # graph_loss = 100 * self.MSE_loss(needed_adj, pretrain_bipart_graph.view(-1))
+                # if loss is None:
+                #     loss = graph_loss
+                # else:
+                #     loss += graph_loss
 
 
             if is_adv and self.with_spa:
@@ -953,7 +970,7 @@ class CrossDatasetsCELoss_AdvGNN(nn.Module):
                 print("NaN value found in datasets :", i)
               
         if init_gnn_stage:
-            mse_loss = 100 * self.MSE_loss(unify_prototype, logits)
+            mse_loss = self.n_datasets * 10 * self.MSE_loss(unify_prototype, logits)
             if loss is None:
                 loss = mse_loss
             else:

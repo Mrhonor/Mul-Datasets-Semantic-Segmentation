@@ -8,7 +8,7 @@ from collections import defaultdict
 from math import log2
 import numpy as np
 
-from lib.module.util import _UpsampleBlend
+from lib.module.util import _UpsampleBlend, _UpsampleBlend_mulbn
 
 __all__ = ['ResNet', 'resnet18', 'resnet34', 'BasicBlock']
 
@@ -468,8 +468,8 @@ class ResNet_mulbn(nn.Module):
         self.pyramid_subsample = pyramid_subsample
 
         self.bn1 = nn.ModuleList([nn.ModuleList([bn_class(64, affine=False) for _ in range(self.n_datasets)]) for _ in range(pyramid_levels)])
-        self.affine_weight = nn.ParameterList([nn.Parameter(torch.empty(64)) for _ in range(pyramid_levels)])
-        self.affine_bias = nn.ParameterList([nn.Parameter(torch.empty(64)) for _ in range(pyramid_levels)])
+        self.affine_weight1 = nn.ParameterList([nn.Parameter(torch.empty(64)) for _ in range(pyramid_levels)])
+        self.affine_bias1 = nn.ParameterList([nn.Parameter(torch.empty(64)) for _ in range(pyramid_levels)])
         
         self.relu = nn.ReLU(inplace=True)
         self.maxpool = nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
@@ -498,16 +498,17 @@ class ResNet_mulbn(nn.Module):
         else:
             target_sizes = [None] * num_pyr_modules
         self.upsample_blends = nn.ModuleList(
-            [_UpsampleBlend(num_features,
+            [_UpsampleBlend_mulbn(num_features,
                             use_bn=use_bn,
                             use_skip=upsample_skip,
                             detach_skip=i in detach_upsample_skips,
                             fixed_size=ts,
-                            k=k_upsample)
+                            k=k_upsample,
+                            n_bn=self.n_datasets)
              for i, ts in enumerate(target_sizes)])
         self.detach_upsample_in = detach_upsample_in
 
-        self.random_init = [self.upsample_bottlenecks, self.upsample_blends, self.affine_weight, self.affine_bias]
+        self.random_init = [self.upsample_bottlenecks, self.upsample_blends, self.affine_weight1, self.affine_bias1]
 
         self.features = num_features
 
@@ -559,7 +560,7 @@ class ResNet_mulbn(nn.Module):
         feat_ = self.bn1[idx][dataset_id[cur_pos]](feat[cur_pos:])
         feat_list.append(feat_)
         feat = torch.cat(feat_list, dim=0)
-        feat = feat * self.affine_weight[idx].reshape(1,-1,1,1) + self.affine_bias[idx].reshape(1,-1,1,1) 
+        feat = feat * self.affine_weight1[idx].reshape(1,-1,1,1) + self.affine_bias1[idx].reshape(1,-1,1,1) 
 
         # x = self.bn1[idx](x)
         x = self.relu(feat)
@@ -606,7 +607,7 @@ class ResNet_mulbn(nn.Module):
         if self.detach_upsample_in:
             x = x.detach()
         for i, (sk, blend) in enumerate(zip(skips[1:], self.upsample_blends)):
-            x = blend(x, sum(sk))
+            x = blend(x, sum(sk), dataset_id)
         return x, additional
 
     def _load_from_state_dict(self, state_dict, prefix, local_metadata, strict,

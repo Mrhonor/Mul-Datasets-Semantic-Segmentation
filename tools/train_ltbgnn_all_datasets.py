@@ -525,7 +525,7 @@ def train():
     alter_iter = 0
     SEG = 0
     GNN = 1
-    init_gnn_stage = True
+    init_gnn_stage = False
     fix_graph = False
     train_seg_or_gnn = GNN
     adv_out = None
@@ -604,7 +604,7 @@ def train():
     for i in range(starti, configer.get('lr','max_iter') + starti):
         configer.plus_one('iter')
         alter_iter += 1
-        if train_seg_or_gnn == GNN and alter_iter > 10000:
+        if train_seg_or_gnn == GNN and alter_iter > 30000:
             init_gnn_stage = False
 
         ims = []
@@ -766,15 +766,16 @@ def train():
                 GNN_INIT = True
                 graph_net.train()
                 net.eval()
-                unify_prototype, bi_graphs, adv_out, _ = graph_net(graph_node_features)                
+                unify_prototype, bi_graphs, adv_out, adj = graph_net(graph_node_features)                
                 if init_gnn_stage:    
+                    
                     if is_distributed():
                         seg_out['seg'] = net.module.unify_prototype.detach()
-                        seg_out['pretrain_bipart_graph'] = net.module.bipartite_graphs.detached()
+                        seg_out['pretrain_bipart_graph'] = net.module.bipartite_graphs
                     else:
                         seg_out['seg'] = net.unify_prototype.detach()
-                        seg_out['pretrain_bipart_graph'] = net.bipartite_graphs.detached()
-                    seg_out['adj'] = adv_out
+                        seg_out['pretrain_bipart_graph'] = net.bipartite_graphs
+                    seg_out['adj'] = adj
                 else:
                     with torch.no_grad():
                         seg_out = net(im)
