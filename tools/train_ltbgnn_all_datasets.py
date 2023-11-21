@@ -28,7 +28,7 @@ from lib.loss.loss_cross_datasets import CrossDatasetsLoss, CrossDatasetsCELoss,
 from lib.class_remap import ClassRemap
 
 from tools.configer import Configer
-from evaluate import eval_model_contrast, eval_model_aux, eval_model, eval_model_contrast_single, eval_model_mulbn
+from evaluate import eval_model_contrast, eval_model_aux, eval_model, eval_model_contrast_single, eval_model_mulbn, eval_model_dsg
 
 from tensorboardX import SummaryWriter
 
@@ -346,6 +346,11 @@ def train():
     # 使用迭代器读取数据
     
     dl_iters = [iter(dl) for dl in dls]
+    STOP = False
+    GO = True
+    dsg_flag = [GO for _ in range(n_datasets)]
+    dsg_max_miou = [0 for _ in range(n_datasets)]
+    dsg_index = [0 for _ in range(n_datasets)]
     
     ## train loop
     # for it, (im, lb) in enumerate(dl):
@@ -382,28 +387,30 @@ def train():
         ims = []
         lbs = []    
         for j in range(0,len(dl_iters)):
+            if dsg_flag[j] == STOP:
+                continue
             try:
                 im, lb = next(dl_iters[j])
                 if not im.size()[0] == configer.get('dataset'+str(j+1), 'ims_per_gpu'):
                     raise StopIteration
                 while torch.min(lb) == 255:
-                    print(f"{j}:while")
                     im, lb = next(dl_iters[j])
                     if not im.size()[0] == configer.get('dataset'+str(j+1), 'ims_per_gpu'):
                         raise StopIteration
 
-
+                
             except StopIteration:
                 dl_iters[j] = iter(dls[j])
                 im, lb = next(dl_iters[j])
                 while torch.min(lb) == 255:
-                    print(f"{j}:stop while")
                     im, lb = next(dl_iters[j])
-                    
             
             ims.append(im)
             lbs.append(lb)
                 
+        if len(im) == 0:
+            dsg_flag == [GO for _ in range(n_datasets)]
+            continue
         im = torch.cat(ims, dim=0)
         lb = torch.cat(lbs, dim=0)
 
@@ -470,6 +477,63 @@ def train():
                 i, 0, 0, configer.get('lr', 'max_iter')+starti, lr, time_meter, loss_meter,
                 loss_pre_meter, loss_aux_meters, loss_contrast_meter, loss_domain_meter, kl_loss_meter)
             
+        if (i + 1) % 2000 == 0:
+            if is_distributed():
+                if unify_prototype != None:
+                    net.module.set_unify_prototype(unify_prototype)
+                    
+                net.module.set_bipartite_graphs(bi_graphs)
+                gnn_state = graph_net.module.state_dict()
+                seg_state = net.module.state_dict()
+            else:
+                if unify_prototype != None:
+                    net.set_unify_prototype(unify_prototype)
+                net.set_bipartite_graphs(bi_graphs)
+
+            # if fix_graph == False:
+            
+
+            eval_model_func = eval_model_dsg
+
+            optim.zero_grad()
+            gnn_optim.zero_grad()
+            if mse_or_adv == 'adv':
+                gnn_optimD.zero_grad()
+            
+            if is_distributed():
+                torch.cuda.empty_cache()
+                heads, mious = eval_model_func(configer, net.module)
+            else:
+                heads, mious = eval_model_func(configer, net)
+                
+            # writer.add_scalars("mious",{"Cityscapes":mious[CITY_ID],"Camvid":mious[CAM_ID]},configer.get("iter")+1)
+            # writer.export_scalars_to_json(osp.join(configer.get('res_save_pth'), str(time())+'_writer.json'))
+            logger.info(tabulate([mious, ], headers=heads, tablefmt='orgtbl'))
+            net.train()
+            
+            if is_distributed():
+                net.module.aux_mode = 'train'
+            else:
+                net.aux_mode = 'train'
+                
+            for i in range(n_datasets):
+                if dsg_flag[i] == GO:
+                    if mious[i] > dsg_max_miou[i]:
+                        if mious[i] - dsg_max_miou[i] < 0.005:
+                            dsg_index[i] += 1
+                            if dsg_index[i] > 1:
+                                dsg_flag[i] = STOP
+                                print(f'dataset {i} STOP')
+                        else:
+                            dsg_index[i] = 0
+                        dsg_max_miou[i] = mious[i]
+                    else:
+                        dsg_index[i] = 0
+                else:
+                    if mious[i] - dsg_max_miou < -0.01:
+                        dsg_flag[i] = GO
+                        dsg_index[i] = 0
+                        print(f'dataset {i} GO')
 
         if (i + 1) % 10000 == 0:
             seg_save_pth = osp.join(configer.get('res_save_pth'), 'clip_model_{}.pth'.format(i+1))
@@ -610,6 +674,8 @@ def train():
         ims = []
         lbs = []    
         for j in range(0,len(dl_iters)):
+            if dsg_flag[j] == STOP:
+                continue
             try:
                 im, lb = next(dl_iters[j])
                 if not im.size()[0] == configer.get('dataset'+str(j+1), 'ims_per_gpu'):
@@ -629,6 +695,9 @@ def train():
             ims.append(im)
             lbs.append(lb)
                 
+        if len(im) == 0:
+            dsg_flag == [GO for _ in range(n_datasets)]
+            continue
         im = torch.cat(ims, dim=0)
         lb = torch.cat(lbs, dim=0)
 
@@ -893,6 +962,63 @@ def train():
                 i, 0, 0, configer.get('lr', 'max_iter')+starti, lr, time_meter, loss_meter,
                 loss_pre_meter, loss_aux_meters, loss_contrast_meter, loss_domain_meter, kl_loss_meter)
             
+        if (i + 1) % 2000 == 0:
+            if is_distributed():
+                if unify_prototype != None:
+                    net.module.set_unify_prototype(unify_prototype)
+                    
+                net.module.set_bipartite_graphs(bi_graphs)
+                gnn_state = graph_net.module.state_dict()
+                seg_state = net.module.state_dict()
+            else:
+                if unify_prototype != None:
+                    net.set_unify_prototype(unify_prototype)
+                net.set_bipartite_graphs(bi_graphs)
+
+            # if fix_graph == False:
+            
+
+            eval_model_func = eval_model_dsg
+
+            optim.zero_grad()
+            gnn_optim.zero_grad()
+            if mse_or_adv == 'adv':
+                gnn_optimD.zero_grad()
+            
+            if is_distributed():
+                torch.cuda.empty_cache()
+                heads, mious = eval_model_func(configer, net.module)
+            else:
+                heads, mious = eval_model_func(configer, net)
+                
+            # writer.add_scalars("mious",{"Cityscapes":mious[CITY_ID],"Camvid":mious[CAM_ID]},configer.get("iter")+1)
+            # writer.export_scalars_to_json(osp.join(configer.get('res_save_pth'), str(time())+'_writer.json'))
+            logger.info(tabulate([mious, ], headers=heads, tablefmt='orgtbl'))
+            net.train()
+            
+            if is_distributed():
+                net.module.aux_mode = 'train'
+            else:
+                net.aux_mode = 'train'
+                
+            for i in range(n_datasets):
+                if dsg_flag[i] == GO:
+                    if mious[i] > dsg_max_miou[i]:
+                        if mious[i] - dsg_max_miou[i] < 0.005:
+                            dsg_index[i] += 1
+                            if dsg_index[i] > 1:
+                                dsg_flag[i] = STOP
+                                print(f'dataset {i} STOP')
+                        else:
+                            dsg_index[i] = 0
+                        dsg_max_miou[i] = mious[i]
+                    else:
+                        dsg_index[i] = 0
+                else:
+                    if mious[i] - dsg_max_miou < -0.01:
+                        dsg_flag[i] = GO
+                        dsg_index[i] = 0
+                        print(f'dataset {i} GO')
 
         if (i + 1) % 10000 == 0:
             seg_save_pth = osp.join(configer.get('res_save_pth'), 'seg_model_{}.pth'.format(i+1))
@@ -1063,13 +1189,18 @@ def train():
             ims = []
             lbs = []    
             for j in range(0,len(dl_iters)):
+                if dsg_flag[j] == STOP:
+                    continue
                 try:
                     im, lb = next(dl_iters[j])
-                    while torch.min(lb) == 255:
-                        im, lb = next(dl_iters[j])
-
                     if not im.size()[0] == configer.get('dataset'+str(j+1), 'ims_per_gpu'):
                         raise StopIteration
+                    while torch.min(lb) == 255:
+                        im, lb = next(dl_iters[j])
+                        if not im.size()[0] == configer.get('dataset'+str(j+1), 'ims_per_gpu'):
+                            raise StopIteration
+
+                    
                 except StopIteration:
                     dl_iters[j] = iter(dls[j])
                     im, lb = next(dl_iters[j])
@@ -1079,7 +1210,9 @@ def train():
                 ims.append(im)
                 lbs.append(lb)
                     
-
+            if len(im) == 0:
+                dsg_flag == [GO for _ in range(n_datasets)]
+                continue
             im = torch.cat(ims, dim=0)
             lb = torch.cat(lbs, dim=0)
 
@@ -1247,6 +1380,63 @@ def train():
                     i, 0, 0, configer.get('lr', 'max_iter')+starti, lr, time_meter, loss_meter,
                     loss_pre_meter, loss_aux_meters, loss_contrast_meter, loss_domain_meter, kl_loss_meter)
                 
+            if (i + 1) % 2000 == 0:
+                if is_distributed():
+                    if unify_prototype != None:
+                        net.module.set_unify_prototype(unify_prototype)
+                        
+                    net.module.set_bipartite_graphs(bi_graphs)
+                    gnn_state = graph_net.module.state_dict()
+                    seg_state = net.module.state_dict()
+                else:
+                    if unify_prototype != None:
+                        net.set_unify_prototype(unify_prototype)
+                    net.set_bipartite_graphs(bi_graphs)
+
+                # if fix_graph == False:
+                
+
+                eval_model_func = eval_model_dsg
+
+                optim.zero_grad()
+                gnn_optim.zero_grad()
+                if mse_or_adv == 'adv':
+                    gnn_optimD.zero_grad()
+                
+                if is_distributed():
+                    torch.cuda.empty_cache()
+                    heads, mious = eval_model_func(configer, net.module)
+                else:
+                    heads, mious = eval_model_func(configer, net)
+                    
+                # writer.add_scalars("mious",{"Cityscapes":mious[CITY_ID],"Camvid":mious[CAM_ID]},configer.get("iter")+1)
+                # writer.export_scalars_to_json(osp.join(configer.get('res_save_pth'), str(time())+'_writer.json'))
+                logger.info(tabulate([mious, ], headers=heads, tablefmt='orgtbl'))
+                net.train()
+                
+                if is_distributed():
+                    net.module.aux_mode = 'train'
+                else:
+                    net.aux_mode = 'train'
+                    
+                for i in range(n_datasets):
+                    if dsg_flag[i] == GO:
+                        if mious[i] > dsg_max_miou[i]:
+                            if mious[i] - dsg_max_miou[i] < 0.005:
+                                dsg_index[i] += 1
+                                if dsg_index[i] > 1:
+                                    dsg_flag[i] = STOP
+                                    print(f'dataset {i} STOP')
+                            else:
+                                dsg_index[i] = 0
+                            dsg_max_miou[i] = mious[i]
+                        else:
+                            dsg_index[i] = 0
+                    else:
+                        if mious[i] - dsg_max_miou < -0.01:
+                            dsg_flag[i] = GO
+                            dsg_index[i] = 0
+                            print(f'dataset {i} GO')
 
             if (i + 1) % 10000 == 0:
                 stage_iter = 0 if stage == 'stage1' else configer.get('train', 'finetune_stage1_iters')
