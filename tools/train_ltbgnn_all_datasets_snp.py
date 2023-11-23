@@ -860,7 +860,7 @@ def train():
             seg_out['bi_graphs'] = bi_graphs
             seg_out['adv_out'] = adv_out
                 
-            backward_loss, adv_loss, _, _ = contrast_losses(seg_out, lb, dataset_lbs, is_adv, init_gnn_stage)
+            backward_loss, adv_loss = contrast_losses(seg_out, lb, dataset_lbs, is_adv, init_gnn_stage)
             # print(backward_loss)
             kl_loss = None
             loss_seg = backward_loss
@@ -939,7 +939,11 @@ def train():
                 seg_state = net.module.state_dict()
                 if dist.get_rank() == 0: 
                     torch.save(gnn_state, gnn_save_pth)
-                    torch.save(seg_state, seg_save_pth)
+                    torch.save({
+                        'model_state_dict': seg_state,
+                        'optimizer_state_dict': optim.state_dict(),
+                        'scheduler_state_dict': lr_schdr.state_dict(),
+                    }, seg_save_pth)
             else:
                 if unify_prototype != None:
                     net.set_unify_prototype(unify_prototype)
@@ -947,7 +951,11 @@ def train():
                 gnn_state = graph_net.state_dict()
                 seg_state = net.state_dict()
                 torch.save(gnn_state, gnn_save_pth)
-                torch.save(seg_state, seg_save_pth)
+                torch.save({
+                    'model_state_dict': seg_state,
+                    'optimizer_state_dict': optim.state_dict(),
+                    'scheduler_state_dict': lr_schdr.state_dict(),
+                }, seg_save_pth)
 
             # if fix_graph == False:
             

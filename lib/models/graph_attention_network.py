@@ -904,10 +904,12 @@ class Learnable_Topology_BGNN(nn.Module):
             self.GCN_layer1 = GCN(self.nfeat_out, self.nfeat_out)
             self.GCN_layer2 = GCN(self.nfeat_out, self.nfeat_out)
             self.GCN_layer3 = GCN(self.nfeat_out, self.nfeat_out)
+            self.GCN_layer4 = GCN(self.nfeat_out, self.nfeat_out)
         elif self.GNN_type == 'GSAGE':
             self.GCN_layer1 = GSAGE(self.nfeat_out, self.nfeat_out)
             self.GCN_layer2 = GSAGE(self.nfeat_out, self.nfeat_out)
             self.GCN_layer3 = GSAGE(self.nfeat_out, self.nfeat_out)   
+            self.GCN_layer4 = GSAGE(self.nfeat_out, self.nfeat_out)   
         
         self.linear1 = nn.Linear(self.nfeat_out, self.output_feat_dim)
         
@@ -986,6 +988,8 @@ class Learnable_Topology_BGNN(nn.Module):
             out_fake_3 = self.netD3(feat_gcn3.detach())
             g_out_fake_3 = self.netD3(feat_gcn3)
         
+        before_gcn3_x = F.dropout(feat_gcn3, self.dropout_rate, training=self.training)
+        feat_gcn3 = self.GCN_layer4(before_gcn3_x, adj_mI)
         # feat4 = F.elu(feat_gcn3 + before_gcn3_x)
         # feat3_drop = F.dropout(feat3, self.dropout_rate, training=self.training)
         feat_out = self.linear1(feat_gcn3)
