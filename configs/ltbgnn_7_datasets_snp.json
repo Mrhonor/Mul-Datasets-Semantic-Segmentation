@@ -1,5 +1,5 @@
 {
-  "model_name": "snp_rn18",
+  "model_name": "snp_rn18_mulbn",
   "aux_mode": "train",
   "n_datasets": 7,
   "hrnet": {
@@ -125,19 +125,19 @@
   },
   "use_ema": false,
   "lr": {
-    "lr_start":9e-5,
-    "gnn_lr_start": 9e-5,
-    "seg_lr_start": 9e-5,
+    "lr_start":3e-3,
+    "gnn_lr_start": 3e-3,
+    "seg_lr_start": 3e-3,
     "weight_decay": 1e-5,
     "warmup_iters": 0,
     "fix_param_iters": 0,
-    "max_iter": 60000,
-    "init_iter": 60000
+    "max_iter": 400000,
+    "init_iter": 300000
   },
   "train": {
     "scales": [0.5, 1.0, 2.0],
     "cropsize": [768, 768],
-    "finetune": true,
+    "finetune": false,
     "finetune_from": "res/celoss/clip_model_340000.pth",
     "graph_finetune": false,
     "graph_finetune_from": "res/celoss/train6_12u_graph_model_100000.pth",

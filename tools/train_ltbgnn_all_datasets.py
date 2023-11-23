@@ -58,7 +58,7 @@ def parse_args():
     parse.add_argument('--local_rank', dest='local_rank', type=int, default=-1,)
     parse.add_argument('--port', dest='port', type=int, default=16854,)
     parse.add_argument('--finetune_from', type=str, default=None,)
-    parse.add_argument('--config', dest='config', type=str, default='configs/ltbgnn_7_datasets_snp.json',)
+    parse.add_argument('--config', dest='config', type=str, default='configs/ltbgnn_7_datasets.json',)
     return parse.parse_args()
 
 # 使用绝对路径
@@ -553,7 +553,7 @@ def train():
                 'scheduler_state_dict': lr_schdr.state_dict(),
             }, seg_save_pth)
 
-            eval_model_func = eval_model_contrast
+            eval_model_func = eval_model_mulbn
 
             optim.zero_grad()
             if is_distributed():
@@ -674,11 +674,12 @@ def train():
     for i in range(starti, configer.get('lr','max_iter') + starti):
         configer.plus_one('iter')
         alter_iter += 1
-        if train_seg_or_gnn == GNN and alter_iter > 10000:
+        if train_seg_or_gnn == GNN and alter_iter > 30000:
             init_gnn_stage = False
 
         ims = []
-        lbs = []    
+        lbs = []  
+        ids = []  
         for j in range(0,len(dl_iters)):
             if dsg_flag[j] == STOP:
                 continue
@@ -700,6 +701,7 @@ def train():
             
             ims.append(im)
             lbs.append(lb)
+            ids.append(j*torch.ones(lb.shape[0], dtype=torch.int))
                 
         if len(im) == 0:
             dsg_flag == [GO for _ in range(n_datasets)]
@@ -710,7 +712,7 @@ def train():
         im = im.cuda()
         lb = lb.cuda()
 
-        dataset_lbs = torch.cat([i*torch.ones(this_lb.shape[0], dtype=torch.int) for i,this_lb in enumerate(lbs)], dim=0)
+        dataset_lbs = torch.cat(ids, dim=0)
         dataset_lbs = dataset_lbs.cuda()
         # print(dataset_lbs)
 
@@ -841,22 +843,25 @@ def train():
                 GNN_INIT = True
                 graph_net.train()
                 net.eval()
-                unify_prototype, bi_graphs, adv_out, _ = graph_net(graph_node_features)                
+                unify_prototype, bi_graphs, adv_out, adj = graph_net(graph_node_features)                
                 if init_gnn_stage:    
+                    
                     if is_distributed():
                         seg_out['seg'] = net.module.unify_prototype.detach()
-                        seg_out['pretrain_bipart_graph'] = net.module.bipartite_graphs.detached()
+                        seg_out['pretrain_bipart_graph'] = net.module.bipartite_graphs
                     else:
                         seg_out['seg'] = net.unify_prototype.detach()
-                        seg_out['pretrain_bipart_graph'] = net.bipartite_graphs.detached()
-                    seg_out['adj'] = adv_out
+                        seg_out['pretrain_bipart_graph'] = net.bipartite_graphs
+                    seg_out['adj'] = adj
                 else:
                     with torch.no_grad():
                         seg_out = net(im)
 
-                
-
-
+                # if unify_prototype == None:
+                #     if is_distributed():
+                #         net_proto = net.module.unify_prototype.detach()
+                #     else:
+                #         net_proto = net.unify_prototype.detach()    
                     
                     
 

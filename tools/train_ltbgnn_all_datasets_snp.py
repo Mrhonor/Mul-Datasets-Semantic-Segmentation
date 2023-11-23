@@ -58,7 +58,7 @@ def parse_args():
     parse.add_argument('--local_rank', dest='local_rank', type=int, default=-1,)
     parse.add_argument('--port', dest='port', type=int, default=16854,)
     parse.add_argument('--finetune_from', type=str, default=None,)
-    parse.add_argument('--config', dest='config', type=str, default='configs/ltbgnn_7_datasets_snp.json',)
+    parse.add_argument('--config', dest='config', type=str, default='configs/ltbgnn_3_datasets_snp.json',)
     return parse.parse_args()
 
 # 使用绝对路径
@@ -91,9 +91,44 @@ def set_model(configer):
         logger.info(f"load pretrained weights from {configer.get('train', 'finetune_from')}")
         state = torch.load(configer.get('train', 'finetune_from'), map_location='cpu')
         
-        # del state['unify_prototype']
-        # for i in range(0, configer.get('n_datasets')):
-        #     del state[f'bipartite_graphs.{i}']
+        del state['unify_prototype']
+        for i in range(0, configer.get('n_datasets')):
+            del state[f'bipartite_graphs.{i}']
+            
+        new_state = {}
+        for k,v in state.items():
+            
+            if 'bn' in k:
+                if 'weight' in k:
+                    newk = k.replace('bn', 'affine_weight').replace('.weight', '')
+                    new_state[newk] = v
+                    continue
+                elif 'bias' in k:
+                    newk = k.replace('bn', 'affine_bias').replace('.bias', '')
+                    new_state[newk] = v
+                    continue
+                    
+            if 'norm.weight' in k:
+                newk = k.replace('norm.weight', 'affine_weight')
+                new_state[newk] = v
+                continue
+            if 'norm.bias' in k:
+                newk = k.replace('norm.bias', 'affine_bias')
+                new_state[newk] = v
+                continue
+                
+            if 'downsample.1.weight' in k:
+                newk = k.replace('1.weight', 'affine_weight')
+                new_state[newk] = v
+                continue
+            if 'downsample.1.bias' in k:
+                newk = k.replace('1.bias', 'affine_bias')
+                new_state[newk] = v
+                continue
+            
+            new_state[k] = v
+                    
+            
         if 'model_state_dict' in state:
             net.load_state_dict(state['model_state_dict'], strict=False)
         else:
@@ -301,8 +336,6 @@ def train():
         text_feature_vecs = torch.cat(text_feature_vecs, dim=0)
         net.set_unify_prototype(text_feature_vecs, False)
     
-    for i, (name, param) in enumerate(net.named_parameters()):
-        print(f"Parameter at index {i}: {name}")
     if use_ema:
         ema_net = set_ema_model(configer=configer)
         
@@ -324,9 +357,9 @@ def train():
     ## meters
     time_meter, loss_meter, loss_pre_meter, loss_aux_meters, loss_contrast_meter, loss_domain_meter, kl_loss_meter = set_meters(configer)
     ## lr scheduler
-    # gnn_lr_schdr = WarmupPolyLrScheduler(gnn_optim, power=0.9,
-    #     max_iter=configer.get('train','gnn_iters'), warmup_iter=configer.get('lr','warmup_iters'),
-    #     warmup_ratio=0.1, warmup='exp', last_epoch=-1,)
+    gnn_lr_schdr = WarmupPolyLrScheduler(gnn_optim, power=0.9,
+        max_iter=configer.get('train','gnn_iters'), warmup_iter=configer.get('lr','warmup_iters'),
+        warmup_ratio=0.1, warmup='exp', last_epoch=-1,)
 
     # gnn_lr_schdrD = WarmupPolyLrScheduler(gnn_optimD, power=0.9,
     #     max_iter=configer.get('train','gnn_iters'), warmup_iter=configer.get('lr','warmup_iters'),
@@ -369,7 +402,7 @@ def train():
     # if finetune:
     #     fix_param_iters = configer.get('lr', 'fix_param_iters')
     #     net.switch_require_grad_state(False)
-    bi_graphs = graph_net.pretrain_bipartite_graphs(True)
+    # bi_graphs = graph_net.pretrain_bipartite_graphs(True)
     ## ddp training
     if is_distributed():
         net = set_model_dist(net)
@@ -380,10 +413,11 @@ def train():
     start_i = 0
     for i in range(start_i, configer.get('lr','init_iter')):
         configer.plus_one('iter')
-
+        # print("1")
         ims = []
-        lbs = []    
+        lbs = []
         for j in range(0,len(dl_iters)):
+
             try:
                 im, lb = next(dl_iters[j])
                 if not im.size()[0] == configer.get('dataset'+str(j+1), 'ims_per_gpu'):
@@ -402,74 +436,77 @@ def train():
                     print(f"{j}:stop while")
                     im, lb = next(dl_iters[j])
                     
+        #     ims.append(im)
+        #     lbs.append(lb)
             
-            ims.append(im)
-            lbs.append(lb)
+
+                    
+        # im = torch.cat(ims, dim=0)
+        # lb = torch.cat(lbs, dim=0)
+
+            im = im.cuda()
+            lb = lb.cuda()
+
+            dataset_lbs = j*torch.ones(lb.shape[0], dtype=torch.int)
+            # dataset_lbs = torch.cat([i*torch.ones(this_lb.shape[0], dtype=torch.int) for i,this_lb in enumerate(lbs)], dim=0)
+            dataset_lbs = dataset_lbs.cuda()
+            # print(dataset_lbs)
+
+            lb = torch.squeeze(lb, 1)
+
+            # net.eval()
+            # with torch.no_grad():
+            #     seg_out = net(im)
+
+            optim.zero_grad()
+            with amp.autocast(enabled=configer.get('use_fp16')):
+                ## 修改为多数据集模式
                 
-        im = torch.cat(ims, dim=0)
-        lb = torch.cat(lbs, dim=0)
-
-        im = im.cuda()
-        lb = lb.cuda()
-
-        dataset_lbs = torch.cat([i*torch.ones(this_lb.shape[0], dtype=torch.int) for i,this_lb in enumerate(lbs)], dim=0)
-        dataset_lbs = dataset_lbs.cuda()
-        # print(dataset_lbs)
-
-        lb = torch.squeeze(lb, 1)
-
-        # net.eval()
-        # with torch.no_grad():
-        #     seg_out = net(im)
-
-        optim.zero_grad()
-        with amp.autocast(enabled=configer.get('use_fp16')):
-            ## 修改为多数据集模式
-            
-            if train_aux:
-                train_aux = False
-                if is_distributed():
-                    net.module.set_train_dataset_aux(False)
-                else:
-                    net.set_train_dataset_aux(False)    
-            
-
-            seg_out = {}
-            is_adv = False
-            adv_out = None
-            net.train()
-
-            seg_out = net(im, dataset_lbs)
-            seg_out['unify_prototype'] = None
-            
-            seg_out['bi_graphs'] = bi_graphs
-            seg_out['adv_out'] = adv_out
+                if train_aux:
+                    train_aux = False
+                    if is_distributed():
+                        net.module.set_train_dataset_aux(False)
+                    else:
+                        net.set_train_dataset_aux(False)    
                 
-            backward_loss, adv_loss = contrast_losses(seg_out, lb, dataset_lbs, is_adv, False)
+
+                seg_out = {}
+                is_adv = False
+                adv_out = None
+                net.train()
+
+                seg_out = net(im, dataset_lbs)
+                seg_out['unify_prototype'] = None
+                
+                seg_out['bi_graphs'] = bi_graphs
+                seg_out['adv_out'] = adv_out
+                    
+                backward_loss, adv_loss, _, _ = contrast_losses(seg_out, lb, dataset_lbs, is_adv, False)
+                # print(backward_loss)
+                kl_loss = None
+                loss_seg = backward_loss
+                loss_aux = None
+
+            scaler.scale(backward_loss).backward()
             # print(backward_loss)
-            kl_loss = None
-            loss_seg = backward_loss
-            loss_aux = None
-
-        scaler.scale(backward_loss).backward()
-        # print(backward_loss)
-        scaler.step(optim)
-        
-        scaler.update()
-        torch.cuda.synchronize()       
+            scaler.step(optim)
+            
+            scaler.update()
+            torch.cuda.synchronize()       
 
 
-        # print('synchronize')
-        time_meter.update()
-        loss_meter.update(backward_loss.item())
-    
+            # print('synchronize')
+            time_meter.update()
+            loss_meter.update(backward_loss.item())
+            lr_schdr.step()
+            
         ## print training log message
         if (i + 1) % 100 == 0:
             # writer.add_scalars("loss",{"seg":loss_pre_meter.getWoErase(),"contrast":loss_contrast_meter.getWoErase(), "domain":loss_domain_meter.getWoErase()},configer.get("iter")+1)
             lr = lr_schdr.get_lr()
             lr = sum(lr) / len(lr)
             print_log_msg(
-                i, 0, 0, configer.get('lr', 'max_iter')+starti, lr, time_meter, loss_meter,
+                i*3, 0, 0, configer.get('lr', 'max_iter')+starti, lr, time_meter, loss_meter,
                 loss_pre_meter, loss_aux_meters, loss_contrast_meter, loss_domain_meter, kl_loss_meter)
             
 
@@ -520,7 +557,7 @@ def train():
                 net.aux_mode = 'train'
         
             
-        lr_schdr.step()
+            
 
 
     
@@ -780,7 +817,7 @@ def train():
                         seg_out['seg'] = net.unify_prototype.detach()
                 else:
                     with torch.no_grad():
-                        seg_out = net(im)
+                        seg_out = net(im,dataset_lbs)
 
                 unify_prototype, bi_graphs, adv_out, _ = graph_net(graph_node_features)
 
@@ -813,7 +850,7 @@ def train():
                         
                     
                 
-                seg_out = net(im)
+                seg_out = net(im,dataset_lbs)
                 if is_distributed():
                     bi_graphs = net.module.bipartite_graphs
                 else:
@@ -823,7 +860,7 @@ def train():
             seg_out['bi_graphs'] = bi_graphs
             seg_out['adv_out'] = adv_out
                 
-            backward_loss, adv_loss = contrast_losses(seg_out, lb, dataset_lbs, is_adv, init_gnn_stage)
+            backward_loss, adv_loss, _, _ = contrast_losses(seg_out, lb, dataset_lbs, is_adv, init_gnn_stage)
             # print(backward_loss)
             kl_loss = None
             loss_seg = backward_loss

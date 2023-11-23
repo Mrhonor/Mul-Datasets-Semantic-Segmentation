@@ -54,6 +54,40 @@ class _BNReluConv(nn.Sequential):
             warnings.warn(f'Using dropout with p: {drop_rate}')
             self.add_module('dropout', nn.Dropout2d(drop_rate, inplace=True))
 
+class BNReLUConv(nn.Module):
+    def __init__(self, in_chan, out_chan, ks=3, stride=1, padding=1,
+                 dilation=1, groups=1, bias=False, n_bn=1):
+        ## n_bn bn层数量，对应混合的数据集数量
+        super(BNReLUConv, self).__init__()
+        self.bn = nn.ModuleList([nn.BatchNorm2d(in_chan, affine=False) for i in range(0, n_bn)])
+        ## 采用共享的affine parameter
+        self.affine_weight = nn.Parameter(torch.empty(in_chan))
+        self.affine_bias = nn.Parameter(torch.empty(in_chan))
+
+        self.conv = nn.Conv2d(
+                in_chan, out_chan, kernel_size=ks, stride=stride,
+                padding=padding, dilation=dilation,
+                groups=groups, bias=bias)
+        self.relu = nn.ReLU(inplace=True)
+        
+
+    def forward(self, x, dataset_id):
+        # feat = self.conv(x)
+        feat = x
+        feat_list = []
+        cur_pos = 0
+        for i in range(0, len(dataset_id)):
+            if dataset_id[i] != dataset_id[cur_pos]:
+                feat_ = self.bn[dataset_id[cur_pos]](feat[cur_pos:i])
+                feat_list.append(feat_)
+                cur_pos = i
+        feat_ = self.bn[dataset_id[cur_pos]](feat[cur_pos:])
+        feat_list.append(feat_)
+        feat = torch.cat(feat_list, dim=0)
+        feat = feat * self.affine_weight.reshape(1,-1,1,1) + self.affine_bias.reshape(1,-1,1,1) 
+        feat = self.relu(feat)
+        feat = self.conv(feat)
+        return feat
 
 class _Upsample(nn.Module):
     def __init__(self, num_maps_in, skip_maps_in, num_maps_out, use_bn=True, k=3, use_skip=True, only_skip=False,
@@ -107,6 +141,29 @@ class _UpsampleBlend(nn.Module):
         x = self.blend_conv.forward(x)
         return x
 
+class _UpsampleBlend_mulbn(nn.Module):
+    def __init__(self, num_features, use_bn=True, use_skip=True, detach_skip=False, fixed_size=None, k=3,
+                 separable=False, n_bn=1):
+        super(_UpsampleBlend_mulbn, self).__init__()
+        self.blend_conv = BNReLUConv(num_features, num_features, ks=k, n_bn=n_bn)
+        self.use_skip = use_skip
+        self.detach_skip = detach_skip
+        warnings.warn(f'Using skip connections: {self.use_skip}', UserWarning)
+        self.upsampling_method = upsample
+        if fixed_size is not None:
+            self.upsampling_method = lambda x, size: F.interpolate(x, mode='nearest', size=fixed_size)
+            warnings.warn(f'Fixed upsample size', UserWarning)
+
+    def forward(self, x, skip, dataset_id):
+        if self.detach_skip:
+            warnings.warn(f'Detaching skip connection {skip.shape[2:4]}', UserWarning)
+            skip = skip.detach()
+        skip_size = skip.size()[-2:]
+        x = self.upsampling_method(x, skip_size)
+        if self.use_skip:
+            x = x + skip
+        x = self.blend_conv.forward(x, dataset_id)
+        return x
 
 class SpatialPyramidPooling(nn.Module):
     def __init__(self, num_maps_in, num_levels, bt_size=512, level_size=128, out_size=128,
