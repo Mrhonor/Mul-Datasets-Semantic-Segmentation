@@ -136,7 +136,7 @@
   },
   "train": {
     "scales": [0.5, 1.0, 2.0],
-    "cropsize": [768, 768],
+    "cropsize": [224, 224],
     "finetune": true,
     "finetune_from": "res/celoss/snp_clip_model.pth",
     "graph_finetune": false,

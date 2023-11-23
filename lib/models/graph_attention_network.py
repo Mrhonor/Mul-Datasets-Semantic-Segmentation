@@ -904,12 +904,12 @@ class Learnable_Topology_BGNN(nn.Module):
             self.GCN_layer1 = GCN(self.nfeat_out, self.nfeat_out)
             self.GCN_layer2 = GCN(self.nfeat_out, self.nfeat_out)
             self.GCN_layer3 = GCN(self.nfeat_out, self.nfeat_out)
-            self.GCN_layer4 = GCN(self.nfeat_out, self.nfeat_out)
+            # self.GCN_layer4 = GCN(self.nfeat_out, self.nfeat_out)
         elif self.GNN_type == 'GSAGE':
             self.GCN_layer1 = GSAGE(self.nfeat_out, self.nfeat_out)
             self.GCN_layer2 = GSAGE(self.nfeat_out, self.nfeat_out)
             self.GCN_layer3 = GSAGE(self.nfeat_out, self.nfeat_out)   
-            self.GCN_layer4 = GSAGE(self.nfeat_out, self.nfeat_out)   
+            # self.GCN_layer4 = GSAGE(self.nfeat_out, self.nfeat_out)   
         
         self.linear1 = nn.Linear(self.nfeat_out, self.output_feat_dim)
         
@@ -949,7 +949,8 @@ class Learnable_Topology_BGNN(nn.Module):
         # else:
             
         self.beta = [ot.unif(self.dataset_cats[i]) for i in range(0, self.n_datasets)]
-        
+        self.uot_update = 0
+        self.uot_bi = None
         
     def forward(self, x, pretraining=False):
         # cur_cat = 0
@@ -988,8 +989,8 @@ class Learnable_Topology_BGNN(nn.Module):
             out_fake_3 = self.netD3(feat_gcn3.detach())
             g_out_fake_3 = self.netD3(feat_gcn3)
         
-        before_gcn3_x = F.dropout(feat_gcn3, self.dropout_rate, training=self.training)
-        feat_gcn3 = self.GCN_layer4(before_gcn3_x, adj_mI)
+        # before_gcn3_x = F.dropout(feat_gcn3, self.dropout_rate, training=self.training)
+        # feat_gcn3 = self.GCN_layer4(before_gcn3_x, adj_mI)
         # feat4 = F.elu(feat_gcn3 + before_gcn3_x)
         # feat3_drop = F.dropout(feat3, self.dropout_rate, training=self.training)
         feat_out = self.linear1(feat_gcn3)
@@ -1018,22 +1019,32 @@ class Learnable_Topology_BGNN(nn.Module):
     def sep_bipartite_graphs(self, adj):
         self.bipartite_graphs = []
         cur_cat = 0
+        
+        if self.uot_update == 0:
+            self.uot_bi = self.sep_bipartite_graphs_by_uot(adj.detach())
+            self.uot_update = 100
+        else:
+            self.uot_update -= 1
+            
         for i in range(0, self.n_datasets):
             this_bipartite_graph = adj[cur_cat:cur_cat+self.dataset_cats[i], self.total_cats:]
 
             if self.output_max_adj:
-                # 找到每列的最大值
-                max_values, _ = torch.max(this_bipartite_graph, dim=0)
+                # # 找到每列的最大值
+                # max_values, _ = torch.max(this_bipartite_graph, dim=0)
 
-                # 创建掩码矩阵，将每列的最大值位置置为1，其余位置置为0
-                mask = torch.zeros_like(this_bipartite_graph)
-                mask[this_bipartite_graph == max_values] = 1
-                max_bipartite_graph = this_bipartite_graph * mask
-                self.bipartite_graphs.append(max_bipartite_graph)
+                # # 创建掩码矩阵，将每列的最大值位置置为1，其余位置置为0
+                # mask = torch.zeros_like(this_bipartite_graph)
+                # mask[this_bipartite_graph == max_values] = 1
+                # max_bipartite_graph = this_bipartite_graph * mask
+                
+                # self.bipartite_graphs.append(max_bipartite_graph)
+                
+                self.bipartite_graphs.append(self.uot_bi[i].detach())
                 
             if self.output_softmax_and_max_adj or not self.output_max_adj:
                 # softmax_bipartite_graph = F.softmax(this_bipartite_graph/0.07, dim=0)
-
+                
                 self.bipartite_graphs.append(this_bipartite_graph)
             
             cur_cat += self.dataset_cats[i]

@@ -6,6 +6,7 @@ import sys
 from time import sleep
 sys.path.insert(0, '.')
 import os
+# os.environ['CUDA_LAUNCH_BLOCKING'] = '1'
 import os.path as osp
 import logging
 import argparse
