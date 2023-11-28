@@ -1020,27 +1020,27 @@ class Learnable_Topology_BGNN(nn.Module):
         self.bipartite_graphs = []
         cur_cat = 0
         
-        if self.uot_update == 0:
-            self.uot_bi = self.sep_bipartite_graphs_by_uot(adj.detach())
-            self.uot_update = 100
-        else:
-            self.uot_update -= 1
+        # if self.uot_update == 0:
+        #     self.uot_bi = self.sep_bipartite_graphs_by_uot(adj.detach())
+        #     self.uot_update = 100
+        # else:
+        #     self.uot_update -= 1
+
             
         for i in range(0, self.n_datasets):
             this_bipartite_graph = adj[cur_cat:cur_cat+self.dataset_cats[i], self.total_cats:]
 
             if self.output_max_adj:
-                # # 找到每列的最大值
-                # max_values, _ = torch.max(this_bipartite_graph, dim=0)
+                # 找到每列的最大值
+                max_values, _ = torch.max(this_bipartite_graph, dim=0)
 
-                # # 创建掩码矩阵，将每列的最大值位置置为1，其余位置置为0
-                # mask = torch.zeros_like(this_bipartite_graph)
-                # mask[this_bipartite_graph == max_values] = 1
-                # max_bipartite_graph = this_bipartite_graph * mask
+                # 创建掩码矩阵，将每列的最大值位置置为1，其余位置置为0
+                mask = torch.zeros_like(this_bipartite_graph)
+                mask[this_bipartite_graph == max_values] = 1
+                max_bipartite_graph = this_bipartite_graph * mask
                 
-                # self.bipartite_graphs.append(max_bipartite_graph)
-                
-                self.bipartite_graphs.append(self.uot_bi[i].detach())
+                self.bipartite_graphs.append(max_bipartite_graph)
+                # self.bipartite_graphs.append(self.uot_bi[i].detach())
                 
             if self.output_softmax_and_max_adj or not self.output_max_adj:
                 # softmax_bipartite_graph = F.softmax(this_bipartite_graph/0.07, dim=0)
@@ -1048,7 +1048,7 @@ class Learnable_Topology_BGNN(nn.Module):
                 self.bipartite_graphs.append(this_bipartite_graph)
             
             cur_cat += self.dataset_cats[i]
-        
+
         return self.bipartite_graphs
 
        
@@ -1188,7 +1188,7 @@ class Learnable_Topology_BGNN(nn.Module):
         return self.bipartite_graphs 
     
     def sep_bipartite_graphs_by_uot(self, adj):
-        self.bipartite_graphs = []
+        bipartite_graphs = []
         cur_cat = 0
         for i in range(0, self.n_datasets):
             this_bipartite_graph = adj[cur_cat:cur_cat+self.dataset_cats[i], self.total_cats:]
@@ -1271,7 +1271,7 @@ class Learnable_Topology_BGNN(nn.Module):
             self.beta[i] = mu*self.beta[i] + (1-mu)*new_beta
             # print(out_bipartite_graphs)
             # print(torch.max(out_bipartite_graphs, dim=0))
-            self.bipartite_graphs.append(out_bipartite_graphs) 
+            bipartite_graphs.append(out_bipartite_graphs) 
                 
             cur_cat += self.dataset_cats[i]
         
@@ -1310,7 +1310,7 @@ class Learnable_Topology_BGNN(nn.Module):
         #     self.bipartite_graphs.append(temp_bipartite_graphs[cur_cat:cur_cat+self.dataset_cats[s_id], :])
         #     cur_cat += self.dataset_cats[s_id]
         
-        return self.bipartite_graphs 
+        return bipartite_graphs 
 
     def get_params(self):
         def add_param_to_list(mod, wd_params, nowd_params):

@@ -96,38 +96,38 @@ def set_model(configer):
         for i in range(0, configer.get('n_datasets')):
             del state[f'bipartite_graphs.{i}']
             
-        new_state = {}
-        for k,v in state.items():
+        # new_state = {}
+        # for k,v in state.items():
             
-            if 'bn' in k:
-                if 'weight' in k:
-                    newk = k.replace('bn', 'affine_weight').replace('.weight', '')
-                    new_state[newk] = v
-                    continue
-                elif 'bias' in k:
-                    newk = k.replace('bn', 'affine_bias').replace('.bias', '')
-                    new_state[newk] = v
-                    continue
+        #     if 'bn' in k:
+        #         if 'weight' in k:
+        #             newk = k.replace('bn', 'affine_weight').replace('.weight', '')
+        #             new_state[newk] = v
+        #             continue
+        #         elif 'bias' in k:
+        #             newk = k.replace('bn', 'affine_bias').replace('.bias', '')
+        #             new_state[newk] = v
+        #             continue
                     
-            if 'norm.weight' in k:
-                newk = k.replace('norm.weight', 'affine_weight')
-                new_state[newk] = v
-                continue
-            if 'norm.bias' in k:
-                newk = k.replace('norm.bias', 'affine_bias')
-                new_state[newk] = v
-                continue
+        #     if 'norm.weight' in k:
+        #         newk = k.replace('norm.weight', 'affine_weight')
+        #         new_state[newk] = v
+        #         continue
+        #     if 'norm.bias' in k:
+        #         newk = k.replace('norm.bias', 'affine_bias')
+        #         new_state[newk] = v
+        #         continue
                 
-            if 'downsample.1.weight' in k:
-                newk = k.replace('1.weight', 'affine_weight')
-                new_state[newk] = v
-                continue
-            if 'downsample.1.bias' in k:
-                newk = k.replace('1.bias', 'affine_bias')
-                new_state[newk] = v
-                continue
+        #     if 'downsample.1.weight' in k:
+        #         newk = k.replace('1.weight', 'affine_weight')
+        #         new_state[newk] = v
+        #         continue
+        #     if 'downsample.1.bias' in k:
+        #         newk = k.replace('1.bias', 'affine_bias')
+        #         new_state[newk] = v
+        #         continue
             
-            new_state[k] = v
+        #     new_state[k] = v
                     
             
         if 'model_state_dict' in state:
@@ -586,13 +586,7 @@ def train():
             warmup_ratio=0.1, warmup='exp', last_epoch=-1,)
     
     
-    # _, ori_bi_graphs = graph_net.module.get_optimal_matching(graph_node_features, True)
-    # bi_graphs = []
-    # if len(ori_bi_graphs) == 2*n_datasets:
-    #     for j in range(0, len(ori_bi_graphs), 2):
-    #         bi_graphs.append(ori_bi_graphs[j+1].detach())
-    # else:
-    #     bi_graphs = [bigh.detach() for bigh in ori_bi_graphs]
+
     # with torch.no_grad():
     #     if is_distributed():
     #         unify_prototype, ori_bi_graphs = graph_net.module.get_optimal_matching(graph_node_features, True)
@@ -623,21 +617,21 @@ def train():
 
     #     init_gnn_stage = False
     #     if is_distributed():
-    #         net.module.set_unify_prototype(unify_prototype, True)
+    #         # net.module.set_unify_prototype(unify_prototype, True)
     #         net.module.set_bipartite_graphs(bi_graphs)
     #     else:
-    #         net.set_unify_prototype(unify_prototype, True)
+    #         # net.set_unify_prototype(unify_prototype, True)
     #         net.set_bipartite_graphs(bi_graphs)
     # print_bipartite(configer, 7, bi_graphs)
 
     
     if is_distributed():
-        optim = set_optimizer(net.module, configer, configer.get('lr', 'seg_lr_start'))
         if train_seg_or_gnn == SEG:    
             net.module.unify_prototype.requires_grad = True
+        optim = set_optimizer(net.module, configer, configer.get('lr', 'seg_lr_start'))
     else:
-        optim = set_optimizer(net, configer, configer.get('lr', 'seg_lr_start'))
         net.unify_prototype.requires_grad = True
+        optim = set_optimizer(net, configer, configer.get('lr', 'seg_lr_start'))
         
     lr_schdr = WarmupPolyLrScheduler(optim, power=0.9,
         max_iter=configer.get('train','seg_iters'), warmup_iter=configer.get('lr','warmup_iters'),
@@ -645,6 +639,7 @@ def train():
     
     total_max_iter = configer.get('lr', 'max_iter')
     configer.update(['iter'], 0)
+    starti = 10000
     for i in range(starti, configer.get('lr','max_iter') + starti):
         configer.plus_one('iter')
         alter_iter += 1
@@ -821,6 +816,11 @@ def train():
                         seg_out = net(im,dataset_lbs)
 
                 unify_prototype, bi_graphs, adv_out, _ = graph_net(graph_node_features)
+                
+                # if is_distributed():
+                #     unify_prototype = net.module.unify_prototype.detach()
+                # else:
+                #     unify_prototype = net.unify_prototype.detach()
 
                 # if configer.get("GNN", "ema_graph") == True:
                 #     if len(new_bi_graphs) == 2*len(bi_graphs):
