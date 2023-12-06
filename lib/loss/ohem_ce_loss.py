@@ -7,6 +7,9 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 
+from lib.loss.loss_helper import RecallCrossEntropy, FocalLoss
+
+
 class OhemCELoss(nn.Module):
 
     def __init__(self, thresh, ignore_lb=255):
@@ -39,6 +42,8 @@ class MdsOhemCELoss(nn.Module):
         self.thresh = -torch.log(torch.tensor(thresh, requires_grad=False, dtype=torch.float)) #.cuda()
         self.ignore_lb = ignore_lb
         self.criteria = nn.CrossEntropyLoss(ignore_index=ignore_lb, reduction='none')
+        # self.criteria = FocalLoss(gamma=2, ignore_index=ignore_lb, reduction='none')
+        # self.criterias = [RecallCrossEntropy(n_classes=self.configer.get(f'dataset{i+1}', 'n_cats'), ignore_index=ignore_lb) for i in range(self.n_datasets)]
 
     def forward(self, logits, labels, dataset_ids):
         if labels.is_cuda:
@@ -51,6 +56,7 @@ class MdsOhemCELoss(nn.Module):
         for i in range(self.n_datasets):
             if not (dataset_ids == i).any():
                 continue
+            # loss = self.criterias[i](logits[cur_index], labels[dataset_ids==i]).view(-1)
             loss = self.criteria(logits[cur_index], labels[dataset_ids==i]).view(-1)
             cur_index+=1
             # print(loss.shape)
@@ -61,8 +67,8 @@ class MdsOhemCELoss(nn.Module):
         
         # print("losses shape: ", losses.shape)
         loss_hard = losses[losses > self.thresh]
-        # print("loss.shape: ", losses.shape)
-        # print("loss_hard.shape: ", loss_hard.shape)
+        # # print("loss.shape: ", losses.shape)
+        # # print("loss_hard.shape: ", loss_hard.shape)
             
         if loss_hard.numel() < n_min:
             loss_hard, _ = losses.topk(n_min)

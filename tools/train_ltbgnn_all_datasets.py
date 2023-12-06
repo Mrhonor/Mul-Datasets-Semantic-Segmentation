@@ -704,7 +704,7 @@ def train():
             ids.append(j*torch.ones(lb.shape[0], dtype=torch.int))
                 
         if len(im) == 0:
-            dsg_flag == [GO for _ in range(n_datasets)]
+            dsg_flag = [GO for _ in range(n_datasets)]
             continue
         im = torch.cat(ims, dim=0)
         lb = torch.cat(lbs, dim=0)

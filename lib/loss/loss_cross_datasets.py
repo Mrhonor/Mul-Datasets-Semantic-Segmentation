@@ -811,7 +811,7 @@ class CrossDatasetsCELoss_AdvGNN(nn.Module):
 
         # self.CELoss = nn.CrossEntropyLoss(ignore_index=255)
         self.OhemCELoss = OhemCELoss(0.7, ignore_lb=255)
-        self.mdsOhemCELoss = MdsOhemCELoss(self.configer, 0.7, ignore_lb=255)
+        self.mdsOhemCELoss = MdsOhemCELoss(self.configer, 1.4, ignore_lb=255)
     
         self.advloss = nn.BCELoss()
         self.adv_loss_weight = self.configer.get('loss', 'adv_loss_weight')
