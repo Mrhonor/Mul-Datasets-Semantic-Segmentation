@@ -51,6 +51,7 @@ class MdsOhemCELoss(nn.Module):
 
         n_min = labels[labels != self.ignore_lb].numel() // 16
         losses = []
+        loss_hardes = []
         
         cur_index = 0
         for i in range(self.n_datasets):
@@ -58,12 +59,16 @@ class MdsOhemCELoss(nn.Module):
                 continue
             # loss = self.criterias[i](logits[cur_index], labels[dataset_ids==i]).view(-1)
             loss = self.criteria(logits[cur_index], labels[dataset_ids==i]).view(-1)
+            loss_hard = loss[loss > self.thresh]
+
             cur_index+=1
             # print(loss.shape)
             
             losses.append(loss.clone())
+            # loss_hardes.append(loss_hard.clone())
         
         losses = torch.cat(losses, dim=0)
+        # loss_hard = torch.cat(loss_hardes, dim=0)
         
         # print("losses shape: ", losses.shape)
         loss_hard = losses[losses > self.thresh]
