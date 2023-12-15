@@ -732,7 +732,7 @@ class HRNet_W48_GNN(nn.Module):
         if len(bi_graphs) == 2 * self.n_datasets:
             for i in range(0, self.n_datasets):
                 self.bipartite_graphs[i] = nn.Parameter(
-                    bi_graphs[2*i], requires_grad=False
+                    bi_graphs[2*i+1], requires_grad=False
                     )
         else:
             # print("bi_graphs len:", len(bi_graphs))

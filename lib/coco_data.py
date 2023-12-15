@@ -314,7 +314,7 @@ class Coco_data(BaseDataset):
             
         for el in self.labels_info:
             if mode=='train' and el['trainId'] == 255:
-                self.lb_map[el['id']] = 134
+                self.lb_map[el['id']] = 133
             else:
                 self.lb_map[el['id']] = el['trainId']
 

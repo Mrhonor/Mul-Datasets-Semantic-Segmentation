@@ -951,6 +951,9 @@ class Learnable_Topology_BGNN(nn.Module):
         self.beta = [ot.unif(self.dataset_cats[i]) for i in range(0, self.n_datasets)]
         self.uot_update = 0
         self.uot_bi = None
+        self.GumbelSoftmax = self.configer.get('GNN', 'GumbelSoftmax')
+        if self.GumbelSoftmax:
+            self.tau = 10
         
     def forward(self, x, pretraining=False):
         # cur_cat = 0
@@ -1025,19 +1028,27 @@ class Learnable_Topology_BGNN(nn.Module):
         #     self.uot_update = 100
         # else:
         #     self.uot_update -= 1
-
             
         for i in range(0, self.n_datasets):
             this_bipartite_graph = adj[cur_cat:cur_cat+self.dataset_cats[i], self.total_cats:]
 
+            # if self.GumbelSoftmax:
+            #     F.gumbel_softmax(logits, tau=1, hard=False, eps=1e-20, dim=-1)
+            # else:
             if self.output_max_adj:
                 # 找到每列的最大值
-                max_values, _ = torch.max(this_bipartite_graph, dim=0)
+                if self.GumbelSoftmax:
+                    cur_iter = (self.configer.get('iter') - self.configer.get('lr', 'init_iter')) % (self.configer.get('train', 'seg_iters') + self.configer.get('train', 'gnn_iters'))
+                    cur_iter = cur_iter % self.configer.get('train', 'gnn_iters') 
+                    this_tau = self.np_gumbel_softmax_decay(cur_iter, 2e-5, self.tau, 0.01)
+                    max_bipartite_graph = F.gumbel_softmax(10*this_bipartite_graph, tau=this_tau, hard=False, eps=1e-20, dim=0)
+                else:
+                    max_values, _ = torch.max(this_bipartite_graph, dim=0)
 
-                # 创建掩码矩阵，将每列的最大值位置置为1，其余位置置为0
-                mask = torch.zeros_like(this_bipartite_graph)
-                mask[this_bipartite_graph == max_values] = 1
-                max_bipartite_graph = this_bipartite_graph * mask
+                    # 创建掩码矩阵，将每列的最大值位置置为1，其余位置置为0
+                    mask = torch.zeros_like(this_bipartite_graph)
+                    mask[this_bipartite_graph == max_values] = 1
+                    max_bipartite_graph = this_bipartite_graph * mask
                 
                 self.bipartite_graphs.append(max_bipartite_graph)
                 # self.bipartite_graphs.append(self.uot_bi[i].detach())
@@ -1045,6 +1056,12 @@ class Learnable_Topology_BGNN(nn.Module):
             if self.output_softmax_and_max_adj or not self.output_max_adj:
                 # softmax_bipartite_graph = F.softmax(this_bipartite_graph/0.07, dim=0)
                 
+                
+                # cur_iter = (self.configer.get('iter') - self.configer.get('lr', 'init_iter')) % (self.configer.get('train', 'seg_iters') + self.configer.get('train', 'gnn_iters'))
+                # cur_iter = cur_iter % self.configer.get('train', 'gnn_iters') 
+                # this_tau = self.np_gumbel_softmax_decay(cur_iter, 1e-5, self.tau, 0.01)
+                # max_bipartite_graph = F.gumbel_softmax(10*this_bipartite_graph, tau=this_tau, hard=False, eps=1e-20, dim=0)
+                # self.bipartite_graphs.append(max_bipartite_graph)
                 self.bipartite_graphs.append(this_bipartite_graph)
             
             cur_cat += self.dataset_cats[i]
@@ -1108,6 +1125,12 @@ class Learnable_Topology_BGNN(nn.Module):
             this_bipartite_graph = adj_mI[cur_cat:cur_cat+self.dataset_cats[i], self.total_cats:]
 
             softmax_bipartite_graph = F.softmax(this_bipartite_graph/0.07, dim=0)
+            # if self.GumbelSoftmax:
+            #     cur_iter = (self.configer.get('iter') - self.configer.get('lr', 'init_iter')) % (self.configer.get('train', 'seg_iters') + self.configer.get('train', 'gnn_iters'))
+            #     cur_iter = cur_iter % self.configer.get('train', 'gnn_iters') 
+            #     this_tau = self.np_gumbel_softmax_decay(cur_iter, 1e-5, self.tau, 0.01)
+            #     softmax_bipartite_graph = F.gumbel_softmax(softmax_bipartite_graph, tau=this_tau, hard=False, eps=1e-20, dim=0)
+                
             adj_mI[cur_cat:cur_cat+self.dataset_cats[i], self.total_cats:] = softmax_bipartite_graph
             cur_cat = cur_cat+self.dataset_cats[i]
 
@@ -1140,11 +1163,29 @@ class Learnable_Topology_BGNN(nn.Module):
                 
                 return feat_out[self.total_cats:], self.sep_bipartite_graphs_by_km(non_norm_adj_mI_after)
             else:
+                if self.GumbelSoftmax:
+                    self.GumbelSoftmax = False
+                    _, non_norm_adj_mI = self.calc_adjacency_matrix(feat1)
+                    self.GumbelSoftmax = True
+                                
                 # return feat_out[self.total_cats:], self.sep_bipartite_graphs(non_norm_adj_mI)
                 return feat_out[self.total_cats:], self.sep_bipartite_graphs_by_uot(non_norm_adj_mI)
                 # return feat_out[self.total_cats:], self.sep_bipartite_graphs_by_km(non_norm_adj_mI)
         else:
             return feat_out[self.total_cats:], self.pretrain_bipartite_graphs(x.is_cuda)
+
+    def np_gumbel_softmax_decay(self, current_iter, r, max_temp, min_temp):
+        """
+        Annealing schedule used in Gumbel-Softmax paper
+        Jang et al. Categorical Reparameterization with Gumbel Softmax ICLR 2017
+        :param current_iter: current training iteration
+        :param r: hyperparameter, suggested range {1e-5, 1e-4}
+        :param max_temp: initial tau
+        :param min_temp: minimum tau
+        :return: temperature
+        """
+        annealed_temp = max_temp * np.exp(-r * current_iter)
+        return np.maximum(min_temp, annealed_temp)
 
     def sep_bipartite_graphs_by_km(self, adj):
         self.bipartite_graphs = []

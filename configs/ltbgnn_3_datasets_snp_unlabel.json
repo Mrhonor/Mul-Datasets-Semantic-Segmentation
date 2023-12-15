@@ -9,7 +9,7 @@
     "full_res_stem": false
   },
   "GNN": {
-    "model_name": "learnable_topology_BGNN",
+    "model_name": "learnable_topology_BGNN_unlabel",
     "nfeat": 1024,
     "nfeat_out": 512,
     "nfeat_adj": 256,
@@ -28,15 +28,15 @@
     "calc_bipartite": false,
     "output_max_adj": true,
     "output_softmax_and_max_adj": true,
-    "with_orth": true,
+    "with_orth": false,
     "orth_weight": 1,
     "mse_or_adv": "None",
     "ema_graph": false,
-    "ema_graph_rate": 0.999,
-    "GumbelSoftmax": false
+    "ema_graph_rate": 0.999    
   },
   "dataset1": {
-    "n_cats": 19,
+    "n_cats": 20,
+    "eval_cats": 19,
     "data_reader": "CityScapes",
     "im_root": "D:/Study/code//datasets",
     "train_im_anns":"datasets/Cityscapes/train.txt",
@@ -86,7 +86,8 @@
     "label_names": ["road", "drivable fallback or parking", "sidewalk", "non-drivable fallback or rail track", "person or animal", "out of roi or rider", "motorcycle", "bicycle", "autorickshaw", "car", "truck", "bus", "trailer or caravan or vehicle fallback", "curb", "wall", "fence", "guard rail", "billboard", "traffic sign", "traffic light", "polegroup or pole", "obs-str-bar-fallback", "building", "tunnel or bridge", "vegetation", "sky or fallback background"]
   },
   "dataset2": {
-    "n_cats": 150, 
+    "n_cats": 151, 
+    "eval_cats": 150,
     "data_reader": "ade2016",
     "im_root": "D:/Study/code//datasets/ADEChallengeData2016",
     "train_im_anns":"datasets/ADE/training.txt",
@@ -96,7 +97,8 @@
     "label_names": ["flag", "wall", "building, edifice", "sky", "floor, flooring", "tree", "ceiling", "road, route", "bed ", "windowpane, window ", "grass", "cabinet", "sidewalk, pavement", "person, individual, someone, somebody, mortal, soul", "earth, ground", "door, double door", "table", "mountain, mount", "plant, flora, plant life", "curtain, drape, drapery, mantle, pall", "chair", "car, auto, automobile, machine, motorcar", "water", "painting, picture", "sofa, couch, lounge", "shelf", "house", "sea", "mirror", "rug, carpet, carpeting", "field", "armchair", "seat", "fence, fencing", "desk", "rock, stone", "wardrobe, closet, press", "lamp", "bathtub, bathing tub, bath, tub", "railing, rail", "cushion", "base, pedestal, stand", "box", "column, pillar", "signboard, sign", "chest of drawers, chest, bureau, dresser", "counter", "sand", "sink", "skyscraper", "fireplace, hearth, open fireplace", "refrigerator, icebox", "grandstand, covered stand", "path", "stairs, steps", "runway", "case, display case, showcase, vitrine", "pool table, billiard table, snooker table", "pillow", "screen door, screen", "stairway, staircase", "river", "bridge, span", "bookcase", "blind, screen", "coffee table, cocktail table", "toilet, can, commode, crapper, pot, potty, stool, throne", "flower", "book", "hill", "bench", "countertop", "stove, kitchen stove, range, kitchen range, cooking stove", "palm, palm tree", "kitchen island", "computer, computing machine, computing device, data processor, electronic computer, information processing system", "swivel chair", "boat", "bar", "arcade machine", "hovel, hut, hutch, shack, shanty", "bus, autobus, coach, charabanc, double-decker, jitney, motorbus, motorcoach, omnibus, passenger vehicle", "towel", "light, light source", "truck, motortruck", "tower", "chandelier, pendant, pendent", "awning, sunshade, sunblind", "streetlight, street lamp", "booth, cubicle, stall, kiosk", "television receiver, television, television set, tv, tv set, idiot box, boob tube, telly, goggle box", "airplane, aeroplane, plane", "dirt track", "apparel, wearing apparel, dress, clothes", "pole", "land, ground, soil", "bannister, banister, balustrade, balusters, handrail", "escalator, moving staircase, moving stairway", "ottoman, pouf, pouffe, puff, hassock", "bottle", "buffet, counter, sideboard", "poster, posting, placard, notice, bill, card", "stage", "van", "ship", "fountain", "conveyer belt, conveyor belt, conveyer, conveyor, transporter", "canopy", "washer, automatic washer, washing machine", "plaything, toy", "swimming pool, swimming bath, natatorium", "stool", "barrel, cask", "basket, handbasket", "waterfall, falls", "tent, collapsible shelter", "bag", "minibike, motorbike", "cradle", "oven", "ball", "food, solid food", "step, stair", "tank, storage tank", "trade name, brand name, brand, marque", "microwave, microwave oven", "pot, flowerpot", "animal, animate being, beast, brute, creature, fauna", "bicycle, bike, wheel, cycle ", "lake", "dishwasher, dish washer, dishwashing machine", "screen, silver screen, projection screen", "blanket, cover", "sculpture", "hood, exhaust hood", "sconce", "vase", "traffic light, traffic signal, stoplight", "tray", "ashcan, trash can, garbage can, wastebin, ash bin, ash-bin, ashbin, dustbin, trash barrel, trash bin", "fan", "pier, wharf, wharfage, dock", "crt screen", "plate", "monitor, monitoring device", "bulletin board, notice board", "shower", "radiator", "glass, drinking glass", "clock"]
   },
   "dataset3": {
-    "n_cats": 133, 
+    "n_cats": 134, 
+    "eval_cats": 133,
     "data_reader": "Coco_data",
     "im_root": "D:/Study/code//datasets/coco",
     "train_im_anns":"datasets/coco/train.txt",
@@ -122,8 +124,7 @@
     "spa_loss_weight": 0.1,
     "with_max_enc": false,
     "max_enc_weight": 1,
-    "adv_loss_weight": 1, 
-    "GridSplit": false
+    "adv_loss_weight": 1
   },
   "use_ema": false,
   "lr": {
@@ -142,9 +143,9 @@
     "finetune": true,
     "finetune_from": "res/celoss/snp_clip_model.pth",
     "graph_finetune": false,
-    "graph_finetune_from": "res/celoss/graph_model_80000.pth",
+    "graph_finetune_from": "res/celoss/graph_model_500000.pth",
     "seg_iters": 500000,
-    "gnn_iters": 100000,
+    "gnn_iters": 500000,
     "finetune_stage1_iters": 30000,
     "finetune_stage2_iters": 80000,
     "joint_train": true

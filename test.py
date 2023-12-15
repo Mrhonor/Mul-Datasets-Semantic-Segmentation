@@ -1,19 +1,21 @@
 import torch
 import torch.nn as nn
 torch.manual_seed(123)
-conv1 = nn.Conv2d(2, 4, 1, bias=False)
-class prototype(nn.Module):
-    def __init__(self, n, c):
-        super(prototype, self).__init__()
-        self.b = nn.Parameter(torch.randn(n, c), requires_grad=True)
-    def forward(self, x):
-        x = torch.einsum('bchw, nc -> bnhw', x, self.b)
-        return x
+conv1 = nn.Linear(2, 3, bias=False)
+# class prototype(nn.Module):
+#     def __init__(self, n, c):
+#         super(prototype, self).__init__()
+#         self.b = nn.Parameter(torch.randn(n, c), requires_grad=True)
+#     def forward(self, x):
+#         x = torch.einsum('bc, nc -> bn', x, self.b)
+#         return x
 
-# b = nn.Parameter(torch.randn(2, 4), requires_grad=True)
+
+
+# x = nn.Parameter(torch.randn(2, 2), requires_grad=True)
 bi_graph1 = nn.Parameter(torch.randn(4, 3), requires_grad=True)
 bi_graph2 = nn.Parameter(torch.randn(4, 2), requires_grad=True)
-b = prototype(4, 4)
+# b = prototype(4, 4)
 # def hook_fn(module, grad_input, grad_output):
 #     print(grad_input)
 #     print(grad_output)
@@ -28,19 +30,21 @@ b = prototype(4, 4)
 #     # print("hook_fn: ", grad)
 #     return grad_input
 
-# def hook_fn2(grad):
-#     print("hook_fn2: ", grad)
-#     # grad = torch.ones_like(grad)
-#     return grad
+def hook_fn2(grad):
+    print("hook_fn2: ", grad)
+    # grad = torch.ones_like(grad)
+    return grad
 
 # # b.register_full_backward_hook(hook_fn)
 # b.b.register_hook(hook_fn2)
-x = torch.randn(2, 2, 3, 3)
+x = torch.randn(4, 2)
 y = conv1(x)
 # print(y.shape)
 # print(b.shape)
-# z = torch.einsum('bchw, nc -> bnhw', y, b)
-z = b(y)
+logits = torch.randn(2, 3, 3, 3)
+z = torch.einsum('bchw, nc -> bnhw', logits, y)
+y.register_hook(hook_fn2)
+# z = b(y)
 datasets_id = torch.tensor([0, 1])
 z1 = torch.einsum('bchw, cn -> bnhw', z[datasets_id == 0], bi_graph1)
 z2 = torch.einsum('bchw, cn -> bnhw', z[datasets_id == 1], bi_graph2)
@@ -53,7 +57,7 @@ print(lb)
 loss = criteria(z1, lb[datasets_id == 0]) + criteria(z2, lb[datasets_id == 1]) 
 loss.backward()
 
-print("b.grad: ", b.b.grad)
+print("z.grad: ", z.grad)
 print("conv.grad: ", conv1.weight.grad)
 
 
@@ -76,7 +80,7 @@ class MyConv1x1Function(torch.autograd.Function):
             if not (datasets_id == i).any():
                 continue
             grad_output[datasets_id == i] = torch.einsum('bchw, c -> bchw', grad_output[datasets_id == i], M[i])
-        print(grad_output)
+
         grad_input = torch.einsum('bchw, cn -> bnhw', grad_output, weight)
         grad_weight = torch.einsum('bchw, bnhw -> cn', grad_output, x)
 
@@ -91,20 +95,33 @@ class MyConv1x1(nn.Module):
         self.weight = nn.Parameter(torch.randn(out_channels, in_channels))
 
     def forward(self, x):
-        return MyConv1x1Function.apply(x, self.weight, datasets_id, torch.tensor([[1,1,1,0], [0,1,1,1]]))
+        return MyConv1x1Function.apply(x, self.weight, datasets_id, torch.tensor([[1,1,1,1], [1,1,1,1]]))
 
 conv1.zero_grad()
-b.zero_grad()
+# b.zero_grad()
 x.grad = None
 bi_graph1.grad = None
 bi_graph2.grad = None
-b2 = MyConv1x1(4, 4)
-b2.weight.data = b.b
+logits.grad = None
+z.grad = None
+# b2 = MyConv1x1(4, 4)
+# b2.weight.data = b.b
 y = conv1(x)
 # print(y.shape)
 # print(b.shape)
 # z = torch.einsum('bchw, nc -> bnhw', y, b)
-z = b2(y)
+# cur_cat = 0
+# self.M = torch.zeros(2, 4)
+# for i in range(self.n_datasets):
+#     this_n = int(0.5*self.max_num_unify_class*self.n_cats[i]/float(self.total_cats))
+#     self.M[i, cur_cat:cur_cat+this_n] = 1
+#     cur_cat += this_n
+
+# self.M[:, cur_cat:] = 1
+z = MyConv1x1Function.apply(logits, y, datasets_id, torch.tensor([[1,1,0,0], [0,1,0,0]]))
+y.register_hook(hook_fn2)
+
+# z = torch.einsum('bchw, nc -> bnhw', logits, b)
 z1 = torch.einsum('bchw, cn -> bnhw', z[datasets_id == 0], bi_graph1)
 z2 = torch.einsum('bchw, cn -> bnhw', z[datasets_id == 1], bi_graph2)
 
@@ -112,9 +129,9 @@ loss = criteria(z1, lb[datasets_id == 0]) + criteria(z2, lb[datasets_id == 1])
 # loss = criteria(z, lb)
 loss.backward()
 
-print("b.grad: ", b2.weight.grad)
+# print("b.grad: ", b2.weight.grad)
 print("conv.grad: ", conv1.weight.grad)
-print('bigraph1.grad: ', bi_graph1.grad)
+print('z.grad: ', z.grad)
 
 
 # a = torch.ones(1,2,1,2)
@@ -127,3 +144,4 @@ print('bigraph1.grad: ', bi_graph1.grad)
 # print(output_reshaped)
 # output = output_reshaped.reshape(a.size(0), -1, a.size(2), a.size(3))
 # print("mat: ", output)
+

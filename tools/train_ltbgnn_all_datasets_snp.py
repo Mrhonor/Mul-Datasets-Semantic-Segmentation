@@ -29,7 +29,7 @@ from lib.loss.loss_cross_datasets import CrossDatasetsLoss, CrossDatasetsCELoss,
 from lib.class_remap import ClassRemap
 
 from tools.configer import Configer
-from evaluate import eval_model_contrast, eval_model_aux, eval_model, eval_model_contrast_single, eval_model_mulbn, eval_model_dsg
+from evaluate import eval_model_contrast, eval_model_aux, eval_model, eval_model_contrast_single, eval_model_mulbn, eval_model_dsg, eval_model_unlabel
 
 from tensorboardX import SummaryWriter
 
@@ -92,9 +92,9 @@ def set_model(configer):
         logger.info(f"load pretrained weights from {configer.get('train', 'finetune_from')}")
         state = torch.load(configer.get('train', 'finetune_from'), map_location='cpu')
         
-        # del state['unify_prototype']
-        # for i in range(0, configer.get('n_datasets')):
-        #     del state[f'bipartite_graphs.{i}']
+        del state['unify_prototype']
+        for i in range(0, configer.get('n_datasets')):
+            del state[f'bipartite_graphs.{i}']
             
         # new_state = {}
         # for k,v in state.items():
@@ -150,7 +150,13 @@ def set_graph_model(configer):
 
     if configer.get('train', 'graph_finetune'):
         logger.info(f"load pretrained weights from {configer.get('train', 'graph_finetune_from')}")
-        net.load_state_dict(torch.load(configer.get('train', 'graph_finetune_from'), map_location='cpu'), strict=False)
+        state = torch.load(configer.get('train', 'graph_finetune_from'), map_location='cpu')
+        
+        if 'model_state_dict' in state:
+            net.load_state_dict(state['model_state_dict'], strict=False)
+        else:
+            net.load_state_dict(state, strict=False)
+        # net.load_state_dict(torch.load(configer.get('train', 'graph_finetune_from'), map_location='cpu'), strict=False)
 
         
     if configer.get('use_sync_bn'): 
@@ -780,10 +786,10 @@ def train():
                 
                 if is_distributed():
                     unify_prototype, ori_bi_graphs = graph_net.module.get_optimal_matching(graph_node_features, GNN_INIT)
-                    _, gnn_bi_graphs, adv_out = graph_net(graph_node_features)    
+                    _, gnn_bi_graphs, adv_out, _ = graph_net(graph_node_features)    
                 else:
                     unify_prototype, ori_bi_graphs = graph_net.get_optimal_matching(graph_node_features, GNN_INIT)     
-                    _, gnn_bi_graphs, adv_out = graph_net(graph_node_features)     
+                    _, gnn_bi_graphs, adv_out, _ = graph_net(graph_node_features)     
                 # print(bi_graphs)
 
                 # print(torch.norm(unify_prototype[0][0], p=2))
@@ -1082,7 +1088,8 @@ def train():
             if use_dataset_aux_head and i < aux_iter:
                 eval_model_func = eval_model_aux
             else:
-                # eval_model = eval_model_contrast
+                
+                # eval_model_func = eval_model_unlabel
                 eval_model_func = eval_model_contrast
 
             if train_seg_or_gnn == SEG:
