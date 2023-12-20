@@ -267,6 +267,7 @@ class SemsegModel(nn.Module):
         self.configer = configer
         self.aux_mode = self.configer.get('aux_mode')
         self.n_datasets = configer.get("n_datasets")
+        self.with_datasets_aux = self.configer.get('loss', 'with_datasets_aux')
         self.backbone = resnet18(pretrained=True,
                     pyramid_levels=3,
                     k_upsample=3,
@@ -291,7 +292,18 @@ class SemsegModel(nn.Module):
 
         self.unify_prototype = nn.Parameter(torch.zeros(self.max_num_unify_class, self.output_feat_dim),
                                 requires_grad=False)
+
         trunc_normal_(self.unify_prototype, std=0.02)
+
+        if self.with_datasets_aux:
+            self.aux_prototype = nn.ParameterList([])
+            for i in range(0, self.n_datasets):
+                self.aux_prototype.append(nn.Parameter(torch.zeros(self.datasets_cats[i], self.output_feat_dim),
+                                        requires_grad=False))
+                trunc_normal_(self.aux_prototype[i], std=0.02)
+
+
+
 
         self.num_classes = self.max_num_unify_class
         # self.logits = logit_class(self.backbone.num_features, self.num_classes, batch_norm=use_bn, k=k, bias=bias)
@@ -311,6 +323,14 @@ class SemsegModel(nn.Module):
         if self.aux_mode == 'train':
             if self.training:
                 logits = torch.einsum('bchw, nc -> bnhw', features, self.unify_prototype)
+                if self.with_datasets_aux:
+                    cur_cat = 0
+                    aux_logits = []
+                    for i in range(self.n_datasets):
+                        aux_logits.append(torch.einsum('bchw, nc -> bnhw', features, self.aux_prototype[i]))
+                        cur_cat += self.datasets_cats[i]
+                        
+                    return {'seg':logits, 'aux':aux_logits}
                 return {'seg':logits}
             else:
                 return {'seg':features}
@@ -438,8 +458,17 @@ class SemsegModel(nn.Module):
                     )
 
     def set_unify_prototype(self, unify_prototype, grad=False):
-        self.unify_prototype.data = unify_prototype
-        self.unify_prototype.requires_grad=grad
+        if self.with_datasets_aux:
+            self.unify_prototype.data = unify_prototype[self.total_cats:]
+            self.unify_prototype.requires_grad=grad
+            cur_cat = 0
+            for i in range(self.n_datasets):
+                self.aux_prototype[i].data = unify_prototype[cur_cat:cur_cat+self.datasets_cats[i]]
+                cur_cat += self.datasets_cats[i]
+                self.aux_prototype[i].requires_grad=grad
+        else:
+            self.unify_prototype.data = unify_prototype
+            self.unify_prototype.requires_grad=grad
 
     def get_optim_params(self):
         fine_tune_factor = 4

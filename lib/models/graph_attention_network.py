@@ -890,9 +890,11 @@ class Learnable_Topology_BGNN(nn.Module):
 
         self.mse_or_adv = self.configer.get('GNN', 'mse_or_adv')
         self.GNN_type = self.configer.get('GNN', 'GNN_type')
+        self.with_datasets_aux = self.configer.get('loss', 'with_datasets_aux')
 
         self.linear_before = nn.Linear(self.nfeat, self.nfeat_out)
-        self.linear_adj = nn.Linear(self.nfeat_out, self.nfeat_adj)
+        self.linear_adj = nn.Linear(self.nfeat_out, self.nfeat_adj)        
+        
         if self.calc_bipartite:
             self.linear_adj2 = nn.Linear(self.adj_feat_dim, self.adj_feat_dim)
             
@@ -904,12 +906,12 @@ class Learnable_Topology_BGNN(nn.Module):
             self.GCN_layer1 = GCN(self.nfeat_out, self.nfeat_out)
             self.GCN_layer2 = GCN(self.nfeat_out, self.nfeat_out)
             self.GCN_layer3 = GCN(self.nfeat_out, self.nfeat_out)
-            # self.GCN_layer4 = GCN(self.nfeat_out, self.nfeat_out)
+            self.GCN_layer4 = GCN(self.nfeat_out, self.nfeat_out)
         elif self.GNN_type == 'GSAGE':
             self.GCN_layer1 = GSAGE(self.nfeat_out, self.nfeat_out)
             self.GCN_layer2 = GSAGE(self.nfeat_out, self.nfeat_out)
             self.GCN_layer3 = GSAGE(self.nfeat_out, self.nfeat_out)   
-            # self.GCN_layer4 = GSAGE(self.nfeat_out, self.nfeat_out)   
+            self.GCN_layer4 = GSAGE(self.nfeat_out, self.nfeat_out)   
         
         self.linear1 = nn.Linear(self.nfeat_out, self.output_feat_dim)
         
@@ -942,6 +944,8 @@ class Learnable_Topology_BGNN(nn.Module):
             self.netD2.weights_init()
             self.netD3 = Discriminator(self.nfeat_out, 128, 1, self.dropout_rate)
             self.netD3.weights_init()
+            self.netD4 = Discriminator(self.nfeat_out, 128, 1, self.dropout_rate)
+            self.netD4.weights_init()
         
         self.use_km = False
         if self.use_km:
@@ -996,17 +1000,26 @@ class Learnable_Topology_BGNN(nn.Module):
         # feat_gcn3 = self.GCN_layer4(before_gcn3_x, adj_mI)
         # feat4 = F.elu(feat_gcn3 + before_gcn3_x)
         # feat3_drop = F.dropout(feat3, self.dropout_rate, training=self.training)
-        feat_out = self.linear1(feat_gcn3)
+        before_gcn4_x = F.dropout(feat_gcn3, self.dropout_rate, training=self.training)
+        feat_gcn4 = self.GCN_layer4(before_gcn4_x, adj_mI)
+        if self.mse_or_adv == 'adv':
+            out_real_4 = self.netD4(before_gcn4_x.detach())
+            out_fake_4 = self.netD4(feat_gcn4.detach())
+            g_out_fake_4 = self.netD4(feat_gcn4)
+            
+        feat_out = self.linear1(feat_gcn4)
 
         adv_out = {}
         if self.mse_or_adv == 'adv':
             adv_out['ADV1'] = [out_real_1, out_fake_1, g_out_fake_1]
             adv_out['ADV2'] = [out_real_2, out_fake_2, g_out_fake_2]
             adv_out['ADV3'] = [out_real_3, out_fake_3, g_out_fake_3]
+            adv_out['ADV4'] = [out_real_4, out_fake_4, g_out_fake_4]
         elif self.mse_or_adv == 'mse':
             adv_out['ADV1'] = [feat1_relu.detach(), feat_gcn1]
             adv_out['ADV2'] = [feat_gcn1.detach(), feat_gcn2]
             adv_out['ADV3'] = [feat_gcn2.detach(), feat_gcn3]
+            adv_out['ADV4'] = [feat_gcn3.detach(), feat_gcn4]
             
         if pretraining:
             return feat_out[self.total_cats:], self.sep_bipartite_graphs(non_norm_adj_mI), adv_out, non_norm_adj_mI
@@ -1015,9 +1028,15 @@ class Learnable_Topology_BGNN(nn.Module):
             arch_x = self.linear2(arch_x)
             _, non_norm_adj_mI_after = self.calc_adjacency_matrix(arch_x)
             
-            return feat_out[self.total_cats:], self.sep_bipartite_graphs(non_norm_adj_mI_after), adv_out, non_norm_adj_mI_after
+            if self.with_datasets_aux:
+                return feat_out, self.sep_bipartite_graphs(non_norm_adj_mI_after), adv_out, non_norm_adj_mI_after
+            else:
+                return feat_out[self.total_cats:], self.sep_bipartite_graphs(non_norm_adj_mI_after), adv_out, non_norm_adj_mI_after
         else:
-            return feat_out[self.total_cats:], self.sep_bipartite_graphs(non_norm_adj_mI), adv_out, non_norm_adj_mI
+            if self.with_datasets_aux:
+                return feat_out, self.sep_bipartite_graphs(non_norm_adj_mI), adv_out, non_norm_adj_mI
+            else:
+                return feat_out[self.total_cats:], self.sep_bipartite_graphs(non_norm_adj_mI), adv_out, non_norm_adj_mI
 
     def sep_bipartite_graphs(self, adj):
         self.bipartite_graphs = []
@@ -1152,8 +1171,10 @@ class Learnable_Topology_BGNN(nn.Module):
         
         # feat3 = feat_gcn2 + feat2
         feat_gcn3 = self.GCN_layer3(feat_gcn2, adj_mI)
+
+        feat_gcn4 = self.GCN_layer4(feat_gcn3, adj_mI)
         # feat4 = F.elu(feat_gcn3 + feat3)
-        feat_out = self.linear1(feat_gcn3)
+        feat_out = self.linear1(feat_gcn4)
 
         if init:
             if self.calc_bipartite:
@@ -1161,7 +1182,10 @@ class Learnable_Topology_BGNN(nn.Module):
                 arch_x = self.linear2(arch_x)
                 _, non_norm_adj_mI_after = self.calc_adjacency_matrix(arch_x)
                 
-                return feat_out[self.total_cats:], self.sep_bipartite_graphs_by_km(non_norm_adj_mI_after)
+                if self.with_datasets_aux:
+                    return feat_out, self.sep_bipartite_graphs_by_uot(non_norm_adj_mI_after)
+                else:
+                    return feat_out[self.total_cats:], self.sep_bipartite_graphs_by_uot(non_norm_adj_mI_after)
             else:
                 if self.GumbelSoftmax:
                     self.GumbelSoftmax = False
@@ -1169,10 +1193,16 @@ class Learnable_Topology_BGNN(nn.Module):
                     self.GumbelSoftmax = True
                                 
                 # return feat_out[self.total_cats:], self.sep_bipartite_graphs(non_norm_adj_mI)
-                return feat_out[self.total_cats:], self.sep_bipartite_graphs_by_uot(non_norm_adj_mI)
+                if self.with_datasets_aux:
+                    return feat_out, self.sep_bipartite_graphs_by_uot(non_norm_adj_mI)
+                else:
+                    return feat_out[self.total_cats:], self.sep_bipartite_graphs_by_uot(non_norm_adj_mI)
                 # return feat_out[self.total_cats:], self.sep_bipartite_graphs_by_km(non_norm_adj_mI)
         else:
-            return feat_out[self.total_cats:], self.pretrain_bipartite_graphs(x.is_cuda)
+            if self.with_datasets_aux:
+                return feat_out, self.pretrain_bipartite_graphs(x.is_cuda)
+            else:
+                return feat_out[self.total_cats:], self.pretrain_bipartite_graphs(x.is_cuda)
 
     def np_gumbel_softmax_decay(self, current_iter, r, max_temp, min_temp):
         """
@@ -1311,7 +1341,7 @@ class Learnable_Topology_BGNN(nn.Module):
             mu = 0.7
             self.beta[i] = mu*self.beta[i] + (1-mu)*new_beta
             # print(out_bipartite_graphs)
-            # print(torch.max(out_bipartite_graphs, dim=0))
+            # print(torch.max(out_bipartite_graphs, dim=1))
             bipartite_graphs.append(out_bipartite_graphs) 
                 
             cur_cat += self.dataset_cats[i]

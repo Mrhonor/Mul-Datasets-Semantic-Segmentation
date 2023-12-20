@@ -92,9 +92,10 @@ def set_model(configer):
         logger.info(f"load pretrained weights from {configer.get('train', 'finetune_from')}")
         state = torch.load(configer.get('train', 'finetune_from'), map_location='cpu')
         
-        del state['unify_prototype']
-        for i in range(0, configer.get('n_datasets')):
-            del state[f'bipartite_graphs.{i}']
+        if 'unify_prototype' in state:
+            del state['unify_prototype']
+            for i in range(0, configer.get('n_datasets')):
+                del state[f'bipartite_graphs.{i}']
             
         # new_state = {}
         # for k,v in state.items():
@@ -351,15 +352,15 @@ def train():
     ## meters
     time_meter, loss_meter, loss_pre_meter, loss_aux_meters, loss_contrast_meter, loss_domain_meter, kl_loss_meter = set_meters(configer)
     ## lr scheduler
-    # gnn_lr_schdr = WarmupPolyLrScheduler(gnn_optim, power=0.9,
+    # gnn_lr_schdr = WarmupPolyLrScheduler(gnn_optim, power=1.2,
     #     max_iter=configer.get('train','gnn_iters'), warmup_iter=configer.get('lr','warmup_iters'),
     #     warmup_ratio=0.1, warmup='exp', last_epoch=-1,)
 
-    # gnn_lr_schdrD = WarmupPolyLrScheduler(gnn_optimD, power=0.9,
+    # gnn_lr_schdrD = WarmupPolyLrScheduler(gnn_optimD, power=1.2,
     #     max_iter=configer.get('train','gnn_iters'), warmup_iter=configer.get('lr','warmup_iters'),
     #     warmup_ratio=0.1, warmup='exp', last_epoch=-1,)
 
-    # lr_schdr = WarmupPolyLrScheduler(optim, power=0.9,
+    # lr_schdr = WarmupPolyLrScheduler(optim, power=1.2,
     #     max_iter=configer.get('lr','init_iter'), warmup_iter=configer.get('lr','warmup_iters'),
     #     warmup_ratio=0.1, warmup='exp', last_epoch=-1,)
 
@@ -497,7 +498,7 @@ def train():
             seg_out['bi_graphs'] = bi_graphs
             seg_out['adv_out'] = adv_out
                 
-            backward_loss, adv_loss = contrast_losses(seg_out, lb, dataset_lbs, is_adv, False)
+            backward_loss, adv_loss, _ = contrast_losses(seg_out, lb, dataset_lbs, is_adv, False)
             # print(backward_loss)
             kl_loss = None
             loss_seg = backward_loss
@@ -589,17 +590,17 @@ def train():
     unify_prototype = None
     GNN_INIT = configer.get('train', 'graph_finetune')
     # GNN_INIT = True
-    gnn_lr_schdr = WarmupPolyLrScheduler(gnn_optim, power=0.9,
+    gnn_lr_schdr = WarmupPolyLrScheduler(gnn_optim, power=1.2,
                 max_iter=configer.get('train','gnn_iters'), warmup_iter=configer.get('lr','warmup_iters'),
                 warmup_ratio=0.1, warmup='exp', last_epoch=-1,)
 
     if mse_or_adv == 'adv':
-        gnn_lr_schdrD = WarmupPolyLrScheduler(gnn_optimD, power=0.9,
+        gnn_lr_schdrD = WarmupPolyLrScheduler(gnn_optimD, power=1.2,
             max_iter=configer.get('train','gnn_iters'), warmup_iter=configer.get('lr','warmup_iters'),
             warmup_ratio=0.1, warmup='exp', last_epoch=-1,)
     
     
-    # print_bipartite(configer, 7, bi_graphs)
+    
 
     if train_seg_or_gnn == SEG:   
         if is_distributed():
@@ -630,42 +631,45 @@ def train():
 
                 net.module.set_unify_prototype(unify_prototype, True)
                 net.module.set_bipartite_graphs(bi_graphs)
+                print_bipartite(configer, n_datasets, net.module.bipartite_graphs)
 
                 # net.module.unify_prototype.requires_grad = True
                     
         else:
-            # with torch.no_grad():
+            with torch.no_grad():
 
-            #     unify_prototype, ori_bi_graphs = graph_net.get_optimal_matching(graph_node_features, True)
+                unify_prototype, ori_bi_graphs = graph_net.get_optimal_matching(graph_node_features, True)
 
-            #     # print(torch.norm(unify_prototype[0][0], p=2))
-            #     unify_prototype = unify_prototype.detach()
-            #     new_bi_graphs = []
-            #     if len(ori_bi_graphs) == 2*n_datasets:
-            #         for j in range(0, len(ori_bi_graphs), 2):
-            #             new_bi_graphs.append(ori_bi_graphs[j+1].detach())
-            #     else:
-            #         new_bi_graphs = [bigh.detach() for bigh in ori_bi_graphs]
-            #     fix_graph = True
-            #     adv_out = None
-            #     _, ori_bi_graphs, _, _ = graph_net(graph_node_features)
-            #     bi_graphs = []
-            #     if len(ori_bi_graphs) == 2*n_datasets:
-            #         for j in range(0, len(ori_bi_graphs), 2):
-            #             bi_graphs.append(ori_bi_graphs[j+1].detach())
-            #     else:
-            #         bi_graphs = [bigh.detach() for bigh in ori_bi_graphs]
+                # print(torch.norm(unify_prototype[0][0], p=2))
+                unify_prototype = unify_prototype.detach()
+                new_bi_graphs = []
+                if len(ori_bi_graphs) == 2*n_datasets:
+                    for j in range(0, len(ori_bi_graphs), 2):
+                        new_bi_graphs.append(ori_bi_graphs[j+1].detach())
+                else:
+                    new_bi_graphs = [bigh.detach() for bigh in ori_bi_graphs]
+                fix_graph = True
+                adv_out = None
+                # _, ori_bi_graphs, _, _ = graph_net(graph_node_features)
+                # bi_graphs = []
+                # if len(ori_bi_graphs) == 2*n_datasets:
+                #     for j in range(0, len(ori_bi_graphs), 2):
+                #         bi_graphs.append(ori_bi_graphs[j+1].detach())
+                # else:
+                #     bi_graphs = [bigh.detach() for bigh in ori_bi_graphs]
 
 
-            #     init_gnn_stage = False
+                init_gnn_stage = False
 
-            #     net.set_unify_prototype(unify_prototype, True)
-            #     net.set_bipartite_graphs(bi_graphs)
-            net.unify_prototype.requires_grad = True
+                net.set_unify_prototype(unify_prototype, True)
+                net.set_bipartite_graphs(new_bi_graphs)
+            # print_bipartite(configer, n_datasets, net.bipartite_graphs)
+            # net.unify_prototype.requires_grad = True
         
+    
     optim = set_optimizer(net, configer, configer.get('lr', 'seg_lr_start'))
     
-    lr_schdr = WarmupPolyLrScheduler(optim, power=0.9,
+    lr_schdr = WarmupPolyLrScheduler(optim, power=1.2,
         max_iter=configer.get('train','seg_iters'), warmup_iter=configer.get('lr','warmup_iters'),
         warmup_ratio=0.1, warmup='exp', last_epoch=-1,)
     
@@ -757,24 +761,24 @@ def train():
             # else:
             #     ema_bi_graphs = [bigh.detach() for bigh in ori_ema_bi_graphs]
 
-            # if is_distributed():
-            #     gnn_optim = set_optimizer(graph_net.module, configer, ratio * configer.get('lr', 'gnn_lr_start'))
-            #     if mse_or_adv == 'adv':
-            #         gnn_optimD = set_optimizerD(graph_net.module, configer, ratio * configer.get('lr', 'gnn_lr_start'))
-            # else:
-            gnn_optim = set_optimizer(graph_net, configer, ratio * configer.get('lr', 'gnn_lr_start'))
-            if mse_or_adv == 'adv':
-                gnn_optimD = set_optimizerD(graph_net, configer, ratio * configer.get('lr', 'gnn_lr_start'))
+            if is_distributed():
+                gnn_optim = set_optimizer(graph_net.module, configer, ratio * configer.get('lr', 'gnn_lr_start'))
+                if mse_or_adv == 'adv':
+                    gnn_optimD = set_optimizerD(graph_net.module, configer, ratio * configer.get('lr', 'gnn_lr_start'))
+            else:
+                gnn_optim = set_optimizer(graph_net, configer, ratio * configer.get('lr', 'gnn_lr_start'))
+                if mse_or_adv == 'adv':
+                    gnn_optimD = set_optimizerD(graph_net, configer, ratio * configer.get('lr', 'gnn_lr_start'))
                 
 
             alter_iter = 0
             train_seg_or_gnn = GNN
-            gnn_lr_schdr = WarmupPolyLrScheduler(gnn_optim, power=0.9,
+            gnn_lr_schdr = WarmupPolyLrScheduler(gnn_optim, power=1.2,
                 max_iter=configer.get('train','gnn_iters'), warmup_iter=configer.get('lr','warmup_iters'),
                 warmup_ratio=0.1, warmup='exp', last_epoch=-1,)
 
             if mse_or_adv == 'adv':
-                gnn_lr_schdrD = WarmupPolyLrScheduler(gnn_optimD, power=0.9,
+                gnn_lr_schdrD = WarmupPolyLrScheduler(gnn_optimD, power=1.2,
                     max_iter=configer.get('train','gnn_iters'), warmup_iter=configer.get('lr','warmup_iters'),
                     warmup_ratio=0.1, warmup='exp', last_epoch=-1,)
 
@@ -786,28 +790,28 @@ def train():
                 
                 if is_distributed():
                     unify_prototype, ori_bi_graphs = graph_net.module.get_optimal_matching(graph_node_features, GNN_INIT)
-                    _, gnn_bi_graphs, adv_out, _ = graph_net(graph_node_features)    
+                    # _, gnn_bi_graphs, adv_out, _ = graph_net(graph_node_features)    
                 else:
                     unify_prototype, ori_bi_graphs = graph_net.get_optimal_matching(graph_node_features, GNN_INIT)     
-                    _, gnn_bi_graphs, adv_out, _ = graph_net(graph_node_features)     
+                    # _, gnn_bi_graphs, adv_out, _ = graph_net(graph_node_features)     
                 # print(bi_graphs)
 
                 # print(torch.norm(unify_prototype[0][0], p=2))
                 unify_prototype = unify_prototype.detach()
-                new_bi_graphs = []
+                bi_graphs = []
                 if len(ori_bi_graphs) == 2*n_datasets:
                     for j in range(0, len(ori_bi_graphs), 2):
-                        new_bi_graphs.append(ori_bi_graphs[j].detach())
+                        bi_graphs.append(ori_bi_graphs[j].detach())
                 else:
-                    new_bi_graphs = [bigh.detach() for bigh in ori_bi_graphs]
+                    bi_graphs = [bigh.detach() for bigh in ori_bi_graphs]
                     
                 # _, ori_ema_bi_graphs, _, _ = graph_net(graph_node_features)
-                bi_graphs = []
-                if len(gnn_bi_graphs) == 2*n_datasets:
-                    for j in range(0, len(gnn_bi_graphs), 2):
-                        bi_graphs.append(gnn_bi_graphs[j].detach())
-                else:
-                    bi_graphs = [bigh.detach() for bigh in gnn_bi_graphs]
+                # bi_graphs = []
+                # if len(gnn_bi_graphs) == 2*n_datasets:
+                #     for j in range(0, len(gnn_bi_graphs), 2):
+                #         bi_graphs.append(gnn_bi_graphs[j].detach())
+                # else:
+                #     bi_graphs = [bigh.detach() for bigh in gnn_bi_graphs]
                 
                 fix_graph = True
                 adv_out = None
@@ -816,9 +820,11 @@ def train():
                 if is_distributed():
                     net.module.set_unify_prototype(unify_prototype, True)
                     net.module.set_bipartite_graphs(bi_graphs)
+                    print_bipartite(configer, n_datasets, net.module.bipartite_graphs)
                 else:
                     net.set_unify_prototype(unify_prototype, True)
                     net.set_bipartite_graphs(bi_graphs)
+                    print_bipartite(configer, n_datasets, net.bipartite_graphs)
             
             
             
@@ -831,7 +837,7 @@ def train():
 
             alter_iter = 0
             train_seg_or_gnn = SEG
-            lr_schdr = WarmupPolyLrScheduler(optim, power=0.9,
+            lr_schdr = WarmupPolyLrScheduler(optim, power=1.2,
                 max_iter=configer.get('train','seg_iters'), warmup_iter=configer.get('lr','warmup_iters'),
                 warmup_ratio=0.1, warmup='exp', last_epoch=-1,)
 
@@ -919,9 +925,9 @@ def train():
             seg_out['bi_graphs'] = bi_graphs
             seg_out['adv_out'] = adv_out
                 
-            backward_loss, adv_loss = contrast_losses(seg_out, lb, dataset_lbs, is_adv, init_gnn_stage)
+            backward_loss, adv_loss, aux_loss = contrast_losses(seg_out, lb, dataset_lbs, is_adv, init_gnn_stage)
             # print(backward_loss)
-            kl_loss = None
+            # aux_loss = None
             loss_seg = backward_loss
             loss_aux = None
             loss_contrast = None
@@ -952,8 +958,8 @@ def train():
         # print('synchronize')
         time_meter.update()
         loss_meter.update(backward_loss.item())
-        if kl_loss:
-            kl_loss_meter.update(kl_loss.item())
+        if aux_loss:
+            kl_loss_meter.update(aux_loss.item())
         
         if is_adv and adv_loss != None:
             loss_domain_meter.update(adv_loss.item())
@@ -1203,7 +1209,7 @@ def train():
                         
         dl_iters = [iter(dl) for dl in dls]
         
-        lr_schdr = WarmupPolyLrScheduler(optim, power=0.9,
+        lr_schdr = WarmupPolyLrScheduler(optim, power=1.2,
             max_iter=configer.get('train',f'finetune_{stage}_iters'), warmup_iter=configer.get('lr','warmup_iters'),
             warmup_ratio=0.1, warmup='exp', last_epoch=-1,) 
     
@@ -1308,7 +1314,7 @@ def train():
                     seg_out['bi_graphs'] = net.bipartite_graphs
                 seg_out['adv_out'] = None
                     
-                backward_loss, adv_loss = contrast_losses(seg_out, lb, dataset_lbs, is_adv, init_gnn_stage)
+                backward_loss, adv_loss, _ = contrast_losses(seg_out, lb, dataset_lbs, is_adv, init_gnn_stage)
                 # print(backward_loss)
                 kl_loss = None
                 loss_seg = backward_loss

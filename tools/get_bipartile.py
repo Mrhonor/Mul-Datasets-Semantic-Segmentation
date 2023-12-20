@@ -137,6 +137,9 @@ def print_bipartite(configer, n_datasets, bi_graphs):
         max_value, max_index = torch.max(bi_graphs[i], dim=0)
         n_cat = configer.get(f'dataset{i+1}', 'n_cats')
         
+        # print(bi_graphs[i].shape)
+        # print(max_value, max_index)
+              
         buckets = {}
         for index, j in enumerate(max_index):
             if max_value[index] < 1e-4:
