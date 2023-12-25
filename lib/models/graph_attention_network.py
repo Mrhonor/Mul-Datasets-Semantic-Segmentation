@@ -970,7 +970,7 @@ class Learnable_Topology_BGNN(nn.Module):
         input_x = torch.cat([x, self.unify_node_features], dim=0)
         
         feat1 = self.linear_before(input_x)
-        adj_mI, non_norm_adj_mI = self.calc_adjacency_matrix(feat1)
+        adj_mI, non_norm_adj_mI, adj_feat = self.calc_adjacency_matrix(feat1)
         feat1_relu = self.relu(feat1)
         
         before_gcn1_x = F.dropout(feat1_relu, self.dropout_rate, training=self.training)
@@ -1026,17 +1026,17 @@ class Learnable_Topology_BGNN(nn.Module):
         elif self.calc_bipartite:
             arch_x = self.relu(feat_out)
             arch_x = self.linear2(arch_x)
-            _, non_norm_adj_mI_after = self.calc_adjacency_matrix(arch_x)
+            _, non_norm_adj_mI_after, _ = self.calc_adjacency_matrix(arch_x)
             
             if self.with_datasets_aux:
-                return feat_out, self.sep_bipartite_graphs(non_norm_adj_mI_after), adv_out, non_norm_adj_mI_after
+                return feat_out, self.sep_bipartite_graphs(non_norm_adj_mI_after), adv_out, adj_feat[self.total_cats:] #non_norm_adj_mI_after
             else:
-                return feat_out[self.total_cats:], self.sep_bipartite_graphs(non_norm_adj_mI_after), adv_out, non_norm_adj_mI_after
+                return feat_out[self.total_cats:], self.sep_bipartite_graphs(non_norm_adj_mI_after), adv_out, adj_feat[self.total_cats:] # non_norm_adj_mI_after
         else:
             if self.with_datasets_aux:
-                return feat_out, self.sep_bipartite_graphs(non_norm_adj_mI), adv_out, non_norm_adj_mI
+                return feat_out, self.sep_bipartite_graphs(non_norm_adj_mI), adv_out, adj_feat[self.total_cats:] # non_norm_adj_mI
             else:
-                return feat_out[self.total_cats:], self.sep_bipartite_graphs(non_norm_adj_mI), adv_out, non_norm_adj_mI
+                return feat_out[self.total_cats:], self.sep_bipartite_graphs(non_norm_adj_mI), adv_out, adj_feat[self.total_cats:] #, non_norm_adj_mI
 
     def sep_bipartite_graphs(self, adj):
         self.bipartite_graphs = []
@@ -1155,13 +1155,13 @@ class Learnable_Topology_BGNN(nn.Module):
 
         # softmax_adj = F.softmax(adj_mI/0.07, dim=0)
         norm_adj_mI = normalize_adj(adj_mI)
-        return norm_adj_mI, adj_mI
+        return norm_adj_mI, adj_mI, adj_feat
     
     def get_optimal_matching(self, x, init=False):
         x = torch.cat([x, self.unify_node_features], dim=0)
         
         feat1 = self.linear_before(x)
-        adj_mI, non_norm_adj_mI = self.calc_adjacency_matrix(feat1)
+        adj_mI, non_norm_adj_mI, _ = self.calc_adjacency_matrix(feat1)
         feat1_relu = self.relu(feat1)
         
         feat_gcn1 = self.GCN_layer1(feat1_relu, adj_mI)

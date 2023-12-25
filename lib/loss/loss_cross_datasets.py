@@ -851,10 +851,13 @@ class CrossDatasetsCELoss_AdvGNN(nn.Module):
         self.adv_loss_weight = self.configer.get('loss', 'adv_loss_weight')
         
         self.MSE_loss = torch.nn.MSELoss()
+        self.MSE_sum_loss = torch.nn.MSELoss(reduction='sum')
 
         self.orth_weight = self.configer.get('GNN', 'orth_weight')
         if self.with_datasets_aux:
             self.aux_weight = self.configer.get('loss', 'aux_weight')
+        
+        self.adj_loss_weight = self.configer.get('loss', 'adj_loss_weight')
         
         self.GridSpilt = self.configer.get('loss', 'GridSplit')
         if self.GridSpilt:
@@ -868,7 +871,7 @@ class CrossDatasetsCELoss_AdvGNN(nn.Module):
             self.M[:, cur_cat:] = 1
         
     
-    def similarity_dsb(self, proto_vecs):
+    def similarity_dsb(self, proto_vecs, reduce='mean'):
         """
         Compute EM loss with the probability-based distribution of each feature
         :param feat_domain: source, target or both
@@ -880,12 +883,17 @@ class CrossDatasetsCELoss_AdvGNN(nn.Module):
         z = torch.mm(proto_vecs, proto_vecs.t())  # size N x C_seen
 
         # entropy loss to push each feature to be similar to only one class prototype (no supervision)
-        loss = -1 * torch.mean(F.softmax(z / self.temperature, dim=1) * F.log_softmax(z / self.temperature, dim=1))
+        if reduce == 'mean':
+            loss = -1 * torch.mean(F.softmax(z / self.temperature, dim=1) * F.log_softmax(z / self.temperature, dim=1))
+        elif reduce == 'sum':
+            loss = -1 * torch.sum(F.softmax(z / self.temperature, dim=1) * F.log_softmax(z / self.temperature, dim=1))
+            
 
         return loss
 
 
     def forward(self, preds, target, dataset_ids, is_adv=True, init_gnn_stage=False):
+        logger = logging.getLogger()
         # if not is_adv:
         CELoss = self.mdsOhemCELoss
         # else:
@@ -902,6 +910,14 @@ class CrossDatasetsCELoss_AdvGNN(nn.Module):
             adj_matrix = preds['adj']
             pretrain_bipart_graph = preds['pretrain_bipart_graph']
         
+        adj_feat = None
+        if 'adj_feat' in preds:
+            adj_feat = preds['adj_feat']
+        
+        target_bi_graph = None
+        if 'target_bi_graph' in preds:
+            target_bi_graph = preds['target_bi_graph']
+        
         if is_adv and self.mse_or_adv != "None":
             adv_out = preds['adv_out']
             
@@ -911,13 +927,14 @@ class CrossDatasetsCELoss_AdvGNN(nn.Module):
             if adv_out['ADV1'][0].is_cuda:
                 label_real = label_real.cuda()
                 label_fake = label_fake.cuda()
-        # logger = logging.getLogger()
+        
         loss = None
         adv_loss = None
         orth_loss = None
         graph_loss = None
         mse_loss = None
         aux_loss = None
+        adj_loss = None
         if unify_prototype is not None and not init_gnn_stage:
             if self.with_datasets_aux:
                 cur_cat = 0
@@ -952,17 +969,21 @@ class CrossDatasetsCELoss_AdvGNN(nn.Module):
         # print('logits', logits.shape)
         # print("logits_max : {}, logits_min : {}".format(torch.max(logits), torch.min(logits)))
         # logger.info('logit min: {}, logits max:{}'.format(torch.min(logits), torch.max(logits)))
-        if is_adv and self.with_orth:
+        if is_adv and self.with_orth and adj_feat is None:
+            # logger.info(adj_feat)
             if self.with_datasets_aux:
                 orth_loss = self.orth_weight * self.similarity_dsb(unify_prototype[self.total_cats:])
             else:
                 orth_loss = self.orth_weight * self.similarity_dsb(unify_prototype)
-            loss = orth_loss
+            # orth_loss = self.orth_weight * self.similarity_dsb(adj_feat)
+            # loss = orth_loss
        
         
         remap_logits = []
         max_remap_logits = []
+        incr_cat = 0
         for i in range(0, self.n_datasets):
+            incr_cat += self.n_cats[i]
             # print("logits shape:", )
             if not (dataset_ids == i).any():
                 continue
@@ -1001,6 +1022,28 @@ class CrossDatasetsCELoss_AdvGNN(nn.Module):
                 else:
                     loss = loss + max_enc_loss
                 
+            if is_adv and self.with_orth and adj_feat is not None and self.with_max_adj:
+                # this_feat = unify_prototype[self.total_cats:]
+                base_ratio = 1.0 / bi_graphs[2*i].shape[1]
+                for j in range(bi_graphs[2*i].shape[0]):
+                    if (bi_graphs[2*i][j] != 0).any():
+                        # logger.info('enter')
+                        if orth_loss is None:
+                            # orth_loss = base_ratio * self.orth_weight * self.similarity_dsb(this_feat[bi_graphs[2*i][j] != 0], reduce='sum')
+                            orth_loss = base_ratio * self.orth_weight * self.similarity_dsb(adj_feat[bi_graphs[2*i][j] != 0], reduce='sum')
+                        else:
+                            # orth_loss += base_ratio * self.orth_weight * self.similarity_dsb(this_feat[bi_graphs[2*i][j] != 0], reduce='sum')
+                            orth_loss += base_ratio * self.orth_weight * self.similarity_dsb(adj_feat[bi_graphs[2*i][j] != 0], reduce='sum')
+
+            if is_adv and target_bi_graph is not None:
+                total_num = bi_graphs[2*i].shape[0] * bi_graphs[2*i].shape[1]
+                base_weight = 1 / total_num
+                bi_graphs[2*i + 1]
+                if adj_loss is None:
+                    adj_loss = base_weight * self.MSE_sum_loss(bi_graphs[2*i + 1][target_bi_graph[i] != 255], target_bi_graph[i][target_bi_graph[i] != 255])
+                else:
+                    adj_loss += base_weight * self.MSE_sum_loss(bi_graphs[2*i + 1][target_bi_graph[i] != 255], target_bi_graph[i][target_bi_graph[i] != 255])
+                    
             
             if self.with_datasets_aux:
                 if is_adv:
@@ -1090,7 +1133,13 @@ class CrossDatasetsCELoss_AdvGNN(nn.Module):
         if aux_loss:
             loss = loss + self.aux_weight * aux_loss
         
-        return loss, orth_loss, aux_loss #, graph_loss, mse_loss
+        if orth_loss:
+            loss += orth_loss
+        
+        if adj_loss:
+            loss += self.adj_loss_weight * adj_loss
+        
+        return loss, orth_loss, aux_loss, adj_loss #, graph_loss, mse_loss
     
     
 if __name__ == "__main__":

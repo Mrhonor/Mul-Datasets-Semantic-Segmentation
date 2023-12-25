@@ -184,6 +184,29 @@ def find_unuse(configer, net):
     net.train()
     return out_buckets
 
+@torch.no_grad()
+def find_useful_and_unuseful(configer, net):
+    n_datasets = configer.get('n_datasets')
+    is_dist = dist.is_initialized()
+    net.eval()
+    dls = get_data_loader(configer, aux_mode='train', distributed=is_dist, stage=2)
+    print_bipartite(configer, n_datasets, net.bipartite_graphs)
+
+    out_buckets = {}
+    for i in range(0, n_datasets): 
+        print("dataset {}:".format(i+1))    
+        n_cat = configer.get(f'dataset{i+1}', 'n_cats')
+        buckets = find_unuse_label(configer, net, dls[i], n_cat, i)
+        for index in range(0, n_cat):
+            if index not in buckets:
+                buckets[index] = []
+            print("\"{}\": {}".format(index, buckets[index]))    
+        
+        out_buckets[f'dataset{i+1}'] = buckets
+        
+    net.train()
+    return out_buckets
+
 def find_unuse_self():
     # torch.autograd.set_detect_anomaly(True)
     n_datasets = configer.get('n_datasets')

@@ -1493,6 +1493,150 @@ def find_unuse_label(configer, net, dl, n_classes, dataset_id):
     return buckets 
 
 
+@torch.no_grad()
+def eval_find_use_and_unuse_label(configer, net):
+        ## evaluate
+    # hist = torch.zeros(n_classes, n_classes).cuda().detach()
+    # datasets_remap = []
+    org_aux = net.aux_mode
+    
+    ignore_label = 255
+    n_datasets = configer.get("n_datasets")
+    ignore_index = configer.get('loss','ignore_index')
+    total_cats = 0
+    net.aux_mode = 'train'
+    net.eval()
+    unify_prototype = net.unify_prototype
+    # print(unify_prototype.shape)
+    bipart_graph = net.bipartite_graphs
+    is_dist = dist.is_initialized()
+    dls = get_data_loader(configer, aux_mode='train', distributed=is_dist, stage=2)
+    
+    for i in range(0, n_datasets):
+        total_cats += configer.get("dataset"+str(i+1), "n_cats")
+    total_cats = int(total_cats * configer.get('GNN', 'unify_ratio'))
+
+    heads, mious, target_bipart = [], [], []
+    heads.append('single_scale')
+
+    for i in range(0, n_datasets):
+        n_classes = configer.get(f'dataset{i+1}', 'n_cats')
+        hist = torch.zeros(n_classes, total_cats).cuda().detach()
+        # hist_origin = torch.zeros(n_classes, n_classes).cuda().detach()
+        
+        if dist.is_initialized() and dist.get_rank() != 0:
+            diter = enumerate(dls[i])
+        else:
+            diter = enumerate(tqdm(dls[i]))
+            
+        
+        with torch.no_grad():
+            for _, (imgs, label) in diter:
+                # N, _, H, W = label.shape
+                # if H > 512 or W > 512:
+                #     H = 512
+                #     W = 512
+                    
+
+                # label = label.squeeze(1).cuda()
+                # size = label.shape[-2:]
+
+                # im_sc = F.interpolate(imgs, size=(H, W),
+                #         mode='bilinear', align_corners=True)
+
+                # im_sc = im_sc.cuda()
+            
+                N, _, H, W = label.shape
+
+
+                label = label.squeeze(1).cuda()
+                size = label.shape[-2:]
+
+                im_sc = imgs.cuda()
+                
+                emb = net(im_sc, dataset=i)
+            
+                logits = torch.einsum('bchw, nc -> bnhw', emb['seg'], unify_prototype)
+                # remap_logits = torch.einsum('bchw, nc -> bnhw', logits, bipart_graph[i])
+
+                logits = F.interpolate(logits, size=size,
+                        mode='bilinear', align_corners=True)
+                # remap_logits = F.interpolate(remap_logits, size=size,
+                #         mode='bilinear', align_corners=True)
+
+                probs = torch.softmax(logits, dim=1)
+                preds = torch.argmax(probs, dim=1)
+                
+                # remap_probs = torch.softmax(remap_logits, dim=1)
+                # remap_preds = torch.argmax(remap_probs, dim=1)
+                
+                keep = label != ignore_label
+
+                hist += torch.tensor(np.bincount(
+                    label.cpu().numpy()[keep.cpu().numpy()] * total_cats + preds.cpu().numpy()[keep.cpu().numpy()],
+                    minlength=n_classes * total_cats
+                )).cuda().view(n_classes, total_cats)
+
+                # hist_origin += torch.tensor(np.bincount(
+                #     label.cpu().numpy()[keep.cpu().numpy()] * n_classes + remap_preds.cpu().numpy()[keep.cpu().numpy()],
+                #     minlength=n_classes ** 2
+                # )).cuda().view(n_classes, n_classes)
+
+
+        # if dist.is_initialized():
+        #     dist.all_reduce(hist_origin, dist.ReduceOp.SUM)
+        # ious = hist_origin.diag() / (hist_origin.sum(dim=0) + hist_origin.sum(dim=1) - hist_origin.diag())
+        # print(ious)
+        # miou = np.nanmean(ious.detach().cpu().numpy()).item()
+        # mious.append(miou)
+
+        max_value, max_index = torch.max(bipart_graph[i], dim=0)
+        # print(max_value)
+        n_cat = configer.get(f'dataset{i+1}', 'n_cats')
+        
+        # torch.set_printoptions(profile="full")
+        # print(hist)
+
+        bipart = ignore_index * torch.ones_like(bipart_graph[i])
+        buckets = {}
+        for index, j in enumerate(max_index):
+            if max_value[index] == 0:
+                continue
+            
+            if int(j) not in buckets:
+                buckets[int(j)] = [index]
+            else:
+                buckets[int(j)].append(index)
+
+        for index in range(0, n_cat):
+            if index not in buckets:
+                print('index not in buckets:', index)
+                buckets[index] = []
+
+        for index, val in buckets.items():
+            total_num = 0
+            sum_num = torch.sum(hist[index])
+            for idx in val:
+                total_num += hist[index][idx]
+            # remove_val = []
+            # affirm_val = []
+            if total_num != 0:
+                for idx in val:
+                    rate = hist[index][idx] / total_num
+                    if rate < 1e-2:
+                        bipart[index][idx] = 0
+                        # remove_val.append(i)
+                    elif rate > 0.5:
+                        bipart[index][idx] = 1
+                        # affirm_val.append(i)
+            
+            # buckets[index] = new_val
+        target_bipart.append(bipart)
+
+    # net.train()
+    net.aux_mode = org_aux
+    return heads, mious, target_bipart 
+
 if __name__ == "__main__":
     main()
     # args = parse_args()

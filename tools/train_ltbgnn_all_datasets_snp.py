@@ -29,7 +29,7 @@ from lib.loss.loss_cross_datasets import CrossDatasetsLoss, CrossDatasetsCELoss,
 from lib.class_remap import ClassRemap
 
 from tools.configer import Configer
-from evaluate import eval_model_contrast, eval_model_aux, eval_model, eval_model_contrast_single, eval_model_mulbn, eval_model_dsg, eval_model_unlabel
+from evaluate import eval_model_contrast, eval_model_aux, eval_model, eval_model_contrast_single, eval_model_mulbn, eval_model_dsg, eval_model_unlabel, eval_find_use_and_unuse_label
 
 from tensorboardX import SummaryWriter
 
@@ -588,6 +588,7 @@ def train():
     train_seg_or_gnn = GNN
     adv_out = None
     unify_prototype = None
+    target_bi_graph = None
     GNN_INIT = configer.get('train', 'graph_finetune')
     # GNN_INIT = True
     gnn_lr_schdr = WarmupPolyLrScheduler(gnn_optim, power=1.2,
@@ -879,7 +880,7 @@ def train():
                     with torch.no_grad():
                         seg_out = net(im,dataset_lbs)
 
-                unify_prototype, bi_graphs, adv_out, _ = graph_net(graph_node_features)
+                unify_prototype, bi_graphs, adv_out, adj_feat = graph_net(graph_node_features)
                 
                 # if is_distributed():
                 #     unify_prototype = net.module.unify_prototype.detach()
@@ -900,6 +901,7 @@ def train():
                 # if i % 50 == 0:
                 #     print(torch.norm(unify_prototype[0][0], p=2))
                 seg_out['unify_prototype'] = unify_prototype
+                seg_out['adj_feat'] = adj_feat
             else:
                 is_adv = False
                 graph_net.eval()
@@ -924,8 +926,11 @@ def train():
             seg_out['unify_prototype'] = unify_prototype
             seg_out['bi_graphs'] = bi_graphs
             seg_out['adv_out'] = adv_out
+            if target_bi_graph != None:
+                seg_out['target_bi_graph'] = target_bi_graph
                 
-            backward_loss, adv_loss, aux_loss = contrast_losses(seg_out, lb, dataset_lbs, is_adv, init_gnn_stage)
+            adj_loss = None
+            backward_loss, adv_loss, aux_loss, adj_loss = contrast_losses(seg_out, lb, dataset_lbs, is_adv, init_gnn_stage)
             # print(backward_loss)
             # aux_loss = None
             loss_seg = backward_loss
@@ -972,8 +977,8 @@ def train():
             if with_aux:
                 _ = [mter.update(lss.item()) for mter, lss in zip(loss_aux_meters, loss_aux)]
             
-        # if i >= configer.get('lr', 'warmup_iters') and use_contrast:
-        #     loss_contrast_meter.update(loss_contrast.item())
+        if adj_loss != None:
+            loss_contrast_meter.update(adj_loss.item())
 
     
         ## print training log message
@@ -1096,6 +1101,7 @@ def train():
             else:
                 
                 # eval_model_func = eval_model_unlabel
+                # eval_model_func = eval_find_use_and_unuse_label
                 eval_model_func = eval_model_contrast
 
             if train_seg_or_gnn == SEG:
@@ -1105,10 +1111,16 @@ def train():
                 if mse_or_adv == 'adv':
                     gnn_optimD.zero_grad()
             
+            torch.cuda.empty_cache()
             if is_distributed():
-                torch.cuda.empty_cache()
+                # if eval_model_func == eval_find_use_and_unuse_label:
+                heads, mious, target_bi_graph = eval_find_use_and_unuse_label(configer, net.module)
+                # else:
                 heads, mious = eval_model_func(configer, net.module)
             else:
+                # if eval_model_func == eval_find_use_and_unuse_label:
+                heads, mious, target_bi_graph = eval_find_use_and_unuse_label(configer, net)
+                # else:
                 heads, mious = eval_model_func(configer, net)
                 
             # writer.add_scalars("mious",{"Cityscapes":mious[CITY_ID],"Camvid":mious[CAM_ID]},configer.get("iter")+1)
