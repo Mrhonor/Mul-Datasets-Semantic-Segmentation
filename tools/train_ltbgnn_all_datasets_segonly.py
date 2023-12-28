@@ -163,6 +163,7 @@ def set_optimizer(model, configer):
                 non_wd_params.append(param)
             elif param.dim() == 2 or param.dim() == 4:
                 wd_params.append(param)
+
         params_list = [
             {'params': wd_params, },
             {'params': non_wd_params, 'weight_decay': 0},
@@ -218,7 +219,7 @@ def set_model_dist(net):
     net = nn.parallel.DistributedDataParallel(
         net,
         device_ids=[local_rank, ],
-        find_unused_parameters=True,
+        find_unused_parameters=False,
         output_device=local_rank
         )
     return net
@@ -351,16 +352,13 @@ def train():
     ## dataset
 
     # dl = get_single_data_loader(configer, aux_mode='train', distributed=is_dist)
-    dls = get_data_loader(configer, aux_mode='train', distributed=is_dist)
+    
     # dl_city, dl_cam = get_data_loader(configer, aux_mode='train', distributed=is_dist)
     
     ## model
     net = set_model(configer=configer)
     graph_net = set_graph_model(configer=configer)
     
-    if use_ema:
-        ema_net = set_ema_model(configer=configer)
-        
     contrast_losses = set_contrast_loss(configer)
 
     ## optimizer
@@ -375,7 +373,6 @@ def train():
 
         unify_prototype, ori_bi_graphs = graph_net.get_optimal_matching(graph_node_features, True)     
 
-        print(torch.norm(unify_prototype[0][0], p=2))
         unify_prototype = unify_prototype.detach()
         bi_graphs = []
         if len(ori_bi_graphs) == 2*n_datasets:
@@ -386,12 +383,14 @@ def train():
         fix_graph = True
         adv_out = None
 
-        net.set_unify_prototype(unify_prototype, True)
+        # net.set_unify_prototype(unify_prototype, True)
         net.set_bipartite_graphs(bi_graphs)
+    print_bipartite(configer, n_datasets, bi_graphs)
+    net.unify_prototype.requires_grad = True
 
     optim = set_optimizer(net, configer)
-    gnn_optim = set_optimizer(graph_net, configer)
-    gnn_optimD = set_optimizerD(graph_net, configer)
+    # gnn_optim = set_optimizer(graph_net, configer)
+    # gnn_optimD = set_optimizerD(graph_net, configer)
 
     ## meters
     time_meter, loss_meter, loss_pre_meter, loss_aux_meters, loss_contrast_meter, loss_domain_meter, kl_loss_meter = set_meters(configer)
@@ -411,7 +410,7 @@ def train():
     # 两个数据集分别处理
     # 使用迭代器读取数据
     
-    dl_iters = [iter(dl) for dl in dls]
+    # dl_iters = [iter(dl) for dl in dls]
     
     ## train loop
     # for it, (im, lb) in enumerate(dl):
@@ -465,6 +464,7 @@ def train():
         print(stage)
 
         if stage == 'stage2':
+            dls = get_data_loader(configer, aux_mode='train', distributed=is_dist)
             if is_distributed():
                 loaded_map = find_unuse(configer, net.module)
             else:
@@ -484,7 +484,11 @@ def train():
                 net.set_bipartite_graphs(bi_graphs) 
                           
             optim = set_optimizer(net, configer)
+        else:
+            dls = get_data_loader(configer, aux_mode='train', distributed=is_dist, stage=1)
                         
+        dl_iters = [iter(dl) for dl in dls]
+        
         lr_schdr = WarmupPolyLrScheduler(optim, power=0.9,
             max_iter=configer.get('train',f'finetune_{stage}_iters'), warmup_iter=configer.get('lr','warmup_iters'),
             warmup_ratio=0.1, warmup='exp', last_epoch=-1,) 
@@ -548,8 +552,6 @@ def train():
             #     seg_out = net(im)
 
             optim.zero_grad()
-            gnn_optim.zero_grad()
-            gnn_optimD.zero_grad()
             with amp.autocast(enabled=configer.get('use_fp16')):
                 # if finetune and i >= fix_param_iters + aux_iter:
                 #     finetune = False
@@ -611,8 +613,6 @@ def train():
             # with torch.autograd.detect_anomaly():
             # print(backward_loss)
 
-            if is_adv:
-                backward_loss += adv_loss
                 # scaler.scale(adv_loss).backward()
                 # scaler.step(gnn_optimD)
                 # scaler.update()
@@ -661,8 +661,6 @@ def train():
 
                 
 
-            if use_ema:
-                ema_net.EMAUpdate(net.module)
             # print('synchronize')
             time_meter.update()
             loss_meter.update(backward_loss.item())
@@ -696,9 +694,9 @@ def train():
                     loss_pre_meter, loss_aux_meters, loss_contrast_meter, loss_domain_meter, kl_loss_meter)
                 
 
-            if (i + 1) % 30000 == 0:
+            if (i + 1) % 10000 == 0:
                 stage_iter = 0 if stage == 'stage1' else configer.get('train', 'finetune_stage1_iters')
-                seg_save_pth = osp.join(configer.get('res_save_pth'), 'seg_model_{}.pth'.format(i+1+configer.get('lr','max_iter')))
+                seg_save_pth = osp.join(configer.get('res_save_pth'), 'seg_model_{}_{}.pth'.format(stage, i+1+configer.get('lr','max_iter')))
                 logger.info('\nsave seg_models to {}'.format(seg_save_pth))
                 if is_distributed():
                     seg_state = net.module.state_dict()
@@ -743,15 +741,15 @@ def train():
     
     writer.close()
     if is_distributed():
-        gnn_state = graph_net.module.state_dict()
+        # gnn_state = graph_net.module.state_dict()
         seg_state = net.module.state_dict()
         if dist.get_rank() == 0: 
-            torch.save(gnn_state, gnn_save_pth)
+            # torch.save(gnn_state, gnn_save_pth)
             torch.save(seg_state, seg_save_pth)
     else:
-        gnn_state = graph_net.state_dict()
+        # gnn_state = graph_net.state_dict()
         seg_state = net.state_dict()
-        torch.save(gnn_state, gnn_save_pth)
+        # torch.save(gnn_state, gnn_save_pth)
         torch.save(seg_state, seg_save_pth)
 
     # logger.info('\nevaluating the final model')

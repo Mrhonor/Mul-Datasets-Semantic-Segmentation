@@ -137,11 +137,17 @@ def print_bipartite(configer, n_datasets, bi_graphs):
         max_value, max_index = torch.max(bi_graphs[i], dim=0)
         n_cat = configer.get(f'dataset{i+1}', 'n_cats')
         
+        # print(bi_graphs[i].shape)
+        # print(max_value, max_index)
+              
         buckets = {}
         for index, j in enumerate(max_index):
+            if max_value[index] < 1e-4:
+               continue
             
             if int(j) not in buckets:
                 buckets[int(j)] = [index]
+                
             else:
                 buckets[int(j)].append(index)
             
@@ -160,7 +166,8 @@ def find_unuse(configer, net):
     n_datasets = configer.get('n_datasets')
     is_dist = dist.is_initialized()
     net.eval()
-    dls = get_data_loader(configer, aux_mode='eval', distributed=is_dist)
+    dls = get_data_loader(configer, aux_mode='train', distributed=is_dist, stage=2)
+    print_bipartite(configer, n_datasets, net.bipartite_graphs)
 
     out_buckets = {}
     for i in range(0, n_datasets): 
@@ -174,6 +181,30 @@ def find_unuse(configer, net):
         
         out_buckets[f'dataset{i+1}'] = buckets
         
+    net.train()
+    return out_buckets
+
+@torch.no_grad()
+def find_useful_and_unuseful(configer, net):
+    n_datasets = configer.get('n_datasets')
+    is_dist = dist.is_initialized()
+    net.eval()
+    dls = get_data_loader(configer, aux_mode='train', distributed=is_dist, stage=2)
+    print_bipartite(configer, n_datasets, net.bipartite_graphs)
+
+    out_buckets = {}
+    for i in range(0, n_datasets): 
+        print("dataset {}:".format(i+1))    
+        n_cat = configer.get(f'dataset{i+1}', 'n_cats')
+        buckets = find_unuse_label(configer, net, dls[i], n_cat, i)
+        for index in range(0, n_cat):
+            if index not in buckets:
+                buckets[index] = []
+            print("\"{}\": {}".format(index, buckets[index]))    
+        
+        out_buckets[f'dataset{i+1}'] = buckets
+        
+    net.train()
     return out_buckets
 
 def find_unuse_self():
@@ -234,8 +265,61 @@ def find_unuse_self():
     return
 
 
+def print_unified_label_mapping(configer, bi_graphs, adj):
+    n_datasets = configer.get('n_datasets')
+    total_cats = 0
+    cat_buckets = []
+    class_names = []
+    dataset_names = []
+    for i in range(0, n_datasets):
+        cat_buckets.append(configer.get(f'dataset{i+1}', 'n_cats'))
+        class_names.append(configer.get(f'dataset{i+1}', 'label_names'))
+        dataset_names.append(configer.get(f'dataset{i+1}', 'data_reader'))
+        total_cats += configer.get(f'dataset{i+1}', 'n_cats')
+    
+    uni_cats = int(total_cats*configer.get('GNN', 'unify_ratio'))
+    uni_graph = torch.zeros((total_cats, uni_cats))
+    for i in range(0, n_datasets):
+        uni_graph[sum(cat_buckets[0:i]):sum(cat_buckets[0:i+1]), :] = bi_graphs[i]
+        
+    uni_label_mapping = {}
+    for i in range(0, uni_cats):
+        uni_label_mapping[i] = []
+        for dataset_id in range(0, n_datasets):
+
+            # find each col the value is 1
+            for j in range(0, cat_buckets[dataset_id]):
+                if bi_graphs[dataset_id][j,i] == 1:
+                    
+                    # print(len(adj))
+                    # print(sum(cat_buckets[0:dataset_id])+i)
+                    # print(adj[sum(cat_buckets[0:dataset_id])+i,uni_cats+j])
+                    uni_label_mapping[i].append(f'{dataset_names[dataset_id]}:{class_names[dataset_id][j]}:{adj[dataset_id][j, i]}')
+                
+        
+    for index in range(0, uni_cats):
+        print("\"{}\": {}".format(index, uni_label_mapping[index]))    
+        
+
 def main():
-    find_unuse()
+    configer = Configer(configs='configs/ltbgnn_3_datasets.json')
+    net = model_factory[configer.get('model_name')](configer)
+    graph_net = model_factory[configer.get('GNN','model_name')](configer)
+    graph_net.load_state_dict(torch.load('res/celoss/graph_model_50000.pth', map_location='cpu'), strict=False)
+    
+        
+    state = torch.load('res/celoss/seg_model_50000.pth', map_location='cpu')
+    
+        
+        # del state['unify_prototype']
+        # for i in range(0, configer.get('n_datasets')):
+        #     del state[f'bipartite_graphs.{i}']
+    net.load_state_dict(state, strict=False)
+    node_feat = gen_graph_node_feature(configer)
+    _, bipart_graphs = graph_net.get_optimal_matching(node_feat, True)
+    
+    print_bipartite(configer, 3, bipart_graphs)
+    
 
 
 if __name__ == "__main__":

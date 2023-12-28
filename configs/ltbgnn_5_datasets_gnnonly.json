@@ -10,7 +10,7 @@
     },
     "GNN": {
       "model_name": "learnable_topology_BGNN",
-      "nfeat": 512,
+      "nfeat": 1024,
       "nfeat_out": 512,
       "nfeat_adj": 256,
       "nhid": 64,
@@ -26,7 +26,7 @@
       "calc_bipartite": false,
       "output_max_adj": false,
       "output_softmax_and_max_adj": true,
-      "with_orth": false
+      "with_orth": true
     },
     "dataset1": {
       "n_cats": 19,

@@ -10,14 +10,16 @@ from lib.cityscapes_cv2 import CityScapes, CityScapesIm
 from lib.a2d2_lb_cv2 import A2D2Data
 from lib.a2d2_cv2 import A2D2Data_L
 from lib.ADE20K import ade20k
-from lib.ade2016_data import ade2016
+from lib.ade2016_data import ade2016, ade2016_mseg
 from lib.bdd100k_data import Bdd100k
 from lib.idd_cv2 import Idd
-from lib.Mapi import Mapi
+from lib.Mapi import Mapi, Mapiv1, Mapiv1_mseg
 from lib.sunrgbd import Sunrgbd
-from lib.coco_data import Coco_data
+from lib.coco_data import Coco_data, Coco_data_mseg
 from lib.a2d2_city_dataset import A2D2CityScapes
 from lib.CamVid_lb import CamVid
+from lib.WD2 import wd2
+from lib.scannet import scannet
 from lib.MultiSetReader import MultiSetReader
 from lib.all_datasets_reader import AllDatasetsReader
 
@@ -48,7 +50,7 @@ class TransformationVal(object):
         return dict(im=im, lb=lb)
 
 
-def get_data_loader(configer, aux_mode='eval', distributed=True):
+def get_data_loader(configer, aux_mode='eval', distributed=True, stage=None):
     mode = aux_mode
     n_datasets = configer.get('n_datasets')
     max_iter = configer.get('lr', 'max_iter')
@@ -57,8 +59,13 @@ def get_data_loader(configer, aux_mode='eval', distributed=True):
         scales = configer.get('train', 'scales')
         cropsize = configer.get('train', 'cropsize')
         trans_func = TransformationTrain(scales, cropsize)
-        batchsize = [configer.get('dataset'+str(i), 'ims_per_gpu') for i in range(1, n_datasets+1)]
-        annpath = [configer.get('dataset'+str(i), 'train_im_anns') for i in range(1, n_datasets+1)]
+        if stage != None:
+            annpath = [configer.get('dataset'+str(i), 'train_im_anns').replace('.txt', f'_{stage}.txt') for i in range(1, n_datasets+1)]
+            print(annpath)
+            batchsize = [configer.get('dataset'+str(i), 'ims_per_gpu') for i in range(1, n_datasets+1)]
+        else:
+            annpath = [configer.get('dataset'+str(i), 'train_im_anns') for i in range(1, n_datasets+1)]
+            batchsize = [configer.get('dataset'+str(i), 'ims_per_gpu') for i in range(1, n_datasets+1)]
         imroot = [configer.get('dataset'+str(i), 'im_root') for i in range(1, n_datasets+1)]
         data_reader = [configer.get('dataset'+str(i), 'data_reader') for i in range(1, n_datasets+1)]
         
@@ -76,15 +83,18 @@ def get_data_loader(configer, aux_mode='eval', distributed=True):
     elif mode == 'ret_path':
         trans_func = TransformationVal()
         batchsize = [1 for i in range(1, n_datasets+1)]
-        annpath = []
-        for i in range(1, n_datasets+1):
-            annpath.append(configer.get('dataset'+str(i), 'train_im_anns'))
+        if stage != None:
+            annpath = [configer.get('dataset'+str(i), 'train_im_anns').replace('.txt', f'_{stage}.txt') for i in range(1, n_datasets+1)]
+            print(annpath)
+        else:
+            annpath = [configer.get('dataset'+str(i), 'train_im_anns') for i in range(1, n_datasets+1)]
             
         imroot = [configer.get('dataset'+str(i), 'im_root') for i in range(1, n_datasets+1)]
         data_reader = [configer.get('dataset'+str(i), 'data_reader') for i in range(1, n_datasets+1)]
         
         shuffle = False
         drop_last = False
+        
 
     ds = [eval(reader)(root, path, trans_func=trans_func, mode=mode)
           for reader, root, path in zip(data_reader, imroot, annpath)]
@@ -93,7 +103,7 @@ def get_data_loader(configer, aux_mode='eval', distributed=True):
 
     if distributed:
         assert dist.is_available(), "dist should be initialzed"
-        if mode == 'train':
+        if mode == 'train' and stage != 2:
             assert not max_iter is None
             n_train_imgs = [ims_per_gpu * dist.get_world_size() * max_iter for ims_per_gpu in batchsize]
             sampler = [RepeatedDistSampler(dataset, n_train_img, shuffle=shuffle) for n_train_img, dataset in zip(n_train_imgs, ds)] 

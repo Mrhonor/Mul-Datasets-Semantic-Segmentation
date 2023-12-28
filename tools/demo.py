@@ -22,15 +22,16 @@ np.random.seed(123)
 # args
 parse = argparse.ArgumentParser()
 
-parse.add_argument('--weight_path', type=str, default='res/clip/seg_model_joint_stage.pth',)
-parse.add_argument('--gnn_weight_path', type=str, default='res/clip/gnn_model_joint_stage.pth',)
-parse.add_argument('--config', dest='config', type=str, default='configs/ltbgnn_7_datasets.json',)
-parse.add_argument('--img_path', dest='img_path', type=str, default='img/0006R0_f00990.png',)
+parse.add_argument('--weight_path', type=str, default='res/clip/7_dataset_model_final.pth',)
+parse.add_argument('--gnn_weight_path', type=str, default='res/celoss/train3_graph_model_80000.pth',)
+parse.add_argument('--config', dest='config', type=str, default='configs/ade20k_mseg.json',)
+parse.add_argument('--img_path', dest='img_path', type=str, default='img/ADE_train_00000001.jpg',)
 args = parse.parse_args()
 # cfg = set_cfg_from_file(args.config)
 configer = Configer(configs=args.config)
 
-palette = np.random.randint(0, 256, (256, 3), dtype=np.uint8)
+palette = np.random.randint(0, 256, (512, 3), dtype=np.uint8)
+print(palette.shape)
 # labels_info_eval = [
 #     {"name": "road", "ignoreInEval": False, "id": 7, "color": [128, 64, 128], "trainId": 0},
 #     {"name": "sidewalk", "ignoreInEval": False, "id": 8, "color": [244, 35, 232], "trainId": 1},
@@ -631,7 +632,8 @@ elif dataset_id is A2D2_ID:
 else:
     labels_info = labels_info_eval
 
-labels_info = labels_info_city + labels_info_cam + sunrgb_labels + bdd_labels + idd_labels
+# labels_info = labels_info_city + labels_info_cam + sunrgb_labels + bdd_labels + idd_labels
+labels_info = idd_labels
 def buildPalette(label_info):
     palette = []
     for el in label_info:
@@ -652,12 +654,29 @@ class E2EModel(torch.nn.Module):
         
         # self.net = model_factory[cfg.model_type](cfg.n_cats, aux_mode="pred")
         self.net = model_factory[configer.get('model_name')](configer)
-        self.net.load_state_dict(torch.load(weight_path, map_location='cpu'), strict=False)
+        state = torch.load(weight_path, map_location='cpu')
+        # del state['bipartite_graphs.0']
+        self.net.load_state_dict(state, strict=False)
         self.net.eval()
         self.net.aux_mode='pred'
-        self.net.aux_mode='uni'
+        # self.net.aux_mode='uni'
         # self.net.train()
         self.net.cuda()
+        bi_graphs = [torch.load('../ade_to_ade_relabel.pt').T.cuda()]
+    
+        self.net.set_bipartite_graphs(bi_graphs)
+        # with open('camvid_mapping.txt', 'r') as f:
+        #     lines = f.readlines()
+
+        # bi_graphs = []
+        # for i, line in enumerate(lines):
+        #     bi_graph = torch.zeros((11, 224), dtype=torch.float32).cuda()
+        #     ids = line.replace('\n', '').replace(' ', '').split(',')
+        #     ids = [int(id) for id in ids]
+        #     print(ids)
+        #     for id in ids:
+        #         bi_graph[i, id] = 1
+        # bi_graphs.append(bi_graph)
 
         # graph_net = model_factory[configer.get('GNN','model_name')](configer)
         # torch.set_printoptions(profile="full")
@@ -674,8 +693,8 @@ class E2EModel(torch.nn.Module):
         #     bi_graphs = [bigh.detach() for bigh in ori_bi_graphs]
         # unify_prototype, bi_graphs, adv_out, _ = graph_net(graph_node_features)
 
-        # print(bi_graphs[0])
-        # print(bi_graphs[0][18])
+        # print(self.net.bipartite_graphs[6])
+        # print(bi_graphs[6])
 
         # self.net.set_unify_prototype(unify_prototype)
         # self.net.set_bipartite_graphs(bi_graphs)
@@ -713,8 +732,8 @@ for i in range(1):
     t0 = time()
     # input_im = to_tensor(dict(im=im, lb=None))['im'].unsqueeze(0).cuda()
     # input_im = cv2.resize(im, (960, 768))
-    # input_im = cv2.resize(im, (1024, 512))
-    input_im = im
+    input_im = cv2.resize(im, (1024, 512))
+    # input_im = im
     
     input_im = torch.tensor(input_im.astype(np.float32).copy()).unsqueeze(0)#.cuda()
     
@@ -746,5 +765,5 @@ for i in range(1):
     # print((time() - t0) * 1000)
 
 # cv2.imwrite('./res1.jpg', pred1)
-cv2.imwrite('./res.bmp', pred2)
+cv2.imwrite('./res2.bmp', out2)
 # cv2.imwrite('./test.jpg', pred1)
