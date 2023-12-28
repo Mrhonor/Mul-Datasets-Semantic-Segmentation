@@ -969,7 +969,7 @@ class CrossDatasetsCELoss_AdvGNN(nn.Module):
         # print('logits', logits.shape)
         # print("logits_max : {}, logits_min : {}".format(torch.max(logits), torch.min(logits)))
         # logger.info('logit min: {}, logits max:{}'.format(torch.min(logits), torch.max(logits)))
-        if is_adv and self.with_orth and adj_feat is None:
+        if is_adv and self.with_orth:# and adj_feat is None:
             # logger.info(adj_feat)
             if self.with_datasets_aux:
                 orth_loss = self.orth_weight * self.similarity_dsb(unify_prototype[self.total_cats:])
@@ -1022,21 +1022,21 @@ class CrossDatasetsCELoss_AdvGNN(nn.Module):
                 else:
                     loss = loss + max_enc_loss
                 
-            if is_adv and self.with_orth and adj_feat is not None and self.with_max_adj:
-                # this_feat = unify_prototype[self.total_cats:]
-                base_ratio = 1.0 / bi_graphs[2*i].shape[1]
-                for j in range(bi_graphs[2*i].shape[0]):
-                    if (bi_graphs[2*i][j] != 0).any():
-                        # logger.info('enter')
-                        if orth_loss is None:
-                            # orth_loss = base_ratio * self.orth_weight * self.similarity_dsb(this_feat[bi_graphs[2*i][j] != 0], reduce='sum')
-                            orth_loss = base_ratio * self.orth_weight * self.similarity_dsb(adj_feat[bi_graphs[2*i][j] != 0], reduce='sum')
-                        else:
-                            # orth_loss += base_ratio * self.orth_weight * self.similarity_dsb(this_feat[bi_graphs[2*i][j] != 0], reduce='sum')
-                            orth_loss += base_ratio * self.orth_weight * self.similarity_dsb(adj_feat[bi_graphs[2*i][j] != 0], reduce='sum')
+            # if is_adv and self.with_orth and adj_feat is not None and self.with_max_adj:
+            #     # this_feat = unify_prototype[self.total_cats:]
+            #     base_ratio = 1.0 / bi_graphs[2*i].shape[1]
+            #     for j in range(bi_graphs[2*i].shape[0]):
+            #         if (bi_graphs[2*i][j] != 0).any():
+            #             # logger.info('enter')
+            #             if orth_loss is None:
+            #                 # orth_loss = base_ratio * self.orth_weight * self.similarity_dsb(this_feat[bi_graphs[2*i][j] != 0], reduce='sum')
+            #                 orth_loss = base_ratio * self.orth_weight * self.similarity_dsb(adj_feat[bi_graphs[2*i][j] != 0], reduce='sum')
+            #             else:
+            #                 # orth_loss += base_ratio * self.orth_weight * self.similarity_dsb(this_feat[bi_graphs[2*i][j] != 0], reduce='sum')
+            #                 orth_loss += base_ratio * self.orth_weight * self.similarity_dsb(adj_feat[bi_graphs[2*i][j] != 0], reduce='sum')
 
             if is_adv and target_bi_graph is not None:
-                total_num = bi_graphs[2*i].shape[0] * bi_graphs[2*i].shape[1]
+                total_num = bi_graphs[2*i].shape[1]
                 base_weight = 1 / total_num
                 bi_graphs[2*i + 1]
                 if adj_loss is None:

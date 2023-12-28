@@ -323,6 +323,8 @@ class Learnable_Topology_BGNN_adj(nn.Module):
             
         feat_out = self.linear1(feat_gcn4)
 
+        ret_feats = [feat_gcn1[self.total_cats:], feat_gcn2[self.total_cats:], feat_gcn3[self.total_cats:], feat_gcn4[self.total_cats:], feat_out[self.total_cats:]]
+
         adv_out = {}
         if self.mse_or_adv == 'adv':
             adv_out['ADV1'] = [out_real_1, out_fake_1, g_out_fake_1]
@@ -343,14 +345,14 @@ class Learnable_Topology_BGNN_adj(nn.Module):
             _, non_norm_adj_mI_after, _ = self.calc_adjacency_matrix(arch_x)
             
             if self.with_datasets_aux:
-                return feat_out, self.sep_bipartite_graphs(non_norm_adj_mI_after), adv_out, None #non_norm_adj_mI_after
+                return feat_out, self.sep_bipartite_graphs(non_norm_adj_mI_after), adv_out, ret_feats #non_norm_adj_mI_after
             else:
-                return feat_out[self.total_cats:], self.sep_bipartite_graphs(non_norm_adj_mI_after), adv_out, None # non_norm_adj_mI_after
+                return feat_out[self.total_cats:], self.sep_bipartite_graphs(non_norm_adj_mI_after), adv_out, ret_feats # non_norm_adj_mI_after
         else:
             if self.with_datasets_aux:
-                return feat_out, self.sep_bipartite_graphs(non_norm_adj_mI), adv_out, None # non_norm_adj_mI
+                return feat_out, self.sep_bipartite_graphs(non_norm_adj_mI), adv_out, ret_feats # non_norm_adj_mI
             else:
-                return feat_out[self.total_cats:], self.sep_bipartite_graphs(non_norm_adj_mI), adv_out, None #, non_norm_adj_mI
+                return feat_out[self.total_cats:], self.sep_bipartite_graphs(non_norm_adj_mI), adv_out, ret_feats #, non_norm_adj_mI
 
     def sep_bipartite_graphs(self, adj):
         self.bipartite_graphs = []

@@ -144,7 +144,7 @@
     "finetune": true,
     "finetune_from": "res/celoss/snp_clip_model.pth",
     "graph_finetune": false,
-    "graph_finetune_from": "res/celoss/graph_model_140000.pth",
+    "graph_finetune_from": "res/celoss/graph_model_300000.pth",
     "seg_iters": 500000,
     "gnn_iters": 200000,
     "finetune_stage1_iters": 30000,

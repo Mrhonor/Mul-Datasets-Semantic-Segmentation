@@ -589,6 +589,12 @@ def train():
     adv_out = None
     unify_prototype = None
     target_bi_graph = None
+    if alter_iter != 0:
+        if is_distributed():
+            _, _, target_bi_graph = eval_find_use_and_unuse_label(configer, net.module)
+        else:
+            _, _, target_bi_graph = eval_find_use_and_unuse_label(configer, net)
+        
     GNN_INIT = configer.get('train', 'graph_finetune')
     # GNN_INIT = True
     gnn_lr_schdr = WarmupPolyLrScheduler(gnn_optim, power=1.2,
@@ -639,33 +645,33 @@ def train():
         else:
             with torch.no_grad():
 
-                unify_prototype, ori_bi_graphs = graph_net.get_optimal_matching(graph_node_features, True)
+                # unify_prototype, ori_bi_graphs = graph_net.get_optimal_matching(graph_node_features, True)
 
-                # print(torch.norm(unify_prototype[0][0], p=2))
-                unify_prototype = unify_prototype.detach()
-                new_bi_graphs = []
-                if len(ori_bi_graphs) == 2*n_datasets:
-                    for j in range(0, len(ori_bi_graphs), 2):
-                        new_bi_graphs.append(ori_bi_graphs[j+1].detach())
-                else:
-                    new_bi_graphs = [bigh.detach() for bigh in ori_bi_graphs]
-                fix_graph = True
-                adv_out = None
-                # _, ori_bi_graphs, _, _ = graph_net(graph_node_features)
-                # bi_graphs = []
+                # # print(torch.norm(unify_prototype[0][0], p=2))
+                # unify_prototype = unify_prototype.detach()
+                # new_bi_graphs = []
                 # if len(ori_bi_graphs) == 2*n_datasets:
                 #     for j in range(0, len(ori_bi_graphs), 2):
-                #         bi_graphs.append(ori_bi_graphs[j+1].detach())
+                #         new_bi_graphs.append(ori_bi_graphs[j+1].detach())
                 # else:
-                #     bi_graphs = [bigh.detach() for bigh in ori_bi_graphs]
+                #     new_bi_graphs = [bigh.detach() for bigh in ori_bi_graphs]
+                # fix_graph = True
+                # adv_out = None
+                # # _, ori_bi_graphs, _, _ = graph_net(graph_node_features)
+                # # bi_graphs = []
+                # # if len(ori_bi_graphs) == 2*n_datasets:
+                # #     for j in range(0, len(ori_bi_graphs), 2):
+                # #         bi_graphs.append(ori_bi_graphs[j+1].detach())
+                # # else:
+                # #     bi_graphs = [bigh.detach() for bigh in ori_bi_graphs]
 
 
-                init_gnn_stage = False
+                # init_gnn_stage = False
 
-                net.set_unify_prototype(unify_prototype, True)
-                net.set_bipartite_graphs(new_bi_graphs)
+                # net.set_unify_prototype(unify_prototype, True)
+                # net.set_bipartite_graphs(new_bi_graphs)
             # print_bipartite(configer, n_datasets, net.bipartite_graphs)
-            # net.unify_prototype.requires_grad = True
+                net.unify_prototype.requires_grad = True
         
     
     optim = set_optimizer(net, configer, configer.get('lr', 'seg_lr_start'))
@@ -1114,12 +1120,14 @@ def train():
             torch.cuda.empty_cache()
             if is_distributed():
                 # if eval_model_func == eval_find_use_and_unuse_label:
-                heads, mious, target_bi_graph = eval_find_use_and_unuse_label(configer, net.module)
+                if train_seg_or_gnn == GNN:
+                    heads, mious, target_bi_graph = eval_find_use_and_unuse_label(configer, net.module)
                 # else:
                 heads, mious = eval_model_func(configer, net.module)
             else:
                 # if eval_model_func == eval_find_use_and_unuse_label:
-                heads, mious, target_bi_graph = eval_find_use_and_unuse_label(configer, net)
+                if train_seg_or_gnn == GNN:
+                    heads, mious, target_bi_graph = eval_find_use_and_unuse_label(configer, net)
                 # else:
                 heads, mious = eval_model_func(configer, net)
                 

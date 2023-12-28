@@ -299,7 +299,7 @@ class SemsegModel(nn.Module):
             self.aux_prototype = nn.ParameterList([])
             for i in range(0, self.n_datasets):
                 self.aux_prototype.append(nn.Parameter(torch.zeros(self.datasets_cats[i], self.output_feat_dim),
-                                        requires_grad=False))
+                                        requires_grad=True))
                 trunc_normal_(self.aux_prototype[i], std=0.02)
 
 
