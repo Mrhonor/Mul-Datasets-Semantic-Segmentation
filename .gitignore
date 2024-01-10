@@ -129,3 +129,7 @@ tvm/
 *.bin
 *.caffemodel
 *.log
+core.*
+*.whl
+*.tar.bz2
+CV-CUDA/

@@ -624,8 +624,9 @@ def resnet18(pretrained=True, **kwargs):
         pretrained (bool): If True, returns a model pre-trained on ImageNet
     """
     model = ResNet(BasicBlock, [2, 2, 2, 2], **kwargs)
-    if pretrained:
-        model.load_state_dict(model_zoo.load_url(model_urls['resnet18']), strict=False)
+    # model_zoo.load_url(model_urls['resnet18'])
+    # if pretrained:
+    #     model.load_state_dict('/cpfs01/projects-HDD/pujianxiangmuzu_HDD/mr_22210240239/Mul-Datasets-Semantic-Segmentation/resnet18-5c106cde.pth', strict=False)
     return model
 
 def resnet18_mulbn(configer, pretrained=True, **kwargs):

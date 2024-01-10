@@ -125,7 +125,160 @@ class ColorJitter(object):
         ]).clip(0, 255).astype(np.uint8)
         return table[im]
 
+class RandomResizedCropGPU(object):
+    def __init__(self, scales=(0.5, 1.), size=(384, 384)):
+        self.scales = scales
+        self.size = size
 
+
+    def __call__(self, im_lb):
+        if self.size is None:
+            return im_lb
+
+        im, lb = im_lb['im'], im_lb['lb']
+        H, W = im.shape[:2]
+
+        assert im.shape[:2] == lb.shape[:2]
+
+        crop_h, crop_w = self.size
+
+        scale = np.random.uniform(min(self.scales), max(self.scales))
+        if np.min([H, W]) < 1080:
+            scale = scale * (1080 / np.min([H, W]))
+
+        im_h, im_w = [math.ceil(el * scale) for el in im.shape[:2]]
+        im_gpu = cv2.cuda_GpuMat()
+        lb_gpu = cv2.cuda_GpuMat()
+        im_gpu.upload(im)
+        lb_gpu.upload(lb)
+        im_gpu = cv2.cuda.resize(im_gpu, (im_w, im_h))
+        lb_gpu = cv2.cuda.resize(lb_gpu, (im_w, im_h), interpolation=cv2.INTER_NEAREST)
+
+        if (im_h, im_w) == (crop_h, crop_w): return dict(im=im_gpu.download(), lb=lb_gpu.download())
+               # 计算需要填充的大小
+        pad_h = max(0, (crop_h - im_h) // 2 + 1)
+        pad_w = max(0, (crop_w - im_w) // 2 + 1)
+        
+        # 使用copyMakeBorder进行填充
+        im_gpu = cv2.cuda.copyMakeBorder(im_gpu, pad_h, pad_h, pad_w, pad_w, cv2.BORDER_CONSTANT, value=0)
+        lb_gpu = cv2.cuda.copyMakeBorder(lb_gpu, pad_h, pad_h, pad_w, pad_w, cv2.BORDER_CONSTANT, value=255)
+ 
+        # 随机裁剪的起始位置
+        sh, sw = np.random.random(2)
+        sh, sw = int(sh * (im_h - crop_h)), int(sw * (im_w - crop_w))
+        
+        # 使用ROI进行随机裁剪
+        im_gpu = im_gpu(cv2.cuda_GpuMat(), roi=(sw, sh, crop_w, crop_h))
+        lb_gpu = lb_gpu(cv2.cuda_GpuMat(), roi=(sw, sh, crop_w, crop_h))
+
+        
+        return dict(im=im_gpu.download(), lb=lb_gpu.download())
+    
+
+
+class RandomResizedCrop_Flip_ColorJitterGPU(object):
+    def __init__(self, scales=(0.5, 1.), size=(384, 384), p=0.5, brightness=None, contrast=None, saturation=None):
+        self.scales = scales
+        self.size = size
+        self.p = p
+        self.brightness = brightness
+        self.contrast = contrast
+        self.saturation = saturation
+
+    def __call__(self, im_lb):
+        if self.size is None:
+            return im_lb
+
+        im, lb = im_lb['im'], im_lb['lb']
+        H, W = im.shape[:2]
+
+        assert im.shape[:2] == lb.shape[:2]
+
+        crop_h, crop_w = self.size
+
+        scale = np.random.uniform(min(self.scales), max(self.scales))
+        if np.min([H, W]) < 1080:
+            scale = scale * (1080 / np.min([H, W]))
+
+        im_h, im_w = [math.ceil(el * scale) for el in im.shape[:2]]
+        im_gpu = cv2.cuda_GpuMat()
+        lb_gpu = cv2.cuda_GpuMat()
+        im_gpu.upload(im)
+        lb_gpu.upload(lb)
+        im_gpu = cv2.cuda.resize(im_gpu, (im_w, im_h))
+        lb_gpu = cv2.cuda.resize(lb_gpu, (im_w, im_h), interpolation=cv2.INTER_NEAREST)
+
+        if (im_h, im_w) == (crop_h, crop_w): 
+            return dict(im=im_gpu.download(), lb=lb_gpu.download())
+            # return dict(im=im_gpu, lb=lb_gpu)
+               # 计算需要填充的大小
+        pad_h = max(0, (crop_h - im_h) // 2 + 1)
+        pad_w = max(0, (crop_w - im_w) // 2 + 1)
+        
+        # 使用copyMakeBorder进行填充
+        im_gpu = cv2.cuda.copyMakeBorder(im_gpu, pad_h, pad_h, pad_w, pad_w, cv2.BORDER_CONSTANT, value=0)
+        lb_gpu = cv2.cuda.copyMakeBorder(lb_gpu, pad_h, pad_h, pad_w, pad_w, cv2.BORDER_CONSTANT, value=255)
+ 
+        # 随机裁剪的起始位置
+
+        
+        
+        # 使用ROI进行随机裁剪
+        # im_gpu = im_gpu(cv2.cuda_GpuMat(), roi=(sw, sh, crop_w, crop_h))
+        # lb_gpu = lb_gpu(cv2.cuda_GpuMat(), roi=(sw, sh, crop_w, crop_h))
+        # cropped = cv2.UMat(im_gpu, [minX, maxX], [minY, maxY])
+        # im_gpu = im_gpu.adjustROI(sw, sw+crop_w, sh, sh+crop_h)
+        # lb_gpu = lb_gpu.adjustROI(sw, sw+crop_w, sh, sh+crop_h)
+
+        if np.random.random() >= self.p:
+            im_gpu = cv2.cuda.flip(im_gpu, flipCode=1)
+            lb_gpu = cv2.cuda.flip(lb_gpu, flipCode=1)
+        
+        # if self.brightness is not None:
+        #     rate = np.random.uniform(max(1 - self.brightness, 0), 1 + self.brightness)
+        #     self.adj_brightness_gpu(im_gpu, rate)
+        # if self.contrast is not None:
+        #     rate = np.random.uniform(max(1 - self.contrast, 0), 1 + self.contrast)
+        #     self.adj_contrast_gpu(im_gpu, rate)
+        # if self.saturation is not None:
+        #     rate = np.random.uniform(max(1 - self.saturation, 0), 1 + self.saturation)
+        #     self.adj_saturation_gpu(im_gpu, rate)
+        
+        im = im_gpu.download()
+        lb = lb_gpu.download()
+        im_h, im_w, _ = im.shape
+        sh, sw = np.random.random(2)
+        sh, sw = int(sh * (im_h - crop_h)), int(sw * (im_w - crop_w))
+        # print(im.shape)
+        # print(lb.shape)
+        # print(sh, sw, crop_h, crop_w)
+        # return dict(im=im_gpu.download()[sh:sh+crop_h, sw:sw+crop_w, :].copy(), lb=lb_gpu.download()[sh:sh+crop_h, sw:sw+crop_w].copy())
+        # return dict(im=im_gpu, lb=lb_gpu)
+        return dict(
+            im=im[sh:sh+crop_h, sw:sw+crop_w, :].copy(),
+            lb=lb[sh:sh+crop_h, sw:sw+crop_w].copy()
+        )
+    
+    def adj_saturation_gpu(self, im_gpu, rate):
+        M = np.float32([
+            [1 + 2 * rate, 1 - rate, 1 - rate],
+            [1 - rate, 1 + 2 * rate, 1 - rate],
+            [1 - rate, 1 - rate, 1 + 2 * rate]
+        ])
+        im_gpu_color = cv2.cuda.cvtColor(im_gpu, cv2.COLOR_BGR2BGRA)
+        im_gpu_color_channels = cv2.cuda.split(im_gpu_color)
+        for i in range(3):
+            cv2.cuda.gemm(im_gpu_color_channels[i], M[i], 1, None, 0, im_gpu_color_channels[i])
+        cv2.cuda.merge(im_gpu_color_channels, im_gpu_color)
+        cv2.cuda.cvtColor(im_gpu_color, cv2.COLOR_BGRA2BGR, dst=im_gpu)
+
+    def adj_brightness_gpu(self, im_gpu, rate):
+        table = np.array([i * rate for i in range(256)]).clip(0, 255).astype(np.uint8)
+        cv2.cuda.LookUpTable(im_gpu, table, im_gpu)
+
+    def adj_contrast_gpu(self, im_gpu, rate):
+        table = np.array([74 + (i - 74) * rate for i in range(256)]).clip(0, 255).astype(np.uint8)
+        cv2.cuda.LookUpTable(im_gpu, table, im_gpu)
 
 class ToTensor(object):
     '''
@@ -144,7 +297,7 @@ class ToTensor(object):
         std = torch.as_tensor(self.std, dtype=dtype, device=device)[:, None, None]
         im = im.sub_(mean).div_(std).clone()
         if not lb is None:
-            lb = torch.from_numpy(lb.astype(np.int64).copy()).clone()
+            lb = torch.from_numpy(lb.astype(np.int64))#.clone()
         return dict(im=im, lb=lb)
 
 class TensorToIMG(object):

@@ -46,12 +46,21 @@ class BaseDataset(Dataset):
             return impth, label, lbpth
 
         img = self.get_image(impth)
+        # im_gpu = cv2.cuda_GpuMat()
+        # lb_gpu = cv2.cuda_GpuMat()
+        # im_gpu.upload(img)
+        # lb_gpu.upload(label)
 
+        # im_lb = dict(im=im_gpu, lb=lb_gpu)
         im_lb = dict(im=img, lb=label)
         if not self.trans_func is None:
             im_lb = self.trans_func(im_lb)
+            
+        # img, label = im_lb['im'].download(), im_lb['lb'].download()
+        # im_lb = dict(im=img, lb=label)
         im_lb = self.to_tensor(im_lb)
         img, label = im_lb['im'], im_lb['lb']
+        
         
         return img.detach(), label.unsqueeze(0).detach()
         # return img.detach()

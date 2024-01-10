@@ -14,7 +14,7 @@ import numpy as np
 
 import lib.transform_cv2 as T
 from lib.base_dataset import BaseDataset, BaseDatasetIm
-
+from lib.cvCudaDataset import ImageBatchDecoderPyTorch, ImageBatchPNGDecoderPyTorch
 
 labels_info = [
     {"hasInstances": False, "category": "void", "catid": 0, "name": "unlabeled", "ignoreInEval": True, "id": 0, "color": [0, 0, 0], "trainId": 255},
@@ -192,6 +192,37 @@ class CityScapesIm(BaseDatasetIm):
         )
 
 
+class CityScapesCVCUDA(ImageBatchPNGDecoderPyTorch):
+    '''
+    '''
+    def __init__(self, dataroot, annpath, batch_size, device_id, cuda_ctx, mode='train'):
+        super(CityScapesCVCUDA, self).__init__(
+                dataroot, annpath, batch_size, device_id, cuda_ctx, mode)
+    
+        # mode = 'eval'
+
+        self.n_cats = 19
+        # if mode == 'train':
+        #     self.n_cats = 20
+        
+        self.lb_ignore = -1
+        # self.lb_ignore = 255
+        self.lb_map = np.arange(256).astype(np.uint8)
+
+        self.labels_info = labels_info_eval
+            
+        for el in self.labels_info:
+            # if mode=='train' and el['trainId'] == 255:
+            #     self.lb_map[el['id']] = 19
+            # else:
+            self.lb_map[el['id']] = el['trainId']
+
+        # self.to_tensor = T.ToTensor(
+        #     mean=(0.3038, 0.3383, 0.3034), # city, rgb
+        #     std=(0.2071, 0.2088, 0.2090),
+        # )
+
+
 
 if __name__ == "__main__":
     from tqdm import tqdm
@@ -202,12 +233,30 @@ if __name__ == "__main__":
             im, lb = im_lb['im'], im_lb['lb']
             return dict(im=im, lb=lb)
 
-    ds = CityScapes('/home/mr/datasets', 'datasets/Cityscapes/train.txt', trans_func=TransformationVal(), mode='ret_path')
+    class TransformationTrain(object):
+
+        def __init__(self, scales, cropsize):
+            self.trans_func = T.Compose([
+                T.RandomResizedCrop_Flip_ColorJitterGPU(scales, cropsize, 
+                    p=0.5,                
+                    brightness=0.4,
+                    contrast=0.4,
+                    saturation=0.4),
+            ])
+
+        def __call__(self, im_lb):
+            im_lb = self.trans_func(im_lb)
+            return im_lb
+
+    ds = CityScapes('/cpfs01/projects-HDD/pujianxiangmuzu_HDD/public/mr', 'datasets/Cityscapes/train.txt', trans_func=TransformationTrain(), mode='train')
     dl = DataLoader(ds,
-                    batch_size = 1,
+                    batch_size = 2,
                     shuffle = False,
-                    num_workers = 1,
+                    num_workers = 2,
                     drop_last = False)
+    i = 0
     for imgs, label in dl:
-        if torch.min(label) == 255:
-            print(imgs)
+        i+=1
+        print(i)
+        # if torch.min(label) == 255:
+        #     print(imgs)

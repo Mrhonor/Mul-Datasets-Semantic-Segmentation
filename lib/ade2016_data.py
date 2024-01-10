@@ -14,6 +14,7 @@ import numpy as np
 
 import lib.transform_cv2 as T
 from lib.base_dataset import BaseDataset, BaseDatasetIm
+from lib.cvCudaDataset import ImageBatchDecoderPyTorch
 
 
 labels_info = [
@@ -431,6 +432,31 @@ class ade2016Im(BaseDatasetIm):
             std=(0.2071, 0.2088, 0.2090),
         )
 
+class ade2016CVCUDA(ImageBatchDecoderPyTorch):
+    '''
+    '''
+    def __init__(self, dataroot, annpath, batch_size, device_id, cuda_ctx, mode='train'):
+        super(ade2016CVCUDA, self).__init__(
+                dataroot, annpath, batch_size, device_id, cuda_ctx, mode)
+    
+        # mode = 'eval'
+
+        self.n_cats = 150
+        # if mode == 'train':
+        #     self.n_cats = 151
+        self.imStack = False 
+        
+        # self.lb_ignore = -1
+        self.lb_ignore = 255
+        self.lb_map = np.arange(256).astype(np.uint8)
+        
+        self.labels_info = labels_info
+            
+        for el in self.labels_info:
+            # if mode == 'train' and el['trainId'] == 255:
+            #     self.lb_map[el['id']] = 150
+            # else:
+            self.lb_map[el['id']] = el['trainId']
 
 
 if __name__ == "__main__":

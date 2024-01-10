@@ -13,6 +13,7 @@ import numpy as np
 
 import lib.transform_cv2 as T
 from lib.base_dataset import BaseDataset, BaseDatasetIm
+from lib.cvCudaDataset import ImageBatchDecoderPyTorch
 
 # Bus、Light、Sign、Person、Bike、Truck、Motor、Car、Train、Rider
 
@@ -93,6 +94,30 @@ class Bdd100kIm(BaseDatasetIm):
             mean=(0.3038, 0.3383, 0.3034), # city, rgb
             std=(0.2071, 0.2088, 0.2090),
         )
+
+class Bdd100kCVCUDA(ImageBatchDecoderPyTorch):
+    '''
+    '''
+    def __init__(self, dataroot, annpath, batch_size, device_id, cuda_ctx, mode='train'):
+        super(Bdd100kCVCUDA, self).__init__(
+                dataroot, annpath, batch_size, device_id, cuda_ctx, mode)
+    
+        # mode = 'eval'
+        self.n_cats = 19
+        # if mode=='train':
+        #     self.n_cats =20
+        
+        self.lb_ignore = 255
+        # self.lb_ignore = 255
+        self.lb_map = np.arange(256).astype(np.uint8)
+        
+        self.labels_info = labels_info
+            
+        for el in self.labels_info:
+            # if mode=='train' and el['trainId'] == 255:
+            #     self.lb_map[el['id']] = 19
+            # else:
+            self.lb_map[el['id']] = el['trainId']
 
 
 

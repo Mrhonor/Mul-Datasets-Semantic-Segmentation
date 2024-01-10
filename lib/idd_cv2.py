@@ -16,6 +16,7 @@ from PIL import Image
 
 import lib.transform_cv2 as T
 from lib.base_dataset import BaseDataset, BaseDatasetIm
+from lib.cvCudaDataset import ImageBatchDecoderPyTorch, ImageBatchPNGDecoderPyTorch
 
 
 # labels_info = [
@@ -273,6 +274,34 @@ class IddIm(BaseDataset):
     #         #     cv2.imshow(impth, label)
     #         #     cv2.waitKey(0)
     #     return mask
+
+class IddCVCUDA(ImageBatchPNGDecoderPyTorch):
+    '''
+    '''
+    def __init__(self, dataroot, annpath, batch_size, device_id, cuda_ctx, mode='train'):
+        super(IddCVCUDA, self).__init__(
+                dataroot, annpath, batch_size, device_id, cuda_ctx, mode)
+    
+        
+        # mode = 'eval'
+        # self.n_cats = 37
+        # if mode == 'eval':
+        self.n_cats = 26
+        # if mode == 'train':
+        #     self.n_cats = 27
+        self.imStack = False
+        # self.lb_ignore = -1
+        self.lb_ignore = 255
+        self.lb_map = np.arange(256).astype(np.uint8)
+        
+        self.labels_info = labels_info
+            
+        for el in self.labels_info:
+            # if mode=='train' and el['trainId'] == 255:
+            #     self.lb_map[el['id']] = self.n_cats - 1
+            # else:
+            self.lb_map[el['id']] = el['trainId']
+
 
 if __name__ == "__main__":
     from tqdm import tqdm

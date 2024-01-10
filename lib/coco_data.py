@@ -13,6 +13,7 @@ import numpy as np
 
 import lib.transform_cv2 as T
 from lib.base_dataset import BaseDataset, BaseDatasetIm
+from lib.cvCudaDataset import ImageBatchDecoderPyTorch
 
 
 labels_info = [
@@ -357,6 +358,32 @@ class Coco_data_mseg(BaseDataset):
         #     mean=(0.3257, 0.3690, 0.3223), # city, rgb
         #     std=(0.2112, 0.2148, 0.2115),
         # )
+
+class Coco_dataCVCUDA(ImageBatchDecoderPyTorch):
+    '''
+    '''
+    def __init__(self, dataroot, annpath, batch_size, device_id, cuda_ctx, mode='train'):
+        super(Coco_dataCVCUDA, self).__init__(
+                dataroot, annpath, batch_size, device_id, cuda_ctx, mode)
+            
+            
+        # mode = 'eval'
+    
+        self.n_cats = 133
+        # if mode=='train':
+        #     self.n_cats = 134
+        self.imStack = False 
+        # self.lb_ignore = -1
+        self.lb_ignore = 255
+        self.lb_map = np.arange(256).astype(np.uint8)
+        
+        self.labels_info = labels_info
+            
+        for el in self.labels_info:
+            # if mode=='train' and el['trainId'] == 255:
+            #     self.lb_map[el['id']] = 133
+            # else:
+            self.lb_map[el['id']] = el['trainId']
 
 
 ## Only return img without label

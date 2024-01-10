@@ -1,5 +1,4 @@
 
-from distutils.command.config import config
 import torch
 from torch.utils.data import Dataset, DataLoader
 import torch.distributed as dist
@@ -30,18 +29,32 @@ class TransformationTrain(object):
     def __init__(self, scales, cropsize):
         self.trans_func = T.Compose([
             T.RandomResizedCrop(scales, cropsize),
-            T.RandomHorizontalFlip(),
-            T.ColorJitter(
-                brightness=0.4,
-                contrast=0.4,
-                saturation=0.4
-            ),
+            # T.RandomHorizontalFlip(),
+            # T.ColorJitter(
+            #     brightness=0.4,
+            #     contrast=0.4,
+            #     saturation=0.4
+            # ),
         ])
 
     def __call__(self, im_lb):
         im_lb = self.trans_func(im_lb)
         return im_lb
 
+# class TransformationTrain(object):
+
+#     def __init__(self, scales, cropsize):
+#         self.trans_func = T.Compose([
+#             T.RandomResizedCrop_Flip_ColorJitterGPU(scales, cropsize, 
+#                 p=0.5,                
+#                 brightness=0.4,
+#                 contrast=0.4,
+#                 saturation=0.4),
+#         ])
+
+#     def __call__(self, im_lb):
+#         im_lb = self.trans_func(im_lb)
+#         return im_lb
 
 class TransformationVal(object):
 
@@ -117,7 +130,7 @@ def get_data_loader(configer, aux_mode='eval', distributed=True, stage=None):
         dl = [DataLoader(
             dataset,
             batch_sampler=batchsamp,
-            num_workers=1,
+            num_workers=3,
             pin_memory=False,
         ) for dataset, batchsamp in zip(ds, batchsampler)]
     else:
@@ -137,7 +150,7 @@ def get_data_loader(configer, aux_mode='eval', distributed=True, stage=None):
             batch_size=bs,
             shuffle=shuffle,
             drop_last=drop_last,
-            num_workers=1,
+            num_workers=3,
             pin_memory=False,
         ) for dataset, bs in zip(ds, batchsize)]
     return dl
