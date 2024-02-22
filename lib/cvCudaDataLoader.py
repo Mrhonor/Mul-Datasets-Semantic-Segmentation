@@ -296,13 +296,13 @@ class MyDataLoaderWOMainThread:
             im, lb = data
             im_list.append(im)
             lb_list.append(lb)
-            for _ in range(len(im)):
-                ids.append(i)
+            # for _ in range(len(im)):
+            #     ids.append(i)
             
         if len(im_list) == 0:
             return None, None, None
         
-        im, lb = self.preprocessor(im_list, lb_list)
+        im, lb, ids = self.preprocessor(im_list, lb_list)
         return im, lb, ids
         
     
@@ -403,7 +403,7 @@ class getDataLoaderCVCUDA:
         scales = configer.get('train', 'scales')
         cropsize = configer.get('train', 'cropsize')
         if mode == 'eval_link':
-            self.ds = [eval(reader)(root, path, bs, device_id, cuda_ctx, mode='train')
+            self.ds = [eval(reader)(root, path, bs, device_id, cuda_ctx, mode='eval')
                 for reader, root, path, bs in zip(self.data_readers, self.imroots, self.annpaths, self.batchsizes)]
             self.preprocessor = PreprocessorCvcuda(scales, cropsize, device_id, p=0.5, brightness=0.4, contrast=0.4, mode='train')
         else:
@@ -420,17 +420,20 @@ class getDataLoaderCVCUDA:
             self.dataLoader = MyDataLoaderWOMainThread(self.n_datasets, self.ds, self.preprocessor, mode=self.mode)
             self.dataLoader.run()
         elif self.mode == 'eval':
-            self.dataLoader = [MyDataLoaderWOMainThread(1, [ds], self.preprocessor, mode=self.mode) for ds in self.ds]
+            if stage is None:
+                stage = 0
+            self.dataLoader = MyDataLoaderWOMainThread(1, [self.ds[stage]], self.preprocessor, mode=self.mode)
+            self.dataLoader.run()
         elif self.mode == 'eval_link':
             self.dataLoader = [MyDataLoaderWOMainThread(1, [ds], self.preprocessor, mode='train') for ds in self.ds]
             
             
     def __call__(self):
-        if self.mode == 'train':
-            im, lb, ids = self.dataLoader()
-            return im, lb, ids
-        else:
-            return self.dataLoader
+        # if self.mode == 'train':
+        im, lb, ids = self.dataLoader()
+        return im, lb, ids
+        # else:
+        #     return self.dataLoader
             
     def __del__(self):
         if isinstance(self.dataLoader, list):

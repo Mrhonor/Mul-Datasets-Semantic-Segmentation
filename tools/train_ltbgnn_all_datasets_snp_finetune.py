@@ -20,22 +20,24 @@ import torch.distributed as dist
 import torch.cuda.amp as amp
 
 from lib.models import model_factory
-from lib.get_dataloader import get_data_loader, get_single_data_loader
+from lib.get_dataloader import get_data_loader, get_single_data_loader, get_DALI_data_loader
 from lib.loss.ohem_ce_loss import OhemCELoss
 from lib.lr_scheduler import WarmupPolyLrScheduler
 from lib.meters import TimeMeter, AvgMeter
 from lib.logger import setup_logger, print_log_msg
-from lib.loss.loss_cross_datasets import CrossDatasetsLoss, CrossDatasetsCELoss, CrossDatasetsCELoss_KMeans, CrossDatasetsCELoss_CLIP, CrossDatasetsCELoss_GNN, CrossDatasetsCELoss_AdvGNN
+from lib.loss.loss_cross_datasets import CrossDatasetsLoss, CrossDatasetsCELoss, CrossDatasetsCELoss_KMeans, CrossDatasetsCELoss_CLIP, CrossDatasetsCELoss_GNN, CrossDatasetsCELoss_AdvGNN, CrossDatasetsCELoss_AdvGNN_ce
 from lib.class_remap import ClassRemap
 
 from tools.configer import Configer
-from evaluate import eval_model_contrast, eval_model_aux, eval_model, eval_model_contrast_single, eval_model_mulbn, eval_model_dsg, eval_model_unlabel, eval_find_use_and_unuse_label
+from evaluate import eval_model_contrast, eval_model_aux, eval_model, eval_model_contrast_single, eval_model_mulbn, eval_model_dsg, eval_model_unlabel, eval_find_use_and_unuse_label, eval_model_dali
 
 from tensorboardX import SummaryWriter
 
 from lib.module.gen_graph_node_feature import gen_graph_node_feature
 from tools.get_bipartile import print_bipartite, find_unuse
 import clip
+
+import lib.transform_cv2 as T
 
 ## fix all random seeds
 #  torch.manual_seed(123)
@@ -92,13 +94,13 @@ def set_model(configer):
         logger.info(f"load pretrained weights from {configer.get('train', 'finetune_from')}")
         state = torch.load(configer.get('train', 'finetune_from'), map_location='cpu')
         
-        if 'unify_prototype' in state:
-            del state['unify_prototype']
+        # if 'unify_prototype' in state:
+        #     del state['unify_prototype']
             
-            for k in ['logits.norm.weight', 'logits.norm.bias', 'logits.norm.running_mean', 'logits.norm.running_var', 'logits.norm.num_batches_tracked', 'logits.conv.weight', 'logits.conv.bias']:
-                del state[k] 
-            # for i in range(0, configer.get('n_datasets')):
-            #     del state[f'bipartite_graphs.{i}']
+        #     for k in ['logits.norm.weight', 'logits.norm.bias', 'logits.norm.running_mean', 'logits.norm.running_var', 'logits.norm.num_batches_tracked', 'logits.conv.weight', 'logits.conv.bias']:
+        #         del state[k] 
+        #     for i in range(0, configer.get('n_datasets')):
+        #         del state[f'bipartite_graphs.{i}']
             
         # new_state = {}
         # for k,v in state.items():
@@ -135,9 +137,18 @@ def set_model(configer):
                     
             
         if 'model_state_dict' in state:
+            if 'unify_prototype' in state['model_state_dict']:
+                del state['model_state_dict']['unify_prototype']
+                for i in range(0, configer.get('n_datasets')):
+                    del state['model_state_dict'][f'bipartite_graphs.{i}']
             net.load_state_dict(state['model_state_dict'], strict=False)
         else:
+            if 'unify_prototype' in state:
+                del state['unify_prototype']
+                for i in range(0, configer.get('n_datasets')):
+                    del state[f'bipartite_graphs.{i}']
             net.load_state_dict(state, strict=False)
+            
             
 
         
@@ -280,7 +291,8 @@ def set_model_dist(net):
 def set_contrast_loss(configer):
     loss_factory = {
         'GNN': CrossDatasetsCELoss_GNN,
-        'Adv_GNN': CrossDatasetsCELoss_AdvGNN
+        'Adv_GNN': CrossDatasetsCELoss_AdvGNN,
+        'CE_GNN': CrossDatasetsCELoss_AdvGNN_ce
     }
     # return CrossDatasetsCELoss_KMeans(configer)
     return loss_factory[configer.get('loss', 'type')](configer)
@@ -326,14 +338,14 @@ def train():
     ## dataset
 
     # dl = get_single_data_loader(configer, aux_mode='train', distributed=is_dist)
-    dls = get_data_loader(configer, aux_mode='train', distributed=is_dist, stage=1)
+    dls = get_DALI_data_loader(configer, aux_mode='train')
     # dl_city, dl_cam = get_data_loader(configer, aux_mode='train', distributed=is_dist)
     
     ## model
     net = set_model(configer=configer)
     
     net.unify_prototype.requires_grad = True
-    # graph_net = set_graph_model(configer=configer)
+    graph_net = set_graph_model(configer=configer)
     
     if use_ema:
         ema_net = set_ema_model(configer=configer)
@@ -402,7 +414,9 @@ def train():
         net.set_train_dataset_aux(starti < aux_iter)
         criteria_pre = OhemCELoss(0.7)
         criteria_aux = [OhemCELoss(0.7) for _ in range(configer.get('loss', 'aux_num'))]
-    
+
+    ori_graph_node_features = gen_graph_node_feature(configer)
+    graph_node_features = ori_graph_node_features.cuda()
     
     finetune = configer.get('train', 'finetune')
     fix_param_iters = 0
@@ -416,8 +430,13 @@ def train():
         net = set_model_dist(net)
         graph_net = set_model_dist(graph_net)
 
+    # bi_graphs = [torch.eye(19).cuda()]
     bi_graphs = None
-    
+    # net.set_bipartite_graphs(bi_graphs)
+    # ToTensor = T.ToTensorCUDA(
+    #         mean=(0.3038, 0.3383, 0.3034), # city, rgb
+    #         std=(0.2071, 0.2088, 0.2090),
+    #     )
     start_i = 0
     for i in range(start_i, configer.get('lr','init_iter')):
         # if bi_graphs is None:  
@@ -444,40 +463,53 @@ def train():
         for j in range(0,len(dl_iters)):
 
             try:
-                im, lb = next(dl_iters[j])
+                data = next(dl_iters[j])
+                im = data[0]['data']
+                lb = data[0]['label']
                 if not im.size()[0] == configer.get('dataset'+str(j+1), 'ims_per_gpu'):
                     raise StopIteration
                 while torch.min(lb) == 255:
                     print(f"{j}:while")
-                    im, lb = next(dl_iters[j])
+                    data = next(dl_iters[j])
+                    im = data[0]['data']
+                    lb = data[0]['label']
                     if not im.size()[0] == configer.get('dataset'+str(j+1), 'ims_per_gpu'):
                         raise StopIteration
 
 
             except StopIteration:
                 dl_iters[j] = iter(dls[j])
-                im, lb = next(dl_iters[j])
+                data = next(dl_iters[j])
+                im = data[0]['data']
+                lb = data[0]['label']
                 while torch.min(lb) == 255:
                     print(f"{j}:stop while")
-                    im, lb = next(dl_iters[j])
-                    
+                    data = next(dl_iters[j])
+                    im = data[0]['data']
+                    lb = data[0]['label']
+                        
             ims.append(im)
             lbs.append(lb)
             
 
+        # im = np.concatenate(ims, axis=0)
+        # lb = np.concatenate(lbs, axis=0)
+        # im, lb = ToTensor(im, lb)
                     
         im = torch.cat(ims, dim=0)
         lb = torch.cat(lbs, dim=0)
-
-        im = im.cuda()
-        lb = lb.cuda()
+        im = im.permute(0,3,1,2).contiguous()
+        # print(im.shape)
+        # print(lb.shape)
+        # im = im.cuda()
+        # lb = lb.cuda()
 
         # dataset_lbs = j*torch.ones(lb.shape[0], dtype=torch.int)
         dataset_lbs = torch.cat([i*torch.ones(this_lb.shape[0], dtype=torch.int) for i,this_lb in enumerate(lbs)], dim=0)
         dataset_lbs = dataset_lbs.cuda()
         # print(dataset_lbs)
 
-        lb = torch.squeeze(lb, 1)
+        lb = torch.squeeze(lb, 3).long()
 
         # net.eval()
         # with torch.no_grad():
@@ -529,7 +561,7 @@ def train():
             
 
         if (i + 1) % 10000 == 0:
-            seg_save_pth = osp.join(configer.get('res_save_pth'), 'clip_model_{}.pth'.format(i+1))
+            seg_save_pth = osp.join(configer.get('res_save_pth'), 'pretrain_model_{}.pth'.format(i+1))
             logger.info('\nsave seg_models to {}'.format(seg_save_pth))
 
             if is_distributed():
@@ -550,18 +582,18 @@ def train():
                 eval_model_func = eval_model_aux
             else:
                 # eval_model = eval_model_contrast
-                # eval_model_func = eval_model_contrast
-                eval_model_func = eval_model_mulbn
+                eval_model_func = eval_model_dali
+                # eval_model_func = eval_model_mulbn
 
             optim.zero_grad()
             if is_distributed():
 
-                net.module.set_bipartite_graphs(bi_graphs)
+                # net.module.set_bipartite_graphs(bi_graphs)
                 torch.cuda.empty_cache()
                 heads, mious = eval_model_func(configer, net.module)
             else:
 
-                net.set_bipartite_graphs(bi_graphs)
+                # net.set_bipartite_graphs(bi_graphs)
                 torch.cuda.empty_cache()
                 heads, mious = eval_model_func(configer, net)
                 
@@ -581,20 +613,50 @@ def train():
     contrast_warmup_iters = configer.get("lr", "warmup_iters")
     with_aux = configer.get('loss', 'with_aux')
     with_domain_adversarial = configer.get('network', 'with_domain_adversarial')
-    alter_iter = 40000
+    alter_iter = 0
     SEG = 0
     GNN = 1
-    init_gnn_stage = False
+    init_gnn_stage = configer.get('GNN', 'init_by_eval')
     fix_graph = False
-    train_seg_or_gnn = SEG
+    train_seg_or_gnn = GNN
+    first_stage_gnn_iters = int(configer.get('train','gnn_iters')/2)
+    sec_stage_gnn_iters = configer.get('train','gnn_iters') - first_stage_gnn_iters
+    isSecondStage = False
     adv_out = None
     unify_prototype = None
     target_bi_graph = None
+    # if alter_iter != 0:
+    #     if is_distributed():
+    #         _, _, target_bi_graph = eval_find_use_and_unuse_label_CVCUDA(configer, net.module, device_id, cuda_ctx)
+    #     else:
+    #         _, _, target_bi_graph = eval_find_use_and_unuse_label_CVCUDA(configer, net, device_id, cuda_ctx)
+    if init_gnn_stage:
+        init_adj = torch.load(configer.get('GNN', 'init_adj_path')).cuda()
+        if is_distributed():
+            graph_net.module.set_adj_matrix(init_adj, grad=False)
+            # graph_net.module.output_max_adj = False
+        else:
+            graph_net.set_adj_matrix(init_adj, grad=False)
+            # graph_net.output_max_adj = False
+        
     GNN_INIT = configer.get('train', 'graph_finetune')
+    gnn_optim = set_optimizer(graph_net, configer, configer.get('lr', 'gnn_lr_start'))
+    if mse_or_adv == 'adv':
+        gnn_optimD = set_optimizerD(graph_net, configer, configer.get('lr', 'gnn_lr_start'))
     # GNN_INIT = True
-    gnn_lr_schdr = WarmupPolyLrScheduler(gnn_optim, power=1.2,
-                max_iter=configer.get('train','gnn_iters'), warmup_iter=configer.get('lr','warmup_iters'),
-                warmup_ratio=0.1, warmup='exp', last_epoch=-1,)
+    if init_gnn_stage:
+        gnn_lr_schdr = WarmupPolyLrScheduler(gnn_optim, power=1.2,
+                    max_iter=configer.get('train','gnn_iters'), warmup_iter=configer.get('lr','warmup_iters'),
+                    warmup_ratio=0.1, warmup='exp', last_epoch=-1,)
+    else:
+        if is_distributed():
+            graph_net.module.adj_matrix.requires_grad=True
+            # graph_net.module.output_max_adj = False
+        else:
+            graph_net.adj_matrix.requires_grad=True
+        gnn_lr_schdr = WarmupPolyLrScheduler(gnn_optim, power=1.2,
+                    max_iter=first_stage_gnn_iters, warmup_iter=configer.get('lr','warmup_iters'),
+                    warmup_ratio=0.1, warmup='exp', last_epoch=-1,)
 
     if mse_or_adv == 'adv':
         gnn_lr_schdrD = WarmupPolyLrScheduler(gnn_optimD, power=1.2,
@@ -620,19 +682,22 @@ def train():
                     new_bi_graphs = [bigh.detach() for bigh in ori_bi_graphs]
                 fix_graph = True
                 adv_out = None
-                _, ori_bi_graphs, _, _ = graph_net(graph_node_features)
-                bi_graphs = []
-                if len(ori_bi_graphs) == 2*n_datasets:
-                    for j in range(0, len(ori_bi_graphs), 2):
-                        bi_graphs.append(ori_bi_graphs[j+1].detach())
-                else:
-                    bi_graphs = [bigh.detach() for bigh in ori_bi_graphs]
+                # _, ori_bi_graphs, _, _ = graph_net(graph_node_features)
+                # bi_graphs = []
+                # if len(ori_bi_graphs) == 2*n_datasets:
+                #     for j in range(0, len(ori_bi_graphs), 2):
+                #         bi_graphs.append(ori_bi_graphs[j+1].detach())
+                # else:
+                #     bi_graphs = [bigh.detach() for bigh in ori_bi_graphs]
 
 
-                init_gnn_stage = False
+                # init_gnn_stage = False
+            
+                # graph_net.module.init_stage = False
+            
 
-                net.module.set_unify_prototype(unify_prototype, True)
-                net.module.set_bipartite_graphs(bi_graphs)
+                net.module.set_unify_prototype(unify_prototype, False)
+                net.module.set_bipartite_graphs(new_bi_graphs)
                 print_bipartite(configer, n_datasets, net.module.bipartite_graphs)
 
                 # net.module.unify_prototype.requires_grad = True
@@ -661,182 +726,140 @@ def train():
                 #     bi_graphs = [bigh.detach() for bigh in ori_bi_graphs]
 
 
-                init_gnn_stage = False
+                # init_gnn_stage = False
+                
+                # graph_net.init_stage = False
 
-                net.set_unify_prototype(unify_prototype, True)
+                net.set_unify_prototype(unify_prototype, False)
                 net.set_bipartite_graphs(new_bi_graphs)
-            # print_bipartite(configer, n_datasets, net.bipartite_graphs)
+                print_bipartite(configer, n_datasets, net.bipartite_graphs)
             # net.unify_prototype.requires_grad = True
         
-    
-    optim = set_optimizer(net, configer, configer.get('lr', 'seg_lr_start'))
+    if is_distributed():
+        optim = set_optimizer(net.module, configer, configer.get('lr', 'seg_lr_start'))
+    else:
+        optim = set_optimizer(net, configer, configer.get('lr', 'seg_lr_start'))
     
     lr_schdr = WarmupPolyLrScheduler(optim, power=1.2,
         max_iter=configer.get('train','seg_iters'), warmup_iter=configer.get('lr','warmup_iters'),
         warmup_ratio=0.1, warmup='exp', last_epoch=-1,)
     
-    if configer.get('train', 'finetune'):
-        state = torch.load(configer.get('train', 'finetune_from'))
-        # net.load_state_dict(torch.load(configer.get('train', 'finetune_from'), map_location='cpu'), strict=False)
-        if 'optimizer_state_dict' in state.keys():
-            optim.load_state_dict(state['optimizer_state_dict'])
-        if 'scheduler_state_dict' in state.keys():
-            lr_schdr.load_state_dict(state['scheduler_state_dict'])
+    # if train_seg_or_gnn==SEG and configer.get('train', 'finetune'):
+    #     state = torch.load(configer.get('train', 'finetune_from'))
+    #     # net.load_state_dict(torch.load(configer.get('train', 'finetune_from'), map_location='cpu'), strict=False)
+    #     if 'optimizer_state_dict' in state.keys():
+    #         optim.load_state_dict(state['optimizer_state_dict'])
+    #     if 'scheduler_state_dict' in state.keys():
+    #         lr_schdr.load_state_dict(state['scheduler_state_dict'])
     
-    if configer.get('train', 'graph_finetune'):
-        state = torch.load(configer.get('train', 'graph_finetune_from'))
-        # net.load_state_dict(torch.load(configer.get('train', 'finetune_from'), map_location='cpu'), strict=False)
-        if 'optimizer_state_dict' in state.keys():
-            gnn_optim.load_state_dict(state['optimizer_state_dict'])
-        if 'scheduler_state_dict' in state.keys():
-            gnn_lr_schdr.load_state_dict(state['scheduler_state_dict'])
+    # if train_seg_or_gnn==GNN and configer.get('train', 'graph_finetune'):
+    #     state = torch.load(configer.get('train', 'graph_finetune_from'))
+    #     # net.load_state_dict(torch.load(configer.get('train', 'finetune_from'), map_location='cpu'), strict=False)
+    #     if 'optimizer_state_dict' in state.keys():
+    #         gnn_optim.load_state_dict(state['optimizer_state_dict'])
+    #     if 'scheduler_state_dict' in state.keys():
+    #         gnn_lr_schdr.load_state_dict(state['scheduler_state_dict'])
     
-            
     total_max_iter = configer.get('lr', 'max_iter')
     configer.update(['iter'], 0)
-    starti = 2400000
-    # mean=[0.3038, 0.3383, 0.3034]
-    # std=[0.2071, 0.2088, 0.2090]
-    # mean = torch.as_tensor(mean)[None, :, None, None].cuda()
-    # std = torch.as_tensor(std)[None, :, None, None].cuda()
+    starti = 0
+    if configer.get('lr','max_iter') > 0:
+        dls = get_DALI_data_loader(configer, aux_mode='train', stage=1)
+        dl_iters = [iter(dl) for dl in dls]
     for i in range(starti, configer.get('lr','max_iter') + starti):
         configer.plus_one('iter')
+        ratio = 1 - float(i) / total_max_iter
         alter_iter += 1
-        if i > 5000:
-            init_gnn_stage = False
 
-        # class RandomHorizontalFlip(object):
-        #     def __init__(self, p=0.5):
-        #         self.p = p
+        if init_gnn_stage == False and train_seg_or_gnn == GNN and alter_iter > first_stage_gnn_iters and isSecondStage == False:
+            if is_distributed():
+                graph_net.module.frozenAdj(True)
+                gnn_optim = set_optimizer(graph_net.module, configer, ratio*configer.get('lr', 'gnn_lr_start'))
+                gnn_lr_schdr = WarmupPolyLrScheduler(gnn_optim, power=1.2,
+                    max_iter=sec_stage_gnn_iters, warmup_iter=configer.get('lr','warmup_iters'),
+                    warmup_ratio=0.1, warmup='exp', last_epoch=-1,)
+            else:
+                graph_net.frozenAdj(True)
+                gnn_optim = set_optimizer(graph_net, configer, ratio*configer.get('lr', 'gnn_lr_start'))
+                gnn_lr_schdr = WarmupPolyLrScheduler(gnn_optim, power=1.2,
+                    max_iter=sec_stage_gnn_iters, warmup_iter=configer.get('lr','warmup_iters'),
+                    warmup_ratio=0.1, warmup='exp', last_epoch=-1,)
+            isSecondStage = True
+        # for j in range(0,len(dl_iters)):
 
-        #     def __call__(self, im, lb):
-        #         if np.random.random() < self.p:
-        #             return im, lb
-
-
-        #         assert im.shape[:2] == lb.shape[:2]
-        #         return im.flip(1), lb.flip(0)
+            # try:
+            #     im, lb = next(dl_iters[j])
+            #     if not im.size()[0] == configer.get('dataset'+str(j+1), 'ims_per_gpu'):
+            #         raise StopIteration
+            #     while torch.min(lb) == 255:
+            #         im, lb = next(dl_iters[j])
+            #         if not im.size()[0] == configer.get('dataset'+str(j+1), 'ims_per_gpu'):
+            #             raise StopIteration
 
                 
-        # class TensorColorJitter(object):
-        #     def __init__(self, brightness=None, contrast=None, saturation=None):
-        #         if not brightness is None and brightness >= 0:
-        #             self.brightness = [max(1 - brightness, 0), 1 + brightness]
-        #         if not contrast is None and contrast >= 0:
-        #             self.contrast = [max(1 - contrast, 0), 1 + contrast]
-        #         if not saturation is None and saturation >= 0:
-        #             self.saturation = [max(1 - saturation, 0), 1 + saturation]
-
-        #     def __call__(self, im, lb):
-        #         assert im.shape[:2] == lb.shape[:2]
-
-        #         if not self.brightness is None:
-        #             rate = torch.tensor([float(torch.rand(1) * (self.brightness[1] - self.brightness[0]) + self.brightness[0])]).cuda()
-        #             im = self.adj_brightness(im, rate)
-
-        #         if not self.contrast is None:
-        #             rate = torch.tensor([float(torch.rand(1) * (self.contrast[1] - self.contrast[0]) + self.contrast[0])]).cuda()
-        #             im = self.adj_contrast(im, rate)
-
-        #         if not self.saturation is None:
-        #             rate = torch.tensor([float(torch.rand(1) * (self.saturation[1] - self.saturation[0]) + self.saturation[0])]).cuda()
-        #             im = self.adj_saturation(im, rate)
-
-        #         return im, lb
-
-        #     def adj_saturation(self, im, rate):
-        #         M = torch.tensor([
-        #             [1 + 2 * rate, 1 - rate, 1 - rate],
-        #             [1 - rate, 1 + 2 * rate, 1 - rate],
-        #             [1 - rate, 1 - rate, 1 + 2 * rate]
-        #         ]).float().cuda()
-
-        #         shape = im.shape
-        #         im_flat = im.reshape(-1, 3)
-        #         im_flat_adjusted = torch.matmul(im_flat.float(), M)
-        #         im_adjusted = im_flat_adjusted.reshape(shape) / 3
-
-        #         # 剪裁和数据类型转换
-        #         im_adjusted = torch.clamp(im_adjusted, 0, 255)#.to(torch.uint8)
-
-        #         return im_adjusted
-
-        #     def adj_brightness(self, im, rate):
-        #         # table = torch.tensor([i * rate for i in range(256)]).clip(0, 255).byte()
-        #         im = (im.float() * rate).clamp(0, 255).to(torch.uint8)
-        #         return im
-
-        #     def adj_contrast(self, im, rate):
-        #         im = (74 + (im.float()-74) * rate).clamp(0, 255).to(torch.uint8)
-        #         # table = torch.tensor([74 + (i - 74) * rate for i in range(256)]).clip(0, 255).byte()
-        #         return im
-            
-        # randomHorizontalFlip = RandomHorizontalFlip()
-        # colorJitter = TensorColorJitter(brightness=0.4, contrast=0.4, saturation=0.4)
-
+            # except StopIteration:
+            #     dl_iters[j] = iter(dls[j])
+            #     im, lb = next(dl_iters[j])
+            #     while torch.min(lb) == 255:
+            #         im, lb = next(dl_iters[j])
         ims = []
-        lbs = []  
-        ids = []  
+        lbs = []
         for j in range(0,len(dl_iters)):
-            if dsg_flag[j] == STOP:
-                continue
+
             try:
-                im, lb = next(dl_iters[j])
+                data = next(dl_iters[j])
+                im = data[0]['data']
+                lb = data[0]['label']
                 if not im.size()[0] == configer.get('dataset'+str(j+1), 'ims_per_gpu'):
                     raise StopIteration
                 while torch.min(lb) == 255:
-                    im, lb = next(dl_iters[j])
+                    print(f"{j}:while")
+                    data = next(dl_iters[j])
+                    im = data[0]['data']
+                    lb = data[0]['label']
                     if not im.size()[0] == configer.get('dataset'+str(j+1), 'ims_per_gpu'):
                         raise StopIteration
 
-                
+
             except StopIteration:
                 dl_iters[j] = iter(dls[j])
-                im, lb = next(dl_iters[j])
+                data = next(dl_iters[j])
+                im = data[0]['data']
+                lb = data[0]['label']
                 while torch.min(lb) == 255:
-                    im, lb = next(dl_iters[j])
-            
-
-            # for idx in range(im.shape[0]):
-            #     this_im = im[idx].cuda()
-            #     this_lb = lb[idx].squeeze().cuda()
-
-            #     this_im, this_lb = randomHorizontalFlip(this_im, this_lb)
-            #     this_im, this_lb = colorJitter(this_im, this_lb)
-            
-            #     ims.append(this_im[None])
-            #     lbs.append(this_lb[None][None])
+                    print(f"{j}:stop while")
+                    data = next(dl_iters[j])
+                    im = data[0]['data']
+                    lb = data[0]['label']
+                        
             ims.append(im)
             lbs.append(lb)
-            ids.append(j*torch.ones(lb.shape[0], dtype=torch.int))
-                
-        if len(im) == 0:
-            dsg_flag = [GO for _ in range(n_datasets)]
-            continue
+            
+
+        # im = np.concatenate(ims, axis=0)
+        # lb = np.concatenate(lbs, axis=0)
+        # im, lb = ToTensor(im, lb)
+                    
         im = torch.cat(ims, dim=0)
         lb = torch.cat(lbs, dim=0)
+        im = im.permute(0,3,1,2).contiguous()
         # print(im.shape)
-        # im = im.permute(0, 3, 1, 2)
-        # im = im.div_(255)
+        # print(lb.shape)
+        # im = im.cuda()
+        # lb = lb.cuda()
 
-
-        # im = im.sub_(mean).div_(std)
-        
-        im = im.cuda()
-        lb = lb.cuda()
-
-        dataset_lbs = torch.cat(ids, dim=0)
-
+        # dataset_lbs = j*torch.ones(lb.shape[0], dtype=torch.int)
+        dataset_lbs = torch.cat([i*torch.ones(this_lb.shape[0], dtype=torch.int) for i,this_lb in enumerate(lbs)], dim=0)
         dataset_lbs = dataset_lbs.cuda()
         # print(dataset_lbs)
 
-        lb = torch.squeeze(lb, 1)
+        lb = torch.squeeze(lb, 3).long()
+
         # print(dataset_lbs)
 
-        lb = torch.squeeze(lb, 1)
 
         if train_seg_or_gnn == SEG and alter_iter > configer.get('train', 'seg_iters'):
-            ratio = 1 - float(i) / total_max_iter / 2
+            
 
             # if is_distributed():
             #     _, ori_ema_bi_graphs = graph_net.module.get_optimal_matching(graph_node_features, GNN_INIT)
@@ -853,12 +876,19 @@ def train():
             #         ema_bi_graphs.append(ori_ema_bi_graphs[j+1].detach())
             # else:
             #     ema_bi_graphs = [bigh.detach() for bigh in ori_ema_bi_graphs]
-
             if is_distributed():
+                graph_net.module.init_stage = False
+            else:
+                graph_net.init_stage = False
+            isSecondStage = False
+            init_gnn_stage = False
+            if is_distributed():
+                graph_net.module.frozenAdj(False)
                 gnn_optim = set_optimizer(graph_net.module, configer, ratio * configer.get('lr', 'gnn_lr_start'))
                 if mse_or_adv == 'adv':
                     gnn_optimD = set_optimizerD(graph_net.module, configer, ratio * configer.get('lr', 'gnn_lr_start'))
             else:
+                graph_net.frozenAdj(False)
                 gnn_optim = set_optimizer(graph_net, configer, ratio * configer.get('lr', 'gnn_lr_start'))
                 if mse_or_adv == 'adv':
                     gnn_optimD = set_optimizerD(graph_net, configer, ratio * configer.get('lr', 'gnn_lr_start'))
@@ -876,7 +906,6 @@ def train():
                     warmup_ratio=0.1, warmup='exp', last_epoch=-1,)
 
         elif train_seg_or_gnn == GNN and alter_iter >  configer.get('train', 'gnn_iters'):
-            ratio =  1 - float(i) / total_max_iter / 2
 
             with torch.no_grad():
                 graph_net.eval()
@@ -910,12 +939,13 @@ def train():
                 adv_out = None
 
                 init_gnn_stage = False
+
                 if is_distributed():
-                    net.module.set_unify_prototype(unify_prototype, True)
+                    net.module.set_unify_prototype(unify_prototype, False)
                     net.module.set_bipartite_graphs(bi_graphs)
                     print_bipartite(configer, n_datasets, net.module.bipartite_graphs)
                 else:
-                    net.set_unify_prototype(unify_prototype, True)
+                    net.set_unify_prototype(unify_prototype, False)
                     net.set_bipartite_graphs(bi_graphs)
                     print_bipartite(configer, n_datasets, net.bipartite_graphs)
             
@@ -948,13 +978,6 @@ def train():
             
             ## 修改为多数据集模式
             
-            # if train_aux:
-            #     train_aux = False
-            #     if is_distributed():
-            #         net.module.set_train_dataset_aux(False)
-            #     else:
-            #         net.set_train_dataset_aux(False)    
-            
             seg_out = {}
             if train_seg_or_gnn == GNN:
                 is_adv = True
@@ -963,37 +986,15 @@ def train():
                 graph_net.train()
                 net.eval()
                 
-                if init_gnn_stage:    
-                    if is_distributed():
-                        seg_out['seg'] = net.module.unify_prototype.detach()
-                    else:
-                        seg_out['seg'] = net.unify_prototype.detach()
-                else:
-                    with torch.no_grad():
-                        seg_out = net(im,dataset_lbs)
+
+                with torch.no_grad():
+                    seg_out = net(im,dataset_lbs)
 
                 unify_prototype, bi_graphs, adv_out, adj_feat = graph_net(graph_node_features)
                 
-                # if is_distributed():
-                #     unify_prototype = net.module.unify_prototype.detach()
-                # else:
-                #     unify_prototype = net.unify_prototype.detach()
-
-                # if configer.get("GNN", "ema_graph") == True:
-                #     if len(new_bi_graphs) == 2*len(bi_graphs):
-                #         temp_bg = []
-                #         for j in range(0, len(bi_graphs)):
-                #             temp_bg.append(bi_graphs[j])
-                #             temp_bg.append(bi_graphs[j])
-                #         bi_graphs = temp_bg
-                            
-                #     bi_graphs = [configer.get("GNN", "ema_graph_rate") * bg + (1 - configer.get("GNN", "ema_graph_rate")) * nbg for bg, nbg  in zip(bi_graphs, new_bi_graphs)] 
-                # else:
-                #     bi_graphs = new_bi_graphs
-                # if i % 50 == 0:
-                #     print(torch.norm(unify_prototype[0][0], p=2))
                 seg_out['unify_prototype'] = unify_prototype
                 seg_out['adj_feat'] = adj_feat
+                seg_out['gnn_stage'] = isSecondStage
             else:
                 is_adv = False
                 graph_net.eval()
@@ -1007,7 +1008,6 @@ def train():
                     else:
                         net.set_bipartite_graphs(this_bi_graphs)
                         
-                    
                 
                 seg_out = net(im,dataset_lbs)
                 if is_distributed():
@@ -1022,7 +1022,7 @@ def train():
                 seg_out['target_bi_graph'] = target_bi_graph
                 
             adj_loss = None
-            backward_loss, adv_loss, aux_loss, adj_loss = contrast_losses(seg_out, lb, dataset_lbs, is_adv, init_gnn_stage)
+            backward_loss, adv_loss, aux_loss, adj_loss = contrast_losses(seg_out, lb, dataset_lbs, is_adv, False)
             # print(backward_loss)
             # aux_loss = None
             loss_seg = backward_loss
@@ -1072,7 +1072,6 @@ def train():
         if adj_loss != None:
             loss_contrast_meter.update(adj_loss.item())
 
-    
         ## print training log message
         if (i + 1) % 100 == 0:
             # writer.add_scalars("loss",{"seg":loss_pre_meter.getWoErase(),"contrast":loss_contrast_meter.getWoErase(), "domain":loss_domain_meter.getWoErase()},configer.get("iter")+1)
@@ -1196,7 +1195,7 @@ def train():
                 
                 # eval_model_func = eval_model_unlabel
                 # eval_model_func = eval_find_use_and_unuse_label
-                eval_model_func = eval_model_contrast
+                eval_model_func = eval_model_dali
 
             if train_seg_or_gnn == SEG:
                 optim.zero_grad()

@@ -15,7 +15,7 @@ from PIL import Image
 
 import lib.transform_cv2 as T
 from lib.base_dataset import BaseDataset, BaseDatasetIm
-from lib.cvCudaDataset import ImageBatchDecoderPyTorch
+from lib.cvCudaDataset import ImageBatchDecoderPyTorch, ImageBatchPNGDecoderPyTorch, ImageBatchPNGDecoderPyTorchDist
 
 
 labels_info = [
@@ -481,8 +481,18 @@ class MapiIm(BaseDatasetIm):
             mean=(0.3038, 0.3383, 0.3034), # city, rgb
             std=(0.2071, 0.2088, 0.2090),
         )
+        # if self.trans_func is not None:
+        self.trans_func = T.Compose([
+            T.RandomResizedCrop((0.5, 1.), (768, 768)),
+            T.RandomHorizontalFlip(),
+            T.ColorJitter(
+                brightness=0.4,
+                contrast=0.4,
+                saturation=0.4
+            ),
+        ])
 
-class Mapiv1CVCUDA(ImageBatchDecoderPyTorch):
+class Mapiv1CVCUDA(ImageBatchPNGDecoderPyTorchDist):
     '''
     '''
     def __init__(self, dataroot, annpath, batch_size, device_id, cuda_ctx, mode='train'):

@@ -27,7 +27,7 @@ import torch.distributed as dist
 from lib.models import model_factory
 from configs import set_cfg_from_file
 from lib.logger import setup_logger
-from lib.get_dataloader import get_data_loader, get_city_loader
+from lib.get_dataloader import get_data_loader, get_city_loader, get_DALI_data_loader
 from lib.city_to_cam import Cityid_to_Camid
 from lib.a2d2_to_cam import a2d2_to_Camid
 from lib.class_remap import ClassRemap
@@ -191,6 +191,103 @@ class MscEvalV0_Contrast(object):
         miou = np.nanmean(ious.detach().cpu().numpy())
         return miou.item()
 
+class MscEvalV0_DALI(object):
+
+    def __init__(self, configer, scales=(0.5, ), flip=False, ignore_label=255, ori_scales=False):
+        self.configer = configer
+        # self.num_unify_classes = self.configer.get('num_unify_classes')
+        # self.class_Remaper = ClassRemap(configer=self.configer)
+        self.scales = scales
+        self.flip = flip
+        self.ignore_label = ignore_label
+        self.ori_scales = ori_scales
+
+        # self.lb_map = torch.tensor(np.load('mapi_relabel.npy')).cuda()
+        # print(self.lb_map)
+
+    def __call__(self, net, dl, n_classes, dataset_id):
+        # n_classes = 43
+        ## evaluate
+        hist = torch.zeros(n_classes, n_classes).cuda().detach()
+        # hist = torch.zeros(118, 118).cuda().detach()
+        # if dist.is_initialized() and dist.get_rank() != 0:
+        diter = enumerate(dl)
+        # else:
+        #     diter = enumerate(tqdm(dl))
+        for i, data in diter:
+            im = data[0]['data']
+            imgs = im.permute(0,3,1,2).contiguous()
+            label = data[0]['label']
+            
+
+            label = label.squeeze(3)#.cuda()
+            N, H, W = label.shape
+            size = label.size()[-2:]
+            # probs = torch.zeros(
+            #         (N, self.num_unify_classes, H, W), dtype=torch.float32).cuda().detach()
+            probs = None
+            # probs = torch.zeros(
+            #         (N, 150, H, W), dtype=torch.float32).cuda().detach()
+
+
+            for scale in self.scales:
+
+                
+                sH, sW = int(scale * H), int(scale * W)
+                sH, sW = get_round_size((sH, sW))
+                im_sc = F.interpolate(imgs, size=(sH, sW),
+                        mode='bilinear', align_corners=True)
+
+                im_sc = im_sc.cuda()
+                
+                logits = net(im_sc, dataset=dataset_id)
+                # logits = net(im_sc, dataset_id * torch.ones(N, dtype=torch.long))
+                N, _, lH, lW = logits.shape
+                if self.ori_scales:
+                    logits = F.interpolate(logits, size=size,
+                            mode='bilinear', align_corners=True)
+                    if probs is None:
+                        probs = torch.zeros(
+                            (N, n_classes, H, W), dtype=torch.float32).cuda().detach()
+                else:
+                    label = F.interpolate(label.float().unsqueeze(1), size=(lH, lW),
+                            mode='nearest').squeeze(1).long()
+                    if probs is None:
+                        probs = torch.zeros(
+                            (N, n_classes, lH, lW), dtype=torch.float32).cuda().detach()
+                    # label = F.interpolate()
+                
+
+                probs += torch.softmax(logits, dim=1)
+                if self.flip:
+                    im_sc = torch.flip(im_sc, dims=(3, ))
+                    logits = net(im_sc, dataset=dataset_id)
+                    logits = torch.flip(logits, dims=(3, ))
+                    logits = F.interpolate(logits, size=size,
+                            mode='bilinear', align_corners=True)
+                    probs += torch.softmax(logits, dim=1)
+            preds = torch.argmax(probs, dim=1)
+
+            keep = label != self.ignore_label
+            
+            # print(np.max(label.cpu().numpy()[keep.cpu().numpy()]))
+
+            hist += torch.tensor(np.bincount(
+                label.cpu().numpy()[keep.cpu().numpy()] * n_classes + preds.cpu().numpy()[keep.cpu().numpy()],
+                minlength=n_classes ** 2
+            )).cuda().view(n_classes, n_classes)
+            # hist += torch.tensor(np.bincount(
+            #     label.cpu().numpy()[keep.cpu().numpy()] * 118 + preds.cpu().numpy()[keep.cpu().numpy()],
+            #     minlength=118 ** 2
+            # )).cuda().view(118, 118)
+                
+        if dist.is_initialized():
+            dist.all_reduce(hist, dist.ReduceOp.SUM)
+        ious = hist.diag() / (hist.sum(dim=0) + hist.sum(dim=1) - hist.diag())
+        print(ious)
+        miou = np.nanmean(ious.detach().cpu().numpy())
+        return miou.item()
+
 class MscEvalV0_CVCUDA(object):
 
     def __init__(self, configer, scales=(0.5, ), flip=False, ignore_label=255, ori_scales=False):
@@ -213,8 +310,13 @@ class MscEvalV0_CVCUDA(object):
 
         while True:
             imgs, label, _ = dl()
+            # print("!")
             if imgs is None:
                 break
+            imgs = imgs[0]
+            label = label[0]
+            if isinstance(label, list):
+                label = label[0]
             imgs = torch.as_tensor(
                 imgs.cuda(), device="cuda:%d" % device_id
             )
@@ -224,7 +326,7 @@ class MscEvalV0_CVCUDA(object):
         
             N, H, W = label.shape
 
-            label = label.squeeze(1).cuda()
+            # label = label.squeeze(1).cuda()
             size = label.size()[-2:]
             # probs = torch.zeros(
             #         (N, self.num_unify_classes, H, W), dtype=torch.float32).cuda().detach()
@@ -1002,7 +1104,7 @@ def evaluate_cdcl(cfg_a2d2, cfg_city, cfg_cam, weight_pth):
 #     # logger.info(tabulate(miou_tab, headers=heads, tablefmt='orgtbl'))
 
 @torch.no_grad()
-def eval_model_contrast(configer, net):
+def eval_model_contrast(configer, net, mode='eval'):
     org_aux = net.aux_mode
     net.aux_mode = 'eval'
 
@@ -1014,7 +1116,7 @@ def eval_model_contrast(configer, net):
     n_datasets = configer.get("n_datasets")
 
     # dl_cam = get_data_loader(cfg_cam, mode='val', distributed=is_dist)
-    dls = get_data_loader(configer, aux_mode='eval', distributed=is_dist)
+    dls = get_data_loader(configer, aux_mode=mode, distributed=is_dist)
     # dl_city = get_data_loader(configer, aux_mode='eval', distributed=is_dist)[0]
     net.eval()
     # net.train()
@@ -1023,6 +1125,45 @@ def eval_model_contrast(configer, net):
     logger = logging.getLogger()
 
     single_scale = MscEvalV0_Contrast(configer, (0.5, ), False)
+    
+    for i in range(0, configer.get('n_datasets')):
+        # mIOU = single_scale(net, dls[i], configer.get('dataset'+str(i+1), "eval_cats"), i)
+        mIOU = single_scale(net, dls[i], configer.get('dataset'+str(i+1), "n_cats"), i)
+        mious.append(mIOU)
+    
+
+    heads.append('single_scale')
+    # mious.append(mIOU_cam)
+    # mious.append(mIOU_city)
+    # mious.append(mIOU_a2d2)
+    # logger.info('Cam single mIOU is: %s\nCityScapes single mIOU is: %s\n A2D2 single mIOU is: %s\n', mIOU_cam, mIOU_city, mIOU_a2d2)
+    # logger.info('Cam single mIOU is: %s\nCityScapes single mIOU is: %s\n', mIOU_cam, mIOU_city)
+
+    net.aux_mode = org_aux
+    return heads, mious
+
+@torch.no_grad()
+def eval_model_dali(configer, net, mode='eval'):
+    org_aux = net.aux_mode
+    net.aux_mode = 'eval'
+
+    is_dist = dist.is_initialized()
+    
+    # cfg_city = set_cfg_from_file(configer.get('dataset1'))
+    # cfg_cam  = set_cfg_from_file(configer.get('dataset2'))
+
+    n_datasets = configer.get("n_datasets")
+
+    # dl_cam = get_data_loader(cfg_cam, mode='val', distributed=is_dist)
+    dls = get_DALI_data_loader(configer, aux_mode='eval')
+    # dl_city = get_data_loader(configer, aux_mode='eval', distributed=is_dist)[0]
+    net.eval()
+    # net.train()
+
+    heads, mious = [], []
+    logger = logging.getLogger()
+
+    single_scale = MscEvalV0_DALI(configer, (0.5, ), False)
     
     for i in range(0, configer.get('n_datasets')):
         # mIOU = single_scale(net, dls[i], configer.get('dataset'+str(i+1), "eval_cats"), i)
@@ -1052,9 +1193,9 @@ def eval_model_cvcuda(configer, net, device_id, cuda_ctx):
 
     n_datasets = configer.get("n_datasets")
 
-    dls = getDataLoaderCVCUDA(configer, device_id, cuda_ctx, mode='eval')
+    
     net.eval()
-    ds = dls()
+    # ds = dls()
     # net.train()
 
     heads, mious = [], []
@@ -1062,11 +1203,13 @@ def eval_model_cvcuda(configer, net, device_id, cuda_ctx):
 
     single_scale = MscEvalV0_CVCUDA(configer, (0.5, ), False)
     
-    for i in range(0, configer.get('n_datasets')):
-        ds[i].run()
+    for i in range(0, 1):
+        # ds[i].run()
+        dls = getDataLoaderCVCUDA(configer, device_id, cuda_ctx, mode='eval', stage=i)
         # mIOU = single_scale(net, dls[i], configer.get('dataset'+str(i+1), "eval_cats"), i)
-        mIOU = single_scale(net, dls[i], configer.get('dataset'+str(i+1), "n_cats"), i, device_id)
+        mIOU = single_scale(net, dls, configer.get('dataset'+str(i+1), "n_cats"), i, device_id)
         mious.append(mIOU)
+        del dls
     
 
     heads.append('single_scale')
@@ -1569,9 +1712,9 @@ def find_unuse_label(configer, net, dl, n_classes, dataset_id):
     with torch.no_grad():
         for i, (imgs, label) in diter:
             N, _, H, W = label.shape
-            if H > 2048 or W > 2048:
-                H = 2048
-                W = 2048
+            # if H > 2048 or W > 2048:
+            #     H = 2048
+            #     W = 2048
                 
 
             label = label.squeeze(1).cuda()
@@ -1627,8 +1770,13 @@ def find_unuse_label(configer, net, dl, n_classes, dataset_id):
         if total_num != 0:
             for i in val:
                 rate = hist[index][i] / total_num
-                if rate > 1e-5:
+                if rate > 0.1:
+                    # new_val.append([i, rate])
                     new_val.append(i)
+        else:
+            for i in val:
+                # new_val.append([i, 0])
+                new_val.append(i)
         
         buckets[index] = new_val
 
@@ -1767,7 +1915,7 @@ def eval_find_use_and_unuse_label(configer, net):
                 for idx in val:
                     sum_num = torch.sum(hist[:, idx])
                     rate = hist[index][idx] / total_num
-                    if rate < 1e-4 or hist[index][idx] / sum_num < 0.1:
+                    if rate < 0.1 or hist[index][idx] / sum_num < 0.1:
                         bipart[index][idx] = 0
                         # remove_val.append(i)
                     elif rate > 0.5:
@@ -1809,6 +1957,7 @@ def eval_find_use_and_unuse_label_CVCUDA(configer, net, device_id, cuda_ctx):
     heads.append('single_scale')
 
     for i in range(0, n_datasets):
+        print(f"eval datasets{i}")
         n_classes = configer.get(f'dataset{i+1}', 'n_cats')
         hist = torch.zeros(n_classes, total_cats).cuda().detach()
         # hist_origin = torch.zeros(n_classes, n_classes).cuda().detach()

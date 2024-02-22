@@ -14,7 +14,7 @@ import numpy as np
 
 import lib.transform_cv2 as T
 from lib.base_dataset import BaseDataset, BaseDatasetIm
-from lib.cvCudaDataset import ImageBatchDecoderPyTorch, ImageBatchPNGDecoderPyTorch
+from lib.cvCudaDataset import ImageBatchDecoderPyTorch, ImageBatchPNGDecoderPyTorch, ImageBatchPNGDecoderPyTorchDist
 
 labels_info = [
     {"hasInstances": False, "category": "void", "catid": 0, "name": "unlabeled", "ignoreInEval": True, "id": 0, "color": [0, 0, 0], "trainId": 255},
@@ -192,7 +192,7 @@ class CityScapesIm(BaseDatasetIm):
         )
 
 
-class CityScapesCVCUDA(ImageBatchPNGDecoderPyTorch):
+class CityScapesCVCUDA(ImageBatchPNGDecoderPyTorchDist):
     '''
     '''
     def __init__(self, dataroot, annpath, batch_size, device_id, cuda_ctx, mode='train'):

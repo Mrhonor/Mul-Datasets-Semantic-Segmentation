@@ -641,8 +641,29 @@ class WeightedNLLPlusLoss(NLLPlusLoss):
             
         prob = torch.sum(probs) / (batch_size * h * w)
         loss = -torch.log(prob)
-        
+            
+        return loss
 
+class AdjNLLPlusLoss(nn.Module):
+    def __init__(self, ignore_lb=255, reduction='mean'):
+        super(AdjNLLPlusLoss, self).__init__()
+        self.nll_loss = nn.NLLLoss(ignore_index=ignore_lb, reduction=reduction)
+        self.softmax = nn.Softmax(dim=1)
+        self.ignore_lb = ignore_lb
+        
+    def forward(self, x, Adj, lb):
+        # labels: k x batch size x H x W, weighted_mask: batch size x H x W x num_of_class
+        # batch_size, n, h, w = x.shape
+        
+        pred = self.softmax(x)
+        probs = torch.einsum('bchw, nc -> bnhw', pred, Adj)
+        probs = F.interpolate(probs, size=(lb.size(1), lb.size(2)), mode="bilinear", align_corners=True) 
+        probs = -torch.log(probs)
+        keep = lb!=self.ignore_lb
+        lb[lb==self.ignore_lb] = 0
+        loss = torch.gather(probs, 1, lb.unsqueeze(1)).squeeze(1)
+        loss = loss[keep] # * mask 
+        # loss = self.nll_loss(probs, lb)
             
         return loss
 

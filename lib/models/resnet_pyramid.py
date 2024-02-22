@@ -193,18 +193,18 @@ class BasicBlock(nn.Module):
 
         return relu, out
 
-    def _load_from_state_dict(self, state_dict, prefix, local_metadata, strict,
-                              missing_keys, unexpected_keys, error_msgs):
-        super(BasicBlock, self)._load_from_state_dict(state_dict, prefix, local_metadata, False, missing_keys,
-                                                      unexpected_keys, error_msgs)
-        missing_keys = []
-        unexpected_keys = []
-        for bn in self.bn1:
-            bn._load_from_state_dict(state_dict, prefix + 'bn1.', local_metadata, strict, missing_keys, unexpected_keys,
-                                     error_msgs)
-        for bn in self.bn2:
-            bn._load_from_state_dict(state_dict, prefix + 'bn2.', local_metadata, strict, missing_keys, unexpected_keys,
-                                     error_msgs)
+    # def _load_from_state_dict(self, state_dict, prefix, local_metadata, strict,
+    #                           missing_keys, unexpected_keys, error_msgs):
+    #     super(BasicBlock, self)._load_from_state_dict(state_dict, prefix, local_metadata, False, missing_keys,
+    #                                                   unexpected_keys, error_msgs)
+    #     missing_keys = []
+    #     unexpected_keys = []
+    #     for bn in self.bn1:
+    #         bn._load_from_state_dict(state_dict, prefix + 'bn1.', local_metadata, strict, missing_keys, unexpected_keys,
+    #                                  error_msgs)
+    #     for bn in self.bn2:
+    #         bn._load_from_state_dict(state_dict, prefix + 'bn2.', local_metadata, strict, missing_keys, unexpected_keys,
+    #                                  error_msgs)
                                     
 class MulBNBlock(nn.Module):
     expansion = 1
@@ -250,18 +250,18 @@ class MulBNBlock(nn.Module):
 
         return relu, out
 
-    def _load_from_state_dict(self, state_dict, prefix, local_metadata, strict,
-                              missing_keys, unexpected_keys, error_msgs):
-        super(MulBNBlock, self)._load_from_state_dict(state_dict, prefix, local_metadata, False, missing_keys,
-                                                      unexpected_keys, error_msgs)
-        missing_keys = []
-        unexpected_keys = []
-        for bn in self.bn1:
-            bn._load_from_state_dict(state_dict, prefix + 'bn1.', local_metadata, strict, missing_keys, unexpected_keys,
-                                     error_msgs)
-        for bn in self.bn2:
-            bn._load_from_state_dict(state_dict, prefix + 'bn2.', local_metadata, strict, missing_keys, unexpected_keys,
-                                     error_msgs)
+    # def _load_from_state_dict(self, state_dict, prefix, local_metadata, strict,
+    #                           missing_keys, unexpected_keys, error_msgs):
+    #     super(MulBNBlock, self)._load_from_state_dict(state_dict, prefix, local_metadata, False, missing_keys,
+    #                                                   unexpected_keys, error_msgs)
+    #     missing_keys = []
+    #     unexpected_keys = []
+    #     for bn in self.bn1:
+    #         bn._load_from_state_dict(state_dict, prefix + 'bn1.', local_metadata, strict, missing_keys, unexpected_keys,
+    #                                  error_msgs)
+    #     for bn in self.bn2:
+    #         bn._load_from_state_dict(state_dict, prefix + 'bn2.', local_metadata, strict, missing_keys, unexpected_keys,
+    #                                  error_msgs)
 
 
 class ResNet(nn.Module):
@@ -321,7 +321,7 @@ class ResNet(nn.Module):
         self.num_skip_levels = self.pyramid_levels + 3 - num_bn_remove
         bottlenecks = bottlenecks[num_bn_remove:]
 
-        self.fine_tune = [self.conv1, self.maxpool, self.layer1, self.layer2, self.layer3, self.layer4, self.bn1]
+        self.fine_tune = ['conv1', 'maxpool', 'layer1', 'layer2', 'layer3', 'layer4', 'bn1']
 
         self.upsample_bottlenecks = nn.ModuleList(bottlenecks[::-1])
         num_pyr_modules = 2 + pyramid_levels - num_bn_remove
@@ -341,7 +341,7 @@ class ResNet(nn.Module):
              for i, ts in enumerate(target_sizes)])
         self.detach_upsample_in = detach_upsample_in
 
-        self.random_init = [self.upsample_bottlenecks, self.upsample_blends]
+        self.random_init = ['upsample_bottlenecks', 'upsample_blends']
 
         self.features = num_features
 
@@ -352,11 +352,17 @@ class ResNet(nn.Module):
                 nn.init.constant_(m.weight, 1)
                 nn.init.constant_(m.bias, 0)
 
-    def random_init_params(self):
-        return chain(*[f.parameters() for f in self.random_init])
+    def random_init_params(self): 
+        params = []
+        for f in self.random_init:
+            params.extend(f.parameters())
+        return params
 
     def fine_tune_params(self):
-        return chain(*[f.parameters() for f in self.fine_tune])
+        params = []
+        for f in self.fine_tune:
+            params.extend(f.parameters())
+        return params
 
     def forward_resblock(self, x, layers, idx):
         skip = None
@@ -416,13 +422,13 @@ class ResNet(nn.Module):
             x = blend(x, sum(sk))
         return x, additional
 
-    def _load_from_state_dict(self, state_dict, prefix, local_metadata, strict,
-                              missing_keys, unexpected_keys, error_msgs):
-        super(ResNet, self)._load_from_state_dict(state_dict, prefix, local_metadata, strict, missing_keys,
-                                                  unexpected_keys, error_msgs)
-        for bn in self.bn1:
-            bn._load_from_state_dict(state_dict, prefix + 'bn1.', local_metadata, strict, missing_keys, unexpected_keys,
-                                     error_msgs)
+    # def _load_from_state_dict(self, state_dict, prefix, local_metadata, strict,
+    #                           missing_keys, unexpected_keys, error_msgs):
+    #     super(ResNet, self)._load_from_state_dict(state_dict, prefix, local_metadata, strict, missing_keys,
+    #                                               unexpected_keys, error_msgs)
+    #     for bn in self.bn1:
+    #         bn._load_from_state_dict(state_dict, prefix + 'bn1.', local_metadata, strict, missing_keys, unexpected_keys,
+    #                                  error_msgs)
 
 class ResNet_mulbn(nn.Module):
     def _make_layer(self, block, planes, blocks, stride=1, bn_class=nn.BatchNorm2d):
@@ -610,13 +616,13 @@ class ResNet_mulbn(nn.Module):
             x = blend(x, sum(sk), dataset_id)
         return x, additional
 
-    def _load_from_state_dict(self, state_dict, prefix, local_metadata, strict,
-                              missing_keys, unexpected_keys, error_msgs):
-        super(ResNet_mulbn, self)._load_from_state_dict(state_dict, prefix, local_metadata, strict, missing_keys,
-                                                  unexpected_keys, error_msgs)
-        for bn in self.bn1:
-            bn._load_from_state_dict(state_dict, prefix + 'bn1.', local_metadata, strict, missing_keys, unexpected_keys,
-                                     error_msgs)
+    # def _load_from_state_dict(self, state_dict, prefix, local_metadata, strict,
+    #                           missing_keys, unexpected_keys, error_msgs):
+    #     super(ResNet_mulbn, self)._load_from_state_dict(state_dict, prefix, local_metadata, strict, missing_keys,
+    #                                               unexpected_keys, error_msgs)
+    #     for bn in self.bn1:
+    #         bn._load_from_state_dict(state_dict, prefix + 'bn1.', local_metadata, strict, missing_keys, unexpected_keys,
+    #                                  error_msgs)
 
 def resnet18(pretrained=True, **kwargs):
     """Constructs a ResNet-18 model.

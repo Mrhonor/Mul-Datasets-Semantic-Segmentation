@@ -49,35 +49,84 @@ class PreprocessorCvcuda:
         #         "NHWC",
         #     ) for frame_nhwc in frame_nhwc_list]
 
-        new_frame_nhwc_list = []
-        for frame_nhwc in frame_nhwc_list:
-            if isinstance(frame_nhwc, torch.Tensor):
-                # print("!")
-                new_frame_nhwc_list.append(cvcuda.as_tensor(frame_nhwc, "NHWC"))
-            elif isinstance(frame_nhwc, np.ndarray):
-                new_frame_nhwc_list.append(cvcuda.as_tensor(
-                    torch.as_tensor(frame_nhwc).to(
-                        device="cuda:%d" % self.device_id, non_blocking=True
-                    ),
-                    "NHWC",
-                ))
-            elif isinstance(frame_nhwc, list):
-                for im in frame_nhwc:
-                    if isinstance(im, torch.Tensor):
-                        new_frame_nhwc_list.append(cvcuda.as_tensor(im.unsqueeze(0), "NHWC"))
-                    elif isinstance(im, np.ndarray):
+        if self.mode == 'train':
+            # new_frame_nhwc_list = []
+            ids = []
+            for this_idx, frame_nhwc in enumerate(frame_nhwc_list):
+                if isinstance(frame_nhwc, torch.Tensor):
+                    # print("!")
+                    for _ in range(frame_nhwc.shape[0]):
+                        ids.append(this_idx)
+                else:
+                    # print("error!")
+                    raise Exception("error!")
+            new_frame_nhwc_list = torch.cat(frame_nhwc_list, dim=0)
+                    # new_frame_nhwc_list.append(cvcuda.as_tensor(frame_nhwc, "NHWC"))
+                # elif isinstance(frame_nhwc, np.ndarray):
+                #     for _ in range(frame_nhwc.shape[0]):
+                #         ids.append(this_idx)
+                #     new_frame_nhwc_list.append(cvcuda.as_tensor(
+                #         torch.as_tensor(frame_nhwc).to(
+                #             device="cuda:%d" % self.device_id, non_blocking=True
+                #         ),
+                #         "NHWC",
+                #     ))
+                # elif isinstance(frame_nhwc, list):
+                #     for _ in range(len(frame_nhwc)):
+                #         ids.append(this_idx)
+                #     for im in frame_nhwc:
+                #         if isinstance(im, torch.Tensor):
+                #             new_frame_nhwc_list.append(cvcuda.as_tensor(im.unsqueeze(0), "NHWC"))
+                #         elif isinstance(im, np.ndarray):
 
-                        new_frame_nhwc_list.append(cvcuda.as_tensor(
-                            torch.as_tensor(im).unsqueeze(0).to(
-                                device="cuda:%d" % self.device_id, non_blocking=True
-                            ),
-                            "NHWC",
-                        ))
-                    else:
-                        new_frame_nhwc_list.append(im)
-            else:
-                new_frame_nhwc_list.append(frame_nhwc)
-                
+                #             new_frame_nhwc_list.append(cvcuda.as_tensor(
+                #                 torch.as_tensor(im).unsqueeze(0).to(
+                #                     device="cuda:%d" % self.device_id, non_blocking=True
+                #                 ),
+                #                 "NHWC",
+                #             ))
+                #         else:
+                #             new_frame_nhwc_list.append(im)
+        else:
+
+            new_frame_nhwc_list = []
+            ids = []
+            for this_idx, frame_nhwc in enumerate(frame_nhwc_list):
+                if isinstance(frame_nhwc, torch.Tensor):
+                    # print("!")
+                    for _ in range(frame_nhwc.shape[0]):
+                        ids.append(this_idx)
+                    new_frame_nhwc_list.append(cvcuda.as_tensor(frame_nhwc, "NHWC"))
+                elif isinstance(frame_nhwc, np.ndarray):
+                    for _ in range(frame_nhwc.shape[0]):
+                        ids.append(this_idx)
+                    new_frame_nhwc_list.append(cvcuda.as_tensor(
+                        torch.as_tensor(frame_nhwc).to(
+                            device="cuda:%d" % self.device_id, non_blocking=True
+                        ),
+                        "NHWC",
+                    ))
+                elif isinstance(frame_nhwc, list):
+                    for _ in range(len(frame_nhwc)):
+                        ids.append(this_idx)
+                    for im in frame_nhwc:
+                        if isinstance(im, torch.Tensor):
+                            new_frame_nhwc_list.append(cvcuda.as_tensor(im.unsqueeze(0), "NHWC"))
+                        elif isinstance(im, np.ndarray):
+
+                            new_frame_nhwc_list.append(cvcuda.as_tensor(
+                                torch.as_tensor(im).unsqueeze(0).to(
+                                    device="cuda:%d" % self.device_id, non_blocking=True
+                                ),
+                                "NHWC",
+                            ))
+                        else:
+                            new_frame_nhwc_list.append(im)
+                else:
+                    for _ in range(frame_nhwc.shape[0]):
+                        ids.append(this_idx)
+                    new_frame_nhwc_list.append(frame_nhwc)
+                    
                         
                         
         # docs_tag: end_tensor_conversion
@@ -101,160 +150,190 @@ class PreprocessorCvcuda:
             #         ),
             #         "NHWC",
             #     ) for lb_nhwc in lb_nhwc_list]
-            new_label_nhwc_list = []
-            for lb_nhwc in lb_nhwc_list:
-                if isinstance(lb_nhwc, torch.Tensor):
-                    new_label_nhwc_list.append(cvcuda.as_tensor(lb_nhwc, "NHWC"))
-                elif isinstance(lb_nhwc, np.ndarray):
-                    new_label_nhwc_list.append(cvcuda.as_tensor(
-                        torch.as_tensor(lb_nhwc).to(
-                            device="cuda:%d" % self.device_id, non_blocking=True
-                        ),
-                        "NHWC",
-                    ))
-                elif isinstance(lb_nhwc, list):
-                    for im in lb_nhwc:
-                        if isinstance(im, torch.Tensor):
-                            new_label_nhwc_list.append(cvcuda.as_tensor(im.unsqueeze(0), "NHWC"))
-                        elif isinstance(im, np.ndarray):
+            # new_label_nhwc_list = []
+            # for lb_nhwc in lb_nhwc_list:
+            #     if isinstance(lb_nhwc, torch.Tensor):
+            #         new_label_nhwc_list.append(cvcuda.as_tensor(lb_nhwc, "NHWC"))
+            #     elif isinstance(lb_nhwc, np.ndarray):
+            #         new_label_nhwc_list.append(cvcuda.as_tensor(
+            #             torch.as_tensor(lb_nhwc).to(
+            #                 device="cuda:%d" % self.device_id, non_blocking=True
+            #             ),
+            #             "NHWC",
+            #         ))
+            #     elif isinstance(lb_nhwc, list):
+            #         for im in lb_nhwc:
+            #             if isinstance(im, torch.Tensor):
+            #                 new_label_nhwc_list.append(cvcuda.as_tensor(im.unsqueeze(0), "NHWC"))
+            #             elif isinstance(im, np.ndarray):
 
-                            new_label_nhwc_list.append(cvcuda.as_tensor(
-                                torch.as_tensor(im).unsqueeze(0).to(
-                                    device="cuda:%d" % self.device_id, non_blocking=True
-                                ),
-                                "NHWC",
-                            ))
-                        else:
-                            new_label_nhwc_list.append(im)
-                else:
-                    new_label_nhwc_list.append(lb_nhwc)
-                
+            #                 new_label_nhwc_list.append(cvcuda.as_tensor(
+            #                     torch.as_tensor(im).unsqueeze(0).to(
+            #                         device="cuda:%d" % self.device_id, non_blocking=True
+            #                     ),
+            #                     "NHWC",
+            #                 ))
+            #             else:
+            #                 new_label_nhwc_list.append(im)
+            #     else:
+            #         new_label_nhwc_list.append(lb_nhwc)
+            new_label_nhwc_list = torch.cat(lb_nhwc_list, dim=0)
             ims = []
             lbs = []
-            for frame_nhwc, lb_nhwc in zip(new_frame_nhwc_list, new_label_nhwc_list):
-                # print(type(frame_nhwc))
-                # print(frame_nhwc.shape)
-                n, h, w, _ = frame_nhwc.shape
-                # print(frame_nhwc.shape)
-                scale = np.random.uniform(min(self.scales), max(self.scales))
-                if h*scale < self.size[0] or w*scale < self.size[1]:
-                    h_rate = self.size[0] / h
-                    w_rate = self.size[1] / w
-                    scale = max([h_rate, w_rate])
-                nh = min([int(h*scale+1), self.size[0]])
-                nw = min([int(w*scale+1), self.size[1]])
+            ret_ids = []
+            this_idx = 0
+            # for frame_nhwc, lb_nhwc in zip(new_frame_nhwc_list, new_label_nhwc_list):
+            #     im = frame_nhwc
+            #     lb = lb_nhwc
+                # # print(type(frame_nhwc))
+                # # print(frame_nhwc.shape)
+                # n, h, w, _ = frame_nhwc.shape
+                # # print(frame_nhwc.shape)
+                # scale = np.random.uniform(min(self.scales), max(self.scales))
+                # if h*scale < self.size[0] or w*scale < self.size[1]:
+                #     h_rate = self.size[0] / h
+                #     w_rate = self.size[1] / w
+                #     scale = max([h_rate, w_rate])
+                # nh = min([int(h*scale+1), self.size[0]])
+                # nw = min([int(w*scale+1), self.size[1]])
+                # # im = cvcuda.resize(
+                # #     frame_nhwc,
+                # #     (
+                # #         frame_nhwc.shape[0],
+                # #         h*scale,
+                # #         w*scale,
+                # #         frame_nhwc.shape[3],
+                # #     ),
+                # #     cvcuda.Interp.LINEAR,
+                # # )
                 # im = cvcuda.resize(
                 #     frame_nhwc,
                 #     (
                 #         frame_nhwc.shape[0],
-                #         h*scale,
-                #         w*scale,
+                #         nh,
+                #         nw,
                 #         frame_nhwc.shape[3],
                 #     ),
                 #     cvcuda.Interp.LINEAR,
                 # )
-                im = cvcuda.resize(
-                    frame_nhwc,
-                    (
-                        frame_nhwc.shape[0],
-                        nh,
-                        nw,
-                        frame_nhwc.shape[3],
-                    ),
-                    cvcuda.Interp.LINEAR,
-                )
                 
-                lb = cvcuda.resize(
-                    lb_nhwc,
-                    (
-                        lb_nhwc.shape[0],
-                        nh,
-                        nw,
-                        lb_nhwc.shape[3],
-                    ),
-                    cvcuda.Interp.NEAREST,
-                )
-                
-                # crop_list = []
-                # for _ in range(n):
-                #     sh, sw = np.random.random(2)
-                #     sh, sw = int(sh * (h*scale - self.size[0])), int(sw * (w*scale - self.size[1]))
-                #     this_crop = torch.Tensor([sw, sh, self.size[1], self.size[0]]).reshape(1,1,1,4)
-                #     crop_list.append(this_crop)
-                sh, sw = np.random.random(2)
-                sh, sw = int(sh * (nh - self.size[0])), int(sw * (nw - self.size[1]))
-                # print(sh, sw)
-                crop_tensor = nvcv.RectI(sw, sh, int(self.size[1]), int(self.size[0]))
+                # lb = cvcuda.resize(
+                #     lb_nhwc,
+                #     (
+                #         lb_nhwc.shape[0],
+                #         nh,
+                #         nw,
+                #         lb_nhwc.shape[3],
+                #     ),
+                #     cvcuda.Interp.NEAREST,
+                # )
+                # if np.random.random() > self.p:
+                #     im = cvcuda.flip(im, 1)
+                #     lb = cvcuda.flip(lb, 1)
+                # # crop_list = []
+                # # for _ in range(n):
+                # #     sh, sw = np.random.random(2)
+                # #     sh, sw = int(sh * (h*scale - self.size[0])), int(sw * (w*scale - self.size[1]))
+                # #     this_crop = torch.Tensor([sw, sh, self.size[1], self.size[0]]).reshape(1,1,1,4)
+                # #     crop_list.append(this_crop)
+                # sh, sw = np.random.random(2)
+                # sh, sw = int(sh * (nh - self.size[0])), int(sw * (nw - self.size[1]))
+                # # print(sh, sw)
+                # crop_tensor = nvcv.RectI(sw, sh, int(self.size[1]), int(self.size[0]))
 
-                # crop_tensor = torch.cat(crop_list, dim=0).cuda(self.device_id)
-                # crop_tensor = cvcuda.as_tensor(crop_tensor, "NHWC")
-                # flip_tensor = torch.ones(im.shape[0], dtype=torch.int).cuda(self.device_id)
-                # flip_tensor = cvcuda.as_tensor(flip_tensor, "N")
+                # # crop_tensor = torch.cat(crop_list, dim=0).cuda(self.device_id)
+                # # crop_tensor = cvcuda.as_tensor(crop_tensor, "NHWC")
+                # # flip_tensor = torch.ones(im.shape[0], dtype=torch.int).cuda(self.device_id)
+                # # flip_tensor = cvcuda.as_tensor(flip_tensor, "N")
 
-                # base_tensor = torch.Tensor([0,0,0])
-                # base_tensor = base_tensor.reshape(1, 1, 1, 3).cuda(self.device_id)
-                # base_tensor = cvcuda.as_tensor(base_tensor, "NHWC")
-                # scale_tensor = torch.Tensor([1,1,1])
-                # scale_tensor = scale_tensor.reshape(1, 1, 1, 3).cuda(self.device_id)
-                # scale_tensor = cvcuda.as_tensor(scale_tensor, "NHWC")
-                # im = cvcuda.crop_flip_normalize_reformat(
+                # # base_tensor = torch.Tensor([0,0,0])
+                # # base_tensor = base_tensor.reshape(1, 1, 1, 3).cuda(self.device_id)
+                # # base_tensor = cvcuda.as_tensor(base_tensor, "NHWC")
+                # # scale_tensor = torch.Tensor([1,1,1])
+                # # scale_tensor = scale_tensor.reshape(1, 1, 1, 3).cuda(self.device_id)
+                # # scale_tensor = cvcuda.as_tensor(scale_tensor, "NHWC")
+                # # im = cvcuda.crop_flip_normalize_reformat(
+                # #     im,
+                # #     (im.shape[0], self.size[1], self.size[0], im.shape[3]),
+                # #     np.uint8,
+                # #     "NHWC",
+                # #     crop_tensor,
+                # #     flip_tensor,
+                # #     base_tensor,
+                # #     scale_tensor,
+                # # )
+                # # lb = cvcuda.crop_flip_normalize_reformat(
+                # #     lb,
+                # #     out_shape = (lb.shape[0], self.size[1], self.size[0], lb.shape[3]),
+                # #     out_dtype = np.uint8,
+                # #     out_layout = "NHWC",
+                # #     rect = crop_tensor,
+                # #     flip_code = flip_tensor,
+                # #     base = base_tensor,
+                # #     scale = scale_tensor,
+                # # )
+                # im = cvcuda.customcrop(
                 #     im,
-                #     (im.shape[0], self.size[1], self.size[0], im.shape[3]),
-                #     np.uint8,
-                #     "NHWC",
-                #     crop_tensor,
-                #     flip_tensor,
-                #     base_tensor,
-                #     scale_tensor,
+                #     crop_tensor   
                 # )
-                # lb = cvcuda.crop_flip_normalize_reformat(
+                # lb = cvcuda.customcrop(
                 #     lb,
-                #     out_shape = (lb.shape[0], self.size[1], self.size[0], lb.shape[3]),
-                #     out_dtype = np.uint8,
-                #     out_layout = "NHWC",
-                #     rect = crop_tensor,
-                #     flip_code = flip_tensor,
-                #     base = base_tensor,
-                #     scale = scale_tensor,
+                #     crop_tensor
                 # )
-                im = cvcuda.customcrop(
-                    im,
-                    crop_tensor   
-                )
-                lb = cvcuda.customcrop(
-                    lb,
-                    crop_tensor
-                )
-                if np.random.random() > self.p:
-                    im = cvcuda.flip(im, 1)
-                    lb = cvcuda.flip(lb, 1)
                     
                     
-                im = torch.as_tensor(
-                    im.cuda(), device="cuda:%d" % self.device_id
-                )
-                lb = torch.as_tensor(
-                    lb.cuda(), device="cuda:%d" % self.device_id
-                )
-                ims.append(im)
-                lbs.append(lb)
-            
-            cropped_im=torch.cat(ims, dim=0)
-            lbs=torch.cat(lbs, dim=0)
-            ims = cvcuda.as_tensor(cropped_im, "NHWC")
-            if self.brightness is not None and self.contrast is not None:
-                brightness_rate = torch.Tensor([np.random.uniform(*self.brightness) for _ in range(ims.shape[0])]).cuda(self.device_id)
-                contrast_rate = torch.Tensor([np.random.uniform(*self.contrast) for _ in range(ims.shape[0])]).cuda(self.device_id)
-                brightness_rate = cvcuda.as_tensor(brightness_rate, "N")
-                contrast_rate = cvcuda.as_tensor(contrast_rate, "N")
-                contrastCenter = torch.Tensor([74 for _ in range(ims.shape[0])]).cuda(self.device_id)
-                contrastCenter = cvcuda.as_tensor(contrastCenter, "N")
-                ims = cvcuda.brightness_contrast(
-                    ims,
-                    brightness=brightness_rate,
-                    contrast=contrast_rate,
-                    contrast_center=contrastCenter
-                )
+                # im = torch.as_tensor(
+                #     im.cuda(), device="cuda:%d" % self.device_id
+                # )
+                # lb = torch.as_tensor(
+                #     lb.cuda(), device="cuda:%d" % self.device_id
+                # )
+                # select_idx = []
+                # for idx in range(lb.shape[0]):
+                #     if torch.min(lb[idx]) != 255:
+                #         select_idx.append(idx)
+                
+                # if len(select_idx) == 0:
+                #     this_idx += n
+                #     continue
+                # select_idx = torch.tensor(select_idx).cuda()
+                # im = torch.index_select(im, 0, select_idx).contiguous()
+                # lb = torch.index_select(lb, 0, select_idx).contiguous()
+                
+                # ims.append(im)
+                # lbs.append(lb)
+                # for _ in range(len(im)):
+                #     ret_ids.append(ids[this_idx])
+                    
+                # this_idx += n
+            # cropped_im=torch.cat(ims, dim=0)
+            # lbs=torch.cat(lbs, dim=0)
+            # ims = cvcuda.as_tensor(cropped_im, "NHWC")    
+
+            n = new_frame_nhwc_list.shape[0]
+            select_idx = []
+            for idx in range(n):
+                if torch.min(new_label_nhwc_list[idx]) != 255:
+                    select_idx.append(idx)
+                    ret_ids.append(ids[idx])
+
+            select_idx = torch.tensor(select_idx).cuda()
+            im = torch.index_select(new_frame_nhwc_list, 0, select_idx).contiguous()
+            lbs = torch.index_select(new_label_nhwc_list, 0, select_idx).contiguous()
+            ims = cvcuda.as_tensor(im, "NHWC")
+            # if self.brightness is not None and self.contrast is not None:
+            #     brightness_rate = torch.Tensor([np.random.uniform(*self.brightness) for _ in range(ims.shape[0])]).cuda(self.device_id)
+            #     contrast_rate = torch.Tensor([np.random.uniform(*self.contrast) for _ in range(ims.shape[0])]).cuda(self.device_id)
+            #     brightness_rate = cvcuda.as_tensor(brightness_rate, "N")
+            #     contrast_rate = cvcuda.as_tensor(contrast_rate, "N")
+            #     contrastCenter = torch.Tensor([74 for _ in range(ims.shape[0])]).cuda(self.device_id)
+            #     contrastCenter = cvcuda.as_tensor(contrastCenter, "N")
+            #     ims = cvcuda.brightness_contrast(
+            #         ims,
+            #         brightness=brightness_rate,
+            #         contrast=contrast_rate,
+            #         contrast_center=contrastCenter
+            #     )
                 
             # Convert to floating point range 0-1.
             normalized = cvcuda.convertto(ims, np.float32, scale=1 / 255)
@@ -269,11 +348,17 @@ class PreprocessorCvcuda:
 
             # Convert it to NCHW layout and return it.
             normalized = cvcuda.reformat(normalized, "NCHW")
-            
+            ids = ret_ids 
         else:
             normalized = []
-            lbs = lb_nhwc_list
-            for ims in frame_nhwc_list:
+            lbs = []
+            for lb_nhwc in lb_nhwc_list:
+                if isinstance(lb_nhwc, list):
+                    for lb in lb_nhwc:
+                        lbs.append(lb.unsqueeze(0))
+                else:
+                    lbs.append(lb_nhwc)
+            for ims in new_frame_nhwc_list:
                 this_normalized = cvcuda.convertto(ims, np.float32, scale=1 / 255)
 
                 # Normalize with mean and std-dev.
@@ -297,5 +382,5 @@ class PreprocessorCvcuda:
         #   1. The original nhwc frame
         #   2. The resized frame
         #   3. The normalized frame.
-        return normalized, lbs
+        return normalized, lbs, ids
         # docs_tag: end_preproc_pipeline

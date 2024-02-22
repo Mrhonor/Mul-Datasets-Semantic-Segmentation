@@ -26,8 +26,10 @@ import cv2
 import threading
 import numpy as np
 from multiprocessing.pool import ThreadPool
-
+import torch.distributed as dist
 from pathlib import Path
+import math
+import lib.transform_cv2 as T
 
 # Bring module folders from the samples directory into our path so that
 # we can import modules from it.
@@ -57,6 +59,30 @@ class LabelReaderThread(threading.Thread):
             self.lb_image = cv2.imread(self.lb_path)[:, :, ::-1]
 
             
+class IMLbReaderThread(threading.Thread):
+    def __init__(self, im_lb_path, lb_map=None, trans_func=None):
+        super(IMLbReaderThread, self).__init__()
+        self.im_lb_path = im_lb_path
+        self.im_lb = []
+        self.lb_map=lb_map
+        self.trans_func = trans_func
+        
+
+    def run(self):
+        # 在这里执行图像读取操作
+        for im_lb_p in self.im_lb_path:
+            imp, lbp = im_lb_p
+            lb = cv2.imread(lbp, 0)
+            if not self.lb_map is None:
+                lb = self.lb_map[lb]
+            
+            im = cv2.imread(imp)[:, :, ::-1]
+            im_lb = dict(im=im, lb=lb)
+            if not self.trans_func is None:
+                im_lb = self.trans_func(im_lb)
+                im = im_lb['im']
+                lb = im_lb['lb']
+            self.im_lb.append([im, lb])
 
 
 class ImageBatchDecoderPyTorch:
@@ -244,7 +270,7 @@ class ImageBatchPNGDecoderPyTorch:
 
 
         self.lb_map = None
-        self.imStack = True
+        self.imStack = False
 
         with open(annpath, 'r') as fr:
             pairs = fr.read().splitlines()
@@ -348,26 +374,31 @@ class ImageBatchPNGDecoderPyTorch:
         return self.len
     
     def get_image_label(self, impth, lbpth):
-        im_threads = [LabelReaderThread(im_path, isLabel=False) for im_path in impth]
-        lb_threads = [LabelReaderThread(lb_path, self.lb_map, isLabel=True) for lb_path in lbpth]
+        threads = []
+        for i in range(0, len(impth), 2):
+            if i+1 < len(impth):
+                im_lb_path = [[impth[i], lbpth[i]], [impth[i+1], lbpth[i+1]]]
+            else:
+                im_lb_path = [[impth[i], lbpth[i]]]
+            threads.append(IMLbReaderThread(im_lb_path, self.lb_map))
 
         # 启动线程
-        for thread in im_threads:
+        for thread in threads:
             thread.start()
-
-        for thread in lb_threads:
-            thread.start()
-
 
         # 等待所有线程完成
-        for thread in im_threads:
+        for thread in threads:
             thread.join()
         
-        for thread in lb_threads:
-            thread.join()
-        
-        ims = [torch.from_numpy(thread.lb_image.copy()) for thread in im_threads]
-        lbs = [torch.from_numpy((thread.lb_image).astype(np.int32)).to(torch.uint8).unsqueeze(2) for thread in lb_threads]
+        ims = []
+        lbs = []
+        for thread in threads:
+            im_lbs = thread.im_lb
+            for im_lb in im_lbs:
+                im, lb = im_lb
+                ims.append(torch.from_numpy(im.copy()))
+                lbs.append(torch.from_numpy((lb).astype(np.int32)).to(torch.uint8).unsqueeze(2))
+
         return ims, lbs
 
         
@@ -387,7 +418,200 @@ class ImageBatchPNGDecoderPyTorch:
         lbs = [torch.from_numpy((thread.lb_image).astype(np.int32)).to(torch.uint8).unsqueeze(2) for thread in threads]
         return lbs
 
+class ImageBatchPNGDecoderPyTorchDist:
+    def __init__(
+        self,
+        dataroot, 
+        annpath, 
+        batch_size,
+        device_id,
+        cuda_ctx,
+        mode='train',
+    ):
+        
+        if dist.is_initialized():
+            self.num_replicas = dist.get_world_size()
+            self.rank = dist.get_rank()
+            print(f'cur rank:{self.rank}, num_replicas:{self.num_replicas}')
+            if self.rank >= self.num_replicas or self.rank < 0:
+                raise ValueError(
+                    f"Invalid rank {self.rank}, rank should be in the interval [0, {self.num_replicas - 1}]")
+        # self.logger = logging.getLogger(__name__)
+        self.batch_size = batch_size
+        self.device_id = device_id
+        # self.total_decoded = 0
+        self.batch_idx = 0
+        self.cuda_ctx = cuda_ctx
+        self.mode = mode
 
+        self.lb_map = None
+        self.imStack = True
+
+        with open(annpath, 'r') as fr:
+            pairs = fr.read().splitlines()
+        self.img_paths, self.lb_paths = [], []
+        for pair in pairs:
+            imgpth, lbpth = pair.split(',')
+            self.img_paths.append(osp.join(dataroot, imgpth))
+            self.lb_paths.append(osp.join(dataroot, lbpth))
+
+        self.img_paths = np.array(self.img_paths)
+        self.lb_paths = np.array(self.lb_paths)
+
+        assert len(self.img_paths) == len(self.lb_paths)
+        self.total_size = len(self.img_paths)
+        self.file_idx = np.arange(0, self.total_size)
+        # docs_tag: end_parse_imagebatchdecoder_pytorch
+        if self.mode == 'train':
+            self.shuffle = True
+            self.trans_func = T.Compose([
+                T.RandomResizedCrop((0,5,1.5), (768, 768)),
+                T.RandomHorizontalFlip(),
+                # T.ColorJitter(
+                #     brightness=0.4,
+                #     contrast=0.4,
+                #     saturation=0.4
+                # ),
+            ])
+            if dist.is_initialized():
+                self.num_samples = int(math.ceil(self.total_size / self.num_replicas))
+                self.total_size = self.num_samples * self.num_replicas
+                self.file_idx += self.file_idx[:(self.total_size - len(self.file_idx))]
+                self.file_idx = self.file_idx[self.rank:self.total_size:self.num_replicas]
+                random.shuffle(self.file_idx)
+                self.total_size = len(self.file_idx)
+        else:
+            self.shuffle = False
+            self.trans_func = None
+        
+        # docs_tag: begin_batch_imagebatchdecoder_pytorch
+        # self.file_name_batches = [
+        #     self.file_names[i : i + self.batch_size]  # noqa: E203
+        #     for i in range(0, len(self.file_names), self.batch_size)
+        # ]
+
+        self.max_image_size = 8192 * 4096 * 3  # Maximum possible image size.
+        
+
+        # self.logger.info("Using torchnvjpeg as decoder.")
+
+        # docs_tag: end_init_imagebatchdecoder_pytorch
+
+    def __call__(self):
+        if self.batch_idx >= self.total_size:
+            if self.mode != 'train':
+                return None
+            self.batch_idx = 0
+            if self.shuffle:
+                random.shuffle(self.file_idx)
+                
+
+        # docs_tag: begin_call_imagebatchdecoder_pytorch
+        file_name_batch = self.img_paths[self.file_idx[self.batch_idx:self.batch_idx+self.batch_size]]
+        label_name_batch = self.lb_paths[self.file_idx[self.batch_idx:self.batch_idx+self.batch_size]]
+        # print(file_name_batch, label_name_batch)
+        effective_batch_size = len(file_name_batch)
+        # data_batch = [open(path, "rb").read() for path in file_name_batch]
+        # # label_batch = [open(path, "rb").read() for path in label_name_batch]
+
+        # # docs_tag: end_read_imagebatchdecoder_pytorch
+
+        # # docs_tag: begin_decode_imagebatchdecoder_pytorch
+        # if self.decoder is None or effective_batch_size != self.batch_size:
+        #     self.decoder = torchnvjpeg.Decoder(
+        #         device_padding=0,
+        #         host_padding=0,
+        #         gpu_huffman=True,
+        #         device_id=self.device_id,
+        #         bath_size=effective_batch_size,
+        #         max_cpu_threads=8,  # this is max_cpu_threads parameter. Not used internally.
+        #         max_image_size=self.max_image_size,
+        #         stream=None,
+        #     )
+
+        # image_tensor_list = self.decoder.batch_decode(data_batch)
+        # # image_tensor_list = [torch.ones(3), torch.ones(3)]
+        # label_tensor_list = self.get_label(label_name_batch)
+        
+
+        # Convert the list of tensors to a tensor itself.
+        image_tensor_list, label_tensor_list = self.get_image_label(file_name_batch, label_name_batch)
+        # if self.imStack:
+        image_tensors_nhwc = torch.stack(image_tensor_list).cuda(self.device_id)
+        lb_tensors_nhwc = torch.stack(label_tensor_list).cuda(self.device_id)
+        # else:
+        #     # image_tensor_list = [image_tensor.unsqueeze(0) for image_tensor in image_tensor_list]
+        #     # label_tensor_list = [label_tensor.unsqueeze(0) for label_tensor in label_tensor_list]
+        #     image_tensors_nhwc = [im.cuda(self.device_id) for im in image_tensor_list] 
+        #     lb_tensors_nhwc = [lb.cuda(self.device_id) for lb in label_tensor_list] 
+        # image_tensors_nhwc = torch.stack(image_tensor_list).cuda(self.device_id)
+        # lb_tensors_nhwc = torch.stack(label_tensor_list).cuda(self.device_id)
+        
+        # self.total_decoded += len(image_tensor_list)
+        # docs_tag: end_decode_imagebatchdecoder_pytorch
+
+        # docs_tag: begin_return_imagebatchdecoder_pytorch
+        # batch = Batch(
+        #     batch_idx=self.batch_idx, data=image_tensors_nhwc, fileinfo=file_name_batch, lb=lb_tensors_nhwc
+        # )
+        self.batch_idx += self.batch_size
+
+        return image_tensors_nhwc, lb_tensors_nhwc
+        # docs_tag: end_return_imagebatchdecoder_pytorch
+
+    def start(self):
+        pass
+
+    def join(self):
+        pass
+
+    def __len__(self):
+        return self.total_size
+    
+    def get_image_label(self, impth, lbpth):
+        threads = []
+        for i in range(0, len(impth), 2):
+            if i+1 < len(impth):
+                im_lb_path = [[impth[i], lbpth[i]], [impth[i+1], lbpth[i+1]]]
+            else:
+                im_lb_path = [[impth[i], lbpth[i]]]
+            threads.append(IMLbReaderThread(im_lb_path, self.lb_map, trans_func=self.trans_func))
+
+        # 启动线程
+        for thread in threads:
+            thread.start()
+
+        # 等待所有线程完成
+        for thread in threads:
+            thread.join()
+        
+        ims = []
+        lbs = []
+        for thread in threads:
+            im_lbs = thread.im_lb
+            for im_lb in im_lbs:
+                im, lb = im_lb
+                ims.append(torch.from_numpy(im.copy()))
+                lbs.append(torch.from_numpy((lb).astype(np.int32)).to(torch.uint8).unsqueeze(2))
+
+        return ims, lbs
+
+        
+    
+    def get_label(self, lbpth):
+        
+        threads = [LabelReaderThread(lb_path, self.lb_map) for lb_path in lbpth]
+
+        # 启动线程
+        for thread in threads:
+            thread.start()
+
+        # 等待所有线程完成
+        for thread in threads:
+            thread.join()
+        
+        lbs = [torch.from_numpy((thread.lb_image).astype(np.int32)).to(torch.uint8).unsqueeze(2) for thread in threads]
+        return lbs
 
 class ImageParallelDecoderPyTorch:
     def __init__(
@@ -502,7 +726,7 @@ class ImageParallelDecoderPyTorch:
     
     def get_label(self, lbpth):
         
-        threads = [LabelReaderThread(lb_path, self.lb_map) for lb_path in lbpth]
+        threads = [IMLbReaderThread(lb_path, self.lb_map) for lb_path in lbpth]
 
         # 启动线程
         for thread in threads:
@@ -514,6 +738,7 @@ class ImageParallelDecoderPyTorch:
         
         lbs = [torch.from_numpy((thread.lb_image).astype(np.int32)).to(torch.uint8).unsqueeze(2) for thread in threads]
         return lbs
+
 
 # docs_tag: begin_init_imagebatchencoder_pytorch
 class ImageBatchEncoderPyTorch:

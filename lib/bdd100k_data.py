@@ -13,7 +13,7 @@ import numpy as np
 
 import lib.transform_cv2 as T
 from lib.base_dataset import BaseDataset, BaseDatasetIm
-from lib.cvCudaDataset import ImageBatchDecoderPyTorch
+from lib.cvCudaDataset import ImageBatchDecoderPyTorch, ImageBatchPNGDecoderPyTorch, ImageBatchPNGDecoderPyTorchDist
 
 # Bus、Light、Sign、Person、Bike、Truck、Motor、Car、Train、Rider
 
@@ -95,7 +95,7 @@ class Bdd100kIm(BaseDatasetIm):
             std=(0.2071, 0.2088, 0.2090),
         )
 
-class Bdd100kCVCUDA(ImageBatchDecoderPyTorch):
+class Bdd100kCVCUDA(ImageBatchPNGDecoderPyTorchDist):
     '''
     '''
     def __init__(self, dataroot, annpath, batch_size, device_id, cuda_ctx, mode='train'):

@@ -19,7 +19,7 @@
     "output_feat_dim": 128,
     "adj_feat_dim": 128,
     "dropout_rate": 0.5,
-    "unify_ratio": 1,
+    "unify_ratio": 0.599,
     "threshold_value": 0.95,
     "alpha": 0.2,
     "fix_architecture_alter_iter": 0,
@@ -34,7 +34,7 @@
     "ema_graph": false,
     "ema_graph_rate": 0.999,
     "GumbelSoftmax": false,
-    "init_by_eval": false,
+    "init_by_eval": true,
     "init_adj_path": "res/init_adj_7_datasets.pt"
   },
   "dataset1": {
@@ -53,7 +53,7 @@
     "im_root": "/cpfs01/projects-HDD/pujianxiangmuzu_HDD/public/mr/mapi",
     "train_im_anns":"datasets/mapi/training.txt",
     "val_im_anns":"datasets/mapi/training_2.txt", 
-    "ims_per_gpu": 4,
+    "ims_per_gpu": 6,
     "eval_ims_per_gpu": 1,
     "label_names": ["Bird", "Ground Animal", "Curb", "Fence", "Guard Rail", "Barrier", "Wall", "Bike Lane", "Crosswalk - Plain", "Curb Cut", "Parking", "Pedestrian Area", "Rail Track", "Road", "Service Lane", "Sidewalk", "Bridge", "Building", "Tunnel", "Person", "Bicyclist", "Motorcyclist", "Other Rider", "Lane Marking - Crosswalk", "Lane Marking - General", "Mountain", "Sand", "Sky", "Snow", "Terrain", "Vegetation", "Water", "Banner", "Bench", "Bike Rack", "Billboard", "Catch Basin", "CCTV Camera", "Fire Hydrant", "Junction Box", "Manhole", "Phone Booth", "Pothole", "Street Light", "Pole", "Traffic Sign Frame", "Utility Pole", "Traffic Light", "Traffic Sign (Back)", "Traffic Sign (Front)", "Trash Can", "Bicycle", "Boat", "Bus", "Car", "Caravan", "Motorcycle", "On Rails", "Other Vehicle", "Trailer", "Truck", "Wheeled Slow", "Car Mount", "Ego Vehicle"]
   },
@@ -110,11 +110,11 @@
   "n_bn": 1,
   "class_remaper": "ClassRemapOneHotLabel",
   "loss":{
-    "type": "CE_GNN",
+    "type": "Adv_GNN",
     "reweight": false,
     "with_aux": false,
     "with_unify_label": true,
-    "with_datasets_aux": false,
+    "with_datasets_aux": true,
     "aux_weight": 0.2,
     "aux_num": 4,
     "ignore_index": 255,
@@ -135,22 +135,22 @@
     "gnn_lr_start": 1e-3,
     "seg_lr_start": 1e-3,
     "weight_decay": 1e-5,
-    "warmup_iters": 5000,
+    "warmup_iters": 1000,
     "fix_param_iters": 0,
-    "max_iter": 0,
-    "init_iter": 60000
+    "max_iter": 210000,
+    "init_iter": 0
   },
   "train": {
     "scales": [0.5, 1.0, 1.5],
     "cropsize": [768, 768],
     "finetune": true,
-    "finetune_from": "res/celoss/pretrain_model_40000.pth",
+    "finetune_from": "res/celoss/snp_clip_model.pth",
     "graph_finetune": false,
     "graph_finetune_from": "res/celoss/tg_graph_model_80000.pth",
     "seg_iters": 200000,
-    "gnn_iters": 80000,
-    "finetune_stage1_iters": 0,
-    "finetune_stage2_iters": 0,
+    "gnn_iters": 400000,
+    "finetune_stage1_iters": 100000,
+    "finetune_stage2_iters": 400000,
     "joint_train": true
   },
   "val": {

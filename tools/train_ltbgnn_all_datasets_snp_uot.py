@@ -20,22 +20,24 @@ import torch.distributed as dist
 import torch.cuda.amp as amp
 
 from lib.models import model_factory
-from lib.get_dataloader import get_data_loader, get_single_data_loader
+from lib.get_dataloader import get_data_loader, get_single_data_loader, get_DALI_data_loader
 from lib.loss.ohem_ce_loss import OhemCELoss
 from lib.lr_scheduler import WarmupPolyLrScheduler
 from lib.meters import TimeMeter, AvgMeter
 from lib.logger import setup_logger, print_log_msg
-from lib.loss.loss_cross_datasets import CrossDatasetsLoss, CrossDatasetsCELoss, CrossDatasetsCELoss_KMeans, CrossDatasetsCELoss_CLIP, CrossDatasetsCELoss_GNN, CrossDatasetsCELoss_AdvGNN
+from lib.loss.loss_cross_datasets import CrossDatasetsLoss, CrossDatasetsCELoss, CrossDatasetsCELoss_KMeans, CrossDatasetsCELoss_CLIP, CrossDatasetsCELoss_GNN, CrossDatasetsCELoss_AdvGNN, CrossDatasetsCELoss_AdvGNN_ce
 from lib.class_remap import ClassRemap
 
 from tools.configer import Configer
-from evaluate import eval_model_contrast, eval_model_aux, eval_model, eval_model_contrast_single, eval_model_mulbn, eval_model_dsg, eval_model_unlabel, eval_find_use_and_unuse_label
+from evaluate import eval_model_contrast, eval_model_aux, eval_model, eval_model_contrast_single, eval_model_mulbn, eval_model_dsg, eval_model_unlabel, eval_find_use_and_unuse_label, eval_model_dali
 
 from tensorboardX import SummaryWriter
 
 from lib.module.gen_graph_node_feature import gen_graph_node_feature
 from tools.get_bipartile import print_bipartite, find_unuse
 import clip
+
+import lib.transform_cv2 as T
 
 ## fix all random seeds
 #  torch.manual_seed(123)
@@ -59,7 +61,7 @@ def parse_args():
     parse.add_argument('--local_rank', dest='local_rank', type=int, default=-1,)
     parse.add_argument('--port', dest='port', type=int, default=16854,)
     parse.add_argument('--finetune_from', type=str, default=None,)
-    parse.add_argument('--config', dest='config', type=str, default='configs/ltbgnn_7_datasets_snp.json',)
+    parse.add_argument('--config', dest='config', type=str, default='configs/ltbgnn_7_datasets_snp_finetune.json',)
     return parse.parse_args()
 
 # 使用绝对路径
@@ -94,6 +96,9 @@ def set_model(configer):
         
         if 'unify_prototype' in state:
             del state['unify_prototype']
+            
+            for k in ['logits.norm.weight', 'logits.norm.bias', 'logits.norm.running_mean', 'logits.norm.running_var', 'logits.norm.num_batches_tracked', 'logits.conv.weight', 'logits.conv.bias']:
+                del state[k] 
             for i in range(0, configer.get('n_datasets')):
                 del state[f'bipartite_graphs.{i}']
             
@@ -152,7 +157,6 @@ def set_graph_model(configer):
     if configer.get('train', 'graph_finetune'):
         logger.info(f"load pretrained weights from {configer.get('train', 'graph_finetune_from')}")
         state = torch.load(configer.get('train', 'graph_finetune_from'), map_location='cpu')
-        
         if 'model_state_dict' in state:
             net.load_state_dict(state['model_state_dict'], strict=False)
         else:
@@ -278,7 +282,8 @@ def set_model_dist(net):
 def set_contrast_loss(configer):
     loss_factory = {
         'GNN': CrossDatasetsCELoss_GNN,
-        'Adv_GNN': CrossDatasetsCELoss_AdvGNN
+        'Adv_GNN': CrossDatasetsCELoss_AdvGNN,
+        'CE_GNN': CrossDatasetsCELoss_AdvGNN_ce
     }
     # return CrossDatasetsCELoss_KMeans(configer)
     return loss_factory[configer.get('loss', 'type')](configer)
@@ -324,30 +329,33 @@ def train():
     ## dataset
 
     # dl = get_single_data_loader(configer, aux_mode='train', distributed=is_dist)
-    dls = get_data_loader(configer, aux_mode='train', distributed=is_dist, stage=1)
+    dls = get_DALI_data_loader(configer, aux_mode='train')
     # dl_city, dl_cam = get_data_loader(configer, aux_mode='train', distributed=is_dist)
     
     ## model
     net = set_model(configer=configer)
-    graph_net = set_graph_model(configer=configer)
+    
+    net.unify_prototype.requires_grad = True
+    # graph_net = set_graph_model(configer=configer)
     
     if use_ema:
         ema_net = set_ema_model(configer=configer)
         
     contrast_losses = set_contrast_loss(configer)
-    net.unify_prototype.requires_grad = False
+    
+
     
     ## optimizer
-    # optim = set_optimizer(net, configer, configer.get('lr', 'seg_lr_start'))
-    gnn_optim = set_optimizer(graph_net, configer, configer.get('lr', 'gnn_lr_start'))
-    if mse_or_adv == 'adv':
-        gnn_optimD = set_optimizerD(graph_net, configer, configer.get('lr', 'gnn_lr_start'))
+    optim = set_optimizer(net, configer, configer.get('lr', 'seg_lr_start'))
+    # gnn_optim = set_optimizer(graph_net, configer, configer.get('lr', 'gnn_lr_start'))
+    # if mse_or_adv == 'adv':
+    #     gnn_optimD = set_optimizerD(graph_net, configer, configer.get('lr', 'gnn_lr_start'))
 
     ## mixed precision training
     scaler = amp.GradScaler()
 
-    ori_graph_node_features = gen_graph_node_feature(configer)
-    graph_node_features = ori_graph_node_features.cuda()
+    # ori_graph_node_features = gen_graph_node_feature(configer)
+    # graph_node_features = ori_graph_node_features.cuda()
 
     ## meters
     time_meter, loss_meter, loss_pre_meter, loss_aux_meters, loss_contrast_meter, loss_domain_meter, kl_loss_meter = set_meters(configer)
@@ -360,17 +368,17 @@ def train():
     #     max_iter=configer.get('train','gnn_iters'), warmup_iter=configer.get('lr','warmup_iters'),
     #     warmup_ratio=0.1, warmup='exp', last_epoch=-1,)
 
-    # lr_schdr = WarmupPolyLrScheduler(optim, power=1.2,
-    #     max_iter=configer.get('lr','init_iter'), warmup_iter=configer.get('lr','warmup_iters'),
-    #     warmup_ratio=0.1, warmup='exp', last_epoch=-1,)
+    lr_schdr = WarmupPolyLrScheduler(optim, power=1.2,
+        max_iter=configer.get('lr','init_iter'), warmup_iter=configer.get('lr','warmup_iters'),
+        warmup_ratio=0.1, warmup='exp', last_epoch=-1,)
 
-    # if configer.get('train', 'finetune'):
-    #     state = torch.load(configer.get('train', 'finetune_from'))
-    #     # net.load_state_dict(torch.load(configer.get('train', 'finetune_from'), map_location='cpu'), strict=False)
-    #     if 'optimizer_state_dict' in state.keys():
-    #         optim.load_state_dict(state['optimizer_state_dict'])
-    #     if 'scheduler_state_dict' in state.keys():
-    #         lr_schdr.load_state_dict(state['scheduler_state_dict'])
+    if configer.get('train', 'finetune'):
+        state = torch.load(configer.get('train', 'finetune_from'))
+        # net.load_state_dict(torch.load(configer.get('train', 'finetune_from'), map_location='cpu'), strict=False)
+        if 'optimizer_state_dict' in state.keys():
+            optim.load_state_dict(state['optimizer_state_dict'])
+        if 'scheduler_state_dict' in state.keys():
+            lr_schdr.load_state_dict(state['scheduler_state_dict'])
 
     # 两个数据集分别处理
     # 使用迭代器读取数据
@@ -406,29 +414,37 @@ def train():
     #     net.switch_require_grad_state(False)
     
     ## ddp training
+    # net.unify_prototype.requires_grad = True
     if is_distributed():
         net = set_model_dist(net)
         graph_net = set_model_dist(graph_net)
 
-    bi_graphs = None
-    
+    bi_graphs = [torch.eye(19).cuda()]
+    # bi_graphs = None
+    net.set_bipartite_graphs(bi_graphs)
+    # ToTensor = T.ToTensorCUDA(
+    #         mean=(0.3038, 0.3383, 0.3034), # city, rgb
+    #         std=(0.2071, 0.2088, 0.2090),
+    #     )
     start_i = 0
     for i in range(start_i, configer.get('lr','init_iter')):
-        if bi_graphs is None:  
-            bi_graphs = graph_net.pretrain_bipartite_graphs(True)
-            if configer.get('lr', 'init_iter') > 0:
-                text_feature_vecs = []
-                with torch.no_grad():
-                    clip_model, _ = clip.load("ViT-B/32", device="cuda")
-                    for i in range(0, n_datasets):
-                        lb_name = configer.get("dataset"+str(i+1), "label_names")
-                        lb_name = [f'a photo of {name} from dataset {i+1}.' for name in lb_name]
-                        text = clip.tokenize(lb_name).cuda()
-                        text_features = clip_model.encode_text(text).type(torch.float32)
-                        text_feature_vecs.append(text_features)
+        # if bi_graphs is None:  
+            # bi_graphs = graph_net.pretrain_bipartite_graphs(True)
+            # if configer.get('lr', 'init_iter') > 0:
+            #     text_feature_vecs = []
+            #     with torch.no_grad():
+            #         clip_model, _ = clip.load("ViT-B/32", device="cuda")
+            #         for i in range(0, n_datasets):
+            #             lb_name = configer.get("dataset"+str(i+1), "label_names")
+            #             lb_name = [f'a photo of {name} from dataset {i+1}.' for name in lb_name]
+            #             text = clip.tokenize(lb_name).cuda()
+            #             text_features = clip_model.encode_text(text).type(torch.float32)
+            #             text_feature_vecs.append(text_features)
                         
-                text_feature_vecs = torch.cat(text_feature_vecs, dim=0)
-                net.set_unify_prototype(text_feature_vecs, False)
+            #     text_feature_vecs = torch.cat(text_feature_vecs, dim=0)
+            #     net.set_unify_prototype(text_feature_vecs, False)
+            
+        
         configer.plus_one('iter')
         # print("1")
         ims = []
@@ -436,40 +452,53 @@ def train():
         for j in range(0,len(dl_iters)):
 
             try:
-                im, lb = next(dl_iters[j])
+                data = next(dl_iters[j])
+                im = data[0]['data']
+                lb = data[0]['label']
                 if not im.size()[0] == configer.get('dataset'+str(j+1), 'ims_per_gpu'):
                     raise StopIteration
                 while torch.min(lb) == 255:
                     print(f"{j}:while")
-                    im, lb = next(dl_iters[j])
+                    data = next(dl_iters[j])
+                    im = data[0]['data']
+                    lb = data[0]['label']
                     if not im.size()[0] == configer.get('dataset'+str(j+1), 'ims_per_gpu'):
                         raise StopIteration
 
 
             except StopIteration:
                 dl_iters[j] = iter(dls[j])
-                im, lb = next(dl_iters[j])
+                data = next(dl_iters[j])
+                im = data[0]['data']
+                lb = data[0]['label']
                 while torch.min(lb) == 255:
                     print(f"{j}:stop while")
-                    im, lb = next(dl_iters[j])
-                    
+                    data = next(dl_iters[j])
+                    im = data[0]['data']
+                    lb = data[0]['label']
+                        
             ims.append(im)
             lbs.append(lb)
             
 
+        # im = np.concatenate(ims, axis=0)
+        # lb = np.concatenate(lbs, axis=0)
+        # im, lb = ToTensor(im, lb)
                     
         im = torch.cat(ims, dim=0)
         lb = torch.cat(lbs, dim=0)
-
-        im = im.cuda()
-        lb = lb.cuda()
+        im = im.permute(0,3,1,2).contiguous()
+        # print(im.shape)
+        # print(lb.shape)
+        # im = im.cuda()
+        # lb = lb.cuda()
 
         # dataset_lbs = j*torch.ones(lb.shape[0], dtype=torch.int)
         dataset_lbs = torch.cat([i*torch.ones(this_lb.shape[0], dtype=torch.int) for i,this_lb in enumerate(lbs)], dim=0)
         dataset_lbs = dataset_lbs.cuda()
         # print(dataset_lbs)
 
-        lb = torch.squeeze(lb, 1)
+        lb = torch.squeeze(lb, 3).long()
 
         # net.eval()
         # with torch.no_grad():
@@ -478,13 +507,6 @@ def train():
         optim.zero_grad()
         with amp.autocast(enabled=configer.get('use_fp16')):
             ## 修改为多数据集模式
-            
-            if train_aux:
-                train_aux = False
-                if is_distributed():
-                    net.module.set_train_dataset_aux(False)
-                else:
-                    net.set_train_dataset_aux(False)    
             
 
             seg_out = {}
@@ -495,10 +517,10 @@ def train():
             seg_out = net(im, dataset_lbs)
             seg_out['unify_prototype'] = None
             
-            seg_out['bi_graphs'] = bi_graphs
+            seg_out['bi_graphs'] = net.bipartite_graphs
             seg_out['adv_out'] = adv_out
                 
-            backward_loss, adv_loss, _ = contrast_losses(seg_out, lb, dataset_lbs, is_adv, False)
+            backward_loss, adv_loss, _, _ = contrast_losses(seg_out, lb, dataset_lbs, is_adv, False)
             # print(backward_loss)
             kl_loss = None
             loss_seg = backward_loss
@@ -528,7 +550,7 @@ def train():
             
 
         if (i + 1) % 10000 == 0:
-            seg_save_pth = osp.join(configer.get('res_save_pth'), 'clip_model_{}.pth'.format(i+1))
+            seg_save_pth = osp.join(configer.get('res_save_pth'), 'pretrain_model_{}.pth'.format(i+1))
             logger.info('\nsave seg_models to {}'.format(seg_save_pth))
 
             if is_distributed():
@@ -549,18 +571,18 @@ def train():
                 eval_model_func = eval_model_aux
             else:
                 # eval_model = eval_model_contrast
-                # eval_model_func = eval_model_contrast
-                eval_model_func = eval_model_mulbn
+                eval_model_func = eval_model_dali
+                # eval_model_func = eval_model_mulbn
 
             optim.zero_grad()
             if is_distributed():
 
-                net.module.set_bipartite_graphs(bi_graphs)
+                # net.module.set_bipartite_graphs(bi_graphs)
                 torch.cuda.empty_cache()
                 heads, mious = eval_model_func(configer, net.module)
             else:
 
-                net.set_bipartite_graphs(bi_graphs)
+                # net.set_bipartite_graphs(bi_graphs)
                 torch.cuda.empty_cache()
                 heads, mious = eval_model_func(configer, net)
                 
@@ -580,21 +602,15 @@ def train():
     contrast_warmup_iters = configer.get("lr", "warmup_iters")
     with_aux = configer.get('loss', 'with_aux')
     with_domain_adversarial = configer.get('network', 'with_domain_adversarial')
-    alter_iter = 0
+    alter_iter = 40000
     SEG = 0
     GNN = 1
     init_gnn_stage = False
     fix_graph = False
-    train_seg_or_gnn = GNN
+    train_seg_or_gnn = SEG
     adv_out = None
     unify_prototype = None
     target_bi_graph = None
-    if alter_iter != 0:
-        if is_distributed():
-            _, _, target_bi_graph = eval_find_use_and_unuse_label(configer, net.module)
-        else:
-            _, _, target_bi_graph = eval_find_use_and_unuse_label(configer, net)
-        
     GNN_INIT = configer.get('train', 'graph_finetune')
     # GNN_INIT = True
     gnn_lr_schdr = WarmupPolyLrScheduler(gnn_optim, power=1.2,
@@ -636,7 +652,7 @@ def train():
 
                 init_gnn_stage = False
 
-                net.module.set_unify_prototype(unify_prototype, False)
+                net.module.set_unify_prototype(unify_prototype, True)
                 net.module.set_bipartite_graphs(bi_graphs)
                 print_bipartite(configer, n_datasets, net.module.bipartite_graphs)
 
@@ -668,10 +684,10 @@ def train():
 
                 init_gnn_stage = False
 
-                net.set_unify_prototype(unify_prototype, False)
+                net.set_unify_prototype(unify_prototype, True)
                 net.set_bipartite_graphs(new_bi_graphs)
-                print_bipartite(configer, n_datasets, net.bipartite_graphs)
-                # net.unify_prototype.requires_grad = False
+            # print_bipartite(configer, n_datasets, net.bipartite_graphs)
+            # net.unify_prototype.requires_grad = True
         
     
     optim = set_optimizer(net, configer, configer.get('lr', 'seg_lr_start'))
@@ -680,13 +696,13 @@ def train():
         max_iter=configer.get('train','seg_iters'), warmup_iter=configer.get('lr','warmup_iters'),
         warmup_ratio=0.1, warmup='exp', last_epoch=-1,)
     
-    # if configer.get('train', 'finetune'):
-    #     state = torch.load(configer.get('train', 'finetune_from'))
-    #     # net.load_state_dict(torch.load(configer.get('train', 'finetune_from'), map_location='cpu'), strict=False)
-    #     if 'optimizer_state_dict' in state.keys():
-    #         optim.load_state_dict(state['optimizer_state_dict'])
-    #     if 'scheduler_state_dict' in state.keys():
-    #         lr_schdr.load_state_dict(state['scheduler_state_dict'])
+    if configer.get('train', 'finetune'):
+        state = torch.load(configer.get('train', 'finetune_from'))
+        # net.load_state_dict(torch.load(configer.get('train', 'finetune_from'), map_location='cpu'), strict=False)
+        if 'optimizer_state_dict' in state.keys():
+            optim.load_state_dict(state['optimizer_state_dict'])
+        if 'scheduler_state_dict' in state.keys():
+            lr_schdr.load_state_dict(state['scheduler_state_dict'])
     
     if configer.get('train', 'graph_finetune'):
         state = torch.load(configer.get('train', 'graph_finetune_from'))
@@ -696,14 +712,88 @@ def train():
         if 'scheduler_state_dict' in state.keys():
             gnn_lr_schdr.load_state_dict(state['scheduler_state_dict'])
     
+            
     total_max_iter = configer.get('lr', 'max_iter')
     configer.update(['iter'], 0)
-    starti = 0
+    starti = 2400000
+    # mean=[0.3038, 0.3383, 0.3034]
+    # std=[0.2071, 0.2088, 0.2090]
+    # mean = torch.as_tensor(mean)[None, :, None, None].cuda()
+    # std = torch.as_tensor(std)[None, :, None, None].cuda()
     for i in range(starti, configer.get('lr','max_iter') + starti):
         configer.plus_one('iter')
         alter_iter += 1
         if i > 5000:
             init_gnn_stage = False
+
+        # class RandomHorizontalFlip(object):
+        #     def __init__(self, p=0.5):
+        #         self.p = p
+
+        #     def __call__(self, im, lb):
+        #         if np.random.random() < self.p:
+        #             return im, lb
+
+
+        #         assert im.shape[:2] == lb.shape[:2]
+        #         return im.flip(1), lb.flip(0)
+
+                
+        # class TensorColorJitter(object):
+        #     def __init__(self, brightness=None, contrast=None, saturation=None):
+        #         if not brightness is None and brightness >= 0:
+        #             self.brightness = [max(1 - brightness, 0), 1 + brightness]
+        #         if not contrast is None and contrast >= 0:
+        #             self.contrast = [max(1 - contrast, 0), 1 + contrast]
+        #         if not saturation is None and saturation >= 0:
+        #             self.saturation = [max(1 - saturation, 0), 1 + saturation]
+
+        #     def __call__(self, im, lb):
+        #         assert im.shape[:2] == lb.shape[:2]
+
+        #         if not self.brightness is None:
+        #             rate = torch.tensor([float(torch.rand(1) * (self.brightness[1] - self.brightness[0]) + self.brightness[0])]).cuda()
+        #             im = self.adj_brightness(im, rate)
+
+        #         if not self.contrast is None:
+        #             rate = torch.tensor([float(torch.rand(1) * (self.contrast[1] - self.contrast[0]) + self.contrast[0])]).cuda()
+        #             im = self.adj_contrast(im, rate)
+
+        #         if not self.saturation is None:
+        #             rate = torch.tensor([float(torch.rand(1) * (self.saturation[1] - self.saturation[0]) + self.saturation[0])]).cuda()
+        #             im = self.adj_saturation(im, rate)
+
+        #         return im, lb
+
+        #     def adj_saturation(self, im, rate):
+        #         M = torch.tensor([
+        #             [1 + 2 * rate, 1 - rate, 1 - rate],
+        #             [1 - rate, 1 + 2 * rate, 1 - rate],
+        #             [1 - rate, 1 - rate, 1 + 2 * rate]
+        #         ]).float().cuda()
+
+        #         shape = im.shape
+        #         im_flat = im.reshape(-1, 3)
+        #         im_flat_adjusted = torch.matmul(im_flat.float(), M)
+        #         im_adjusted = im_flat_adjusted.reshape(shape) / 3
+
+        #         # 剪裁和数据类型转换
+        #         im_adjusted = torch.clamp(im_adjusted, 0, 255)#.to(torch.uint8)
+
+        #         return im_adjusted
+
+        #     def adj_brightness(self, im, rate):
+        #         # table = torch.tensor([i * rate for i in range(256)]).clip(0, 255).byte()
+        #         im = (im.float() * rate).clamp(0, 255).to(torch.uint8)
+        #         return im
+
+        #     def adj_contrast(self, im, rate):
+        #         im = (74 + (im.float()-74) * rate).clamp(0, 255).to(torch.uint8)
+        #         # table = torch.tensor([74 + (i - 74) * rate for i in range(256)]).clip(0, 255).byte()
+        #         return im
+            
+        # randomHorizontalFlip = RandomHorizontalFlip()
+        # colorJitter = TensorColorJitter(brightness=0.4, contrast=0.4, saturation=0.4)
 
         ims = []
         lbs = []  
@@ -727,6 +817,16 @@ def train():
                 while torch.min(lb) == 255:
                     im, lb = next(dl_iters[j])
             
+
+            # for idx in range(im.shape[0]):
+            #     this_im = im[idx].cuda()
+            #     this_lb = lb[idx].squeeze().cuda()
+
+            #     this_im, this_lb = randomHorizontalFlip(this_im, this_lb)
+            #     this_im, this_lb = colorJitter(this_im, this_lb)
+            
+            #     ims.append(this_im[None])
+            #     lbs.append(this_lb[None][None])
             ims.append(im)
             lbs.append(lb)
             ids.append(j*torch.ones(lb.shape[0], dtype=torch.int))
@@ -736,11 +836,18 @@ def train():
             continue
         im = torch.cat(ims, dim=0)
         lb = torch.cat(lbs, dim=0)
+        # print(im.shape)
+        # im = im.permute(0, 3, 1, 2)
+        # im = im.div_(255)
 
+
+        # im = im.sub_(mean).div_(std)
+        
         im = im.cuda()
         lb = lb.cuda()
 
         dataset_lbs = torch.cat(ids, dim=0)
+
         dataset_lbs = dataset_lbs.cuda()
         # print(dataset_lbs)
 
@@ -825,11 +932,11 @@ def train():
 
                 init_gnn_stage = False
                 if is_distributed():
-                    net.module.set_unify_prototype(unify_prototype, False)
+                    net.module.set_unify_prototype(unify_prototype, True)
                     net.module.set_bipartite_graphs(bi_graphs)
                     print_bipartite(configer, n_datasets, net.module.bipartite_graphs)
                 else:
-                    net.set_unify_prototype(unify_prototype, False)
+                    net.set_unify_prototype(unify_prototype, True)
                     net.set_bipartite_graphs(bi_graphs)
                     print_bipartite(configer, n_datasets, net.bipartite_graphs)
             
@@ -1104,6 +1211,8 @@ def train():
             # if (i + 1) % 50000 == 0:            
             if use_dataset_aux_head and i < aux_iter:
                 eval_model_func = eval_model_aux
+            elif configer.get('model_name') == 'snp_rn18_mulbn':
+                eval_model_func = eval_model_contrast
             else:
                 
                 # eval_model_func = eval_model_unlabel
@@ -1120,14 +1229,12 @@ def train():
             torch.cuda.empty_cache()
             if is_distributed():
                 # if eval_model_func == eval_find_use_and_unuse_label:
-                if train_seg_or_gnn == GNN:
-                    heads, mious, target_bi_graph = eval_find_use_and_unuse_label(configer, net.module)
+                heads, mious, target_bi_graph = eval_find_use_and_unuse_label(configer, net.module)
                 # else:
                 heads, mious = eval_model_func(configer, net.module)
             else:
                 # if eval_model_func == eval_find_use_and_unuse_label:
-                if train_seg_or_gnn == GNN:
-                    heads, mious, target_bi_graph = eval_find_use_and_unuse_label(configer, net)
+                heads, mious, target_bi_graph = eval_find_use_and_unuse_label(configer, net)
                 # else:
                 heads, mious = eval_model_func(configer, net)
                 
@@ -1149,37 +1256,37 @@ def train():
             if mse_or_adv == 'adv':
                 gnn_lr_schdrD.step()    
         
-    # with torch.no_grad():
-    #     # input_feats = torch.cat([graph_node_features, graph_net.unify_node_features], dim=0)
-    #     if is_distributed():
-    #         unify_prototype, bi_graphs = graph_net.module.get_optimal_matching(graph_node_features, True)
-    #     else:
-    #         unify_prototype, bi_graphs = graph_net.get_optimal_matching(graph_node_features, True) 
+    with torch.no_grad():
+        # input_feats = torch.cat([graph_node_features, graph_net.unify_node_features], dim=0)
+        if is_distributed():
+            unify_prototype, bi_graphs = graph_net.module.get_optimal_matching(graph_node_features, True)
+        else:
+            unify_prototype, bi_graphs = graph_net.get_optimal_matching(graph_node_features, True) 
         
-    # if is_distributed():
-    #     net.module.set_unify_prototype(unify_prototype)
-    #     net.module.set_bipartite_graphs(bi_graphs)
-    # else:
-    #     net.set_unify_prototype(unify_prototype)
-    #     net.set_bipartite_graphs(bi_graphs)
+    if is_distributed():
+        net.module.set_unify_prototype(unify_prototype)
+        net.module.set_bipartite_graphs(bi_graphs)
+    else:
+        net.set_unify_prototype(unify_prototype)
+        net.set_bipartite_graphs(bi_graphs)
 
-    # ## dump the final model and evaluate the result
-    # seg_save_pth = osp.join(configer.get('res_save_pth'), 'seg_model_joint_stage.pth')
-    # gnn_save_pth = osp.join(configer.get('res_save_pth'), 'gnn_model_joint_stage.pth')
-    # logger.info('\nsave seg_models to {}, gnn_models to {}'.format(seg_save_pth, gnn_save_pth))
+    ## dump the final model and evaluate the result
+    seg_save_pth = osp.join(configer.get('res_save_pth'), 'seg_model_joint_stage.pth')
+    gnn_save_pth = osp.join(configer.get('res_save_pth'), 'gnn_model_joint_stage.pth')
+    logger.info('\nsave seg_models to {}, gnn_models to {}'.format(seg_save_pth, gnn_save_pth))
     
-    # # writer.close()
-    # if is_distributed():
-    #     gnn_state = graph_net.module.state_dict()
-    #     seg_state = net.module.state_dict()
-    #     if dist.get_rank() == 0: 
-    #         torch.save(gnn_state, gnn_save_pth)
-    #         torch.save(seg_state, seg_save_pth)
-    # else:
-    #     gnn_state = graph_net.state_dict()
-    #     seg_state = net.state_dict()
-    #     torch.save(gnn_state, gnn_save_pth)
-    #     torch.save(seg_state, seg_save_pth)
+    # writer.close()
+    if is_distributed():
+        gnn_state = graph_net.module.state_dict()
+        seg_state = net.module.state_dict()
+        if dist.get_rank() == 0: 
+            torch.save(gnn_state, gnn_save_pth)
+            torch.save(seg_state, seg_save_pth)
+    else:
+        gnn_state = graph_net.state_dict()
+        seg_state = net.state_dict()
+        torch.save(gnn_state, gnn_save_pth)
+        torch.save(seg_state, seg_save_pth)
 
     del graph_net
     # logger.info('\nevaluating the final model')
@@ -1232,6 +1339,80 @@ def train():
         lr_schdr = WarmupPolyLrScheduler(optim, power=1.2,
             max_iter=configer.get('train',f'finetune_{stage}_iters'), warmup_iter=configer.get('lr','warmup_iters'),
             warmup_ratio=0.1, warmup='exp', last_epoch=-1,) 
+        
+        # mean=[0.3038, 0.3383, 0.3034]
+        # std=[0.2071, 0.2088, 0.2090]
+        # mean = torch.as_tensor(mean)[None, :, None, None].cuda()
+        # std = torch.as_tensor(std)[None, :, None, None].cuda()
+    
+        # class RandomHorizontalFlip(object):
+        #     def __init__(self, p=0.5):
+        #         self.p = p
+
+        #     def __call__(self, im, lb):
+        #         if np.random.random() < self.p:
+        #             return im, lb
+
+
+        #         assert im.shape[:2] == lb.shape[:2]
+        #         return im.flip(1), lb.flip(0)
+
+                
+        # class TensorColorJitter(object):
+        #     def __init__(self, brightness=None, contrast=None, saturation=None):
+        #         if not brightness is None and brightness >= 0:
+        #             self.brightness = [max(1 - brightness, 0), 1 + brightness]
+        #         if not contrast is None and contrast >= 0:
+        #             self.contrast = [max(1 - contrast, 0), 1 + contrast]
+        #         if not saturation is None and saturation >= 0:
+        #             self.saturation = [max(1 - saturation, 0), 1 + saturation]
+
+        #     def __call__(self, im, lb):
+        #         assert im.shape[:2] == lb.shape[:2]
+
+        #         if not self.brightness is None:
+        #             rate = torch.tensor([float(torch.rand(1) * (self.brightness[1] - self.brightness[0]) + self.brightness[0])]).cuda()
+        #             im = self.adj_brightness(im, rate)
+
+        #         if not self.contrast is None:
+        #             rate = torch.tensor([float(torch.rand(1) * (self.contrast[1] - self.contrast[0]) + self.contrast[0])]).cuda()
+        #             im = self.adj_contrast(im, rate)
+
+        #         if not self.saturation is None:
+        #             rate = torch.tensor([float(torch.rand(1) * (self.saturation[1] - self.saturation[0]) + self.saturation[0])]).cuda()
+        #             im = self.adj_saturation(im, rate)
+
+        #         return im, lb
+
+        #     def adj_saturation(self, im, rate):
+        #         M = torch.tensor([
+        #             [1 + 2 * rate, 1 - rate, 1 - rate],
+        #             [1 - rate, 1 + 2 * rate, 1 - rate],
+        #             [1 - rate, 1 - rate, 1 + 2 * rate]
+        #         ]).float().cuda()
+
+        #         shape = im.shape
+        #         im_flat = im.reshape(-1, 3)
+        #         im_flat_adjusted = torch.matmul(im_flat.float(), M)
+        #         im_adjusted = im_flat_adjusted.reshape(shape) / 3
+
+        #         # 剪裁和数据类型转换
+        #         im_adjusted = torch.clamp(im_adjusted, 0, 255)#.to(torch.uint8)
+
+        #         return im_adjusted
+
+        #     def adj_brightness(self, im, rate):
+        #         # table = torch.tensor([i * rate for i in range(256)]).clip(0, 255).byte()
+        #         im = (im.float() * rate).clamp(0, 255).to(torch.uint8)
+        #         return im
+
+        #     def adj_contrast(self, im, rate):
+        #         im = (74 + (im.float()-74) * rate).clamp(0, 255).to(torch.uint8)
+        #         # table = torch.tensor([74 + (i - 74) * rate for i in range(256)]).clip(0, 255).byte()
+        #         return im
+            
+        # randomHorizontalFlip = RandomHorizontalFlip()
+        # colorJitter = TensorColorJitter(brightness=0.4, contrast=0.4, saturation=0.4)
     
         configer.update(['iter'], 0)
         for i in range(starti, configer.get('train',f'finetune_{stage}_iters') + starti):
@@ -1254,38 +1435,56 @@ def train():
 
 
             ims = []
-            lbs = []    
+            lbs = []  
+            ids = []
             for j in range(0,len(dl_iters)):
+                
                 try:
                     im, lb = next(dl_iters[j])
-                    while torch.min(lb) == 255:
-                        im, lb = next(dl_iters[j])
-
                     if not im.size()[0] == configer.get('dataset'+str(j+1), 'ims_per_gpu'):
                         raise StopIteration
+                    while torch.min(lb) == 255:
+                        im, lb = next(dl_iters[j])
+                        if not im.size()[0] == configer.get('dataset'+str(j+1), 'ims_per_gpu'):
+                            raise StopIteration
+
+                    
                 except StopIteration:
                     dl_iters[j] = iter(dls[j])
                     im, lb = next(dl_iters[j])
                     while torch.min(lb) == 255:
                         im, lb = next(dl_iters[j])
                 
+
+                # for idx in range(im.shape[0]):
+                #     this_im = im[idx].cuda()
+                #     this_lb = lb[idx].squeeze().cuda()
+
+                #     this_im, this_lb = randomHorizontalFlip(this_im, this_lb)
+                #     this_im, this_lb = colorJitter(this_im, this_lb)
+                
+                #     ims.append(this_im[None])
+                #     lbs.append(this_lb[None][None])
                 ims.append(im)
                 lbs.append(lb)
+                ids.append(j*torch.ones(lb.shape[0], dtype=torch.int))
                     
-
             im = torch.cat(ims, dim=0)
             lb = torch.cat(lbs, dim=0)
+            # print(im.shape)
+            # im = im.permute(0, 3, 1, 2)
+            # im = im.div_(255)
 
             im = im.cuda()
             lb = lb.cuda()
-            
+                
+            dataset_lbs = torch.cat(ids, dim=0)
 
-            dataset_lbs = torch.cat([i*torch.ones(this_lb.shape[0], dtype=torch.int) for i,this_lb in enumerate(lbs)], dim=0)
+            # dataset_lbs = torch.cat([i*torch.ones(this_lb.shape[0], dtype=torch.int) for i,this_lb in enumerate(lbs)], dim=0)
             dataset_lbs = dataset_lbs.cuda()
             # print(dataset_lbs)
 
             lb = torch.squeeze(lb, 1)
-
 
             # net.eval()
             # with torch.no_grad():
@@ -1445,10 +1644,22 @@ def train():
                 if is_distributed():
                     seg_state = net.module.state_dict()
                     if dist.get_rank() == 0: 
-                        torch.save(seg_state, seg_save_pth)
+                        torch.save({
+                            'model_state_dict': seg_state,
+                            'optimizer_state_dict': optim.state_dict(),
+                            'scheduler_state_dict': lr_schdr.state_dict(),
+                        }, seg_save_pth)
+
+                        # torch.save(seg_state, seg_save_pth)
                 else:
                     seg_state = net.state_dict()
-                    torch.save(seg_state, seg_save_pth)
+                    # torch.save(seg_state, seg_save_pth)
+                    torch.save({
+                        'model_state_dict': seg_state,
+                        'optimizer_state_dict': optim.state_dict(),
+                        'scheduler_state_dict': lr_schdr.state_dict(),
+                    }, seg_save_pth)
+
 
                 # if fix_graph == False:
                 # with torch.no_grad():

@@ -14,7 +14,7 @@ import numpy as np
 
 import lib.transform_cv2 as T
 from lib.base_dataset import BaseDataset, BaseDatasetIm
-from lib.cvCudaDataset import ImageBatchDecoderPyTorch
+from lib.cvCudaDataset import ImageBatchDecoderPyTorch, ImageBatchPNGDecoderPyTorch, ImageBatchPNGDecoderPyTorchDist
 
 
 labels_info = [
@@ -432,7 +432,7 @@ class ade2016Im(BaseDatasetIm):
             std=(0.2071, 0.2088, 0.2090),
         )
 
-class ade2016CVCUDA(ImageBatchDecoderPyTorch):
+class ade2016CVCUDA(ImageBatchPNGDecoderPyTorchDist):
     '''
     '''
     def __init__(self, dataroot, annpath, batch_size, device_id, cuda_ctx, mode='train'):
@@ -458,6 +458,36 @@ class ade2016CVCUDA(ImageBatchDecoderPyTorch):
             # else:
             self.lb_map[el['id']] = el['trainId']
 
+class ade2016WOProcess(BaseDataset):
+    '''
+    '''
+    def __init__(self, dataroot, annpath, mode='train'):
+        super(ade2016WOProcess, self).__init__(
+                dataroot, annpath, mode=mode)
+    
+
+
+        self.n_cats = 150
+
+        self.lb_ignore = 255
+        self.lb_map = np.arange(256).astype(np.uint8)
+        
+        self.labels_info = labels_info
+            
+        for el in self.labels_info:
+            self.lb_map[el['id']] = el['trainId']
+
+    def __getitem__(self, idx):
+        impth, lbpth = self.img_paths[idx], self.lb_paths[idx]        
+        label = self.get_label(lbpth)
+        if not self.lb_map is None:
+            label = self.lb_map[label]
+        if self.mode == 'ret_path':
+            return impth, label, lbpth
+
+        img = self.get_image(impth)
+        
+        return img.copy(), label.copy()
 
 if __name__ == "__main__":
 
@@ -465,30 +495,30 @@ if __name__ == "__main__":
     from torch.utils.data import DataLoader
     
     
-    class TransformationTrain(object):
+    # class TransformationTrain(object):
 
-        def __init__(self, scales, cropsize):
-            self.trans_func = T.Compose([
-                T.RandomResizedCrop(scales, cropsize),
-                T.RandomHorizontalFlip(),
-                T.ColorJitter(
-                    brightness=0.4,
-                    contrast=0.4,
-                    saturation=0.4
-                ),
-            ])
+    #     def __init__(self, scales, cropsize):
+    #         self.trans_func = T.Compose([
+    #             T.RandomResizedCrop(scales, cropsize),
+    #             T.RandomHorizontalFlip(),
+    #             T.ColorJitter(
+    #                 brightness=0.4,
+    #                 contrast=0.4,
+    #                 saturation=0.4
+    #             ),
+    #         ])
 
-        def __call__(self, im_lb):
-            im_lb = self.trans_func(im_lb)
-            return im_lb
+    #     def __call__(self, im_lb):
+    #         im_lb = self.trans_func(im_lb)
+    #         return im_lb
 
-    trans_func = TransformationTrain([0.5,2.0], [713, 713])
+    # trans_func = TransformationTrain([0.5,2.0], [713, 713])
     
-    ds = ade2016_mseg('/cpfs01/projects-HDD/pujianxiangmuzu_HDD/pujian/mr/datasets/ade/ADEChallengeData2016/', 'datasets/ADE/training.txt', trans_func, mode='train')
+    ds = ade2016WOProcess('/cpfs01/projects-HDD/pujianxiangmuzu_HDD/public/mr/ADEChallengeData2016/', 'datasets/ADE/training.txt', mode='train')
     dl = DataLoader(ds,
-                    batch_size = 1,
-                    shuffle = False,
-                    num_workers = 1,
+                    batch_size = 4,
+                    shuffle = True,
+                    num_workers = 2,
                     drop_last = False)
     i = 0
     index = 0

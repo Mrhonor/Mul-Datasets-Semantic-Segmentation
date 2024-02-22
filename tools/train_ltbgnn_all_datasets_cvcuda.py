@@ -314,7 +314,7 @@ def reduce_tensor(inp):
 
 def train():
     # torch.autograd.set_detect_anomaly(True)
-    device_id = 0
+    device_id = torch.cuda.current_device()
     cuda_device = cuda.Device(device_id)
     cuda_ctx = cuda_device.retain_primary_context()
     # cuda_ctx = cuda_device.make_context()
@@ -409,7 +409,7 @@ def train():
         contrast_warmup_iters = configer.get("lr", "warmup_iters")
         with_aux = configer.get('loss', 'with_aux')
         with_domain_adversarial = configer.get('network', 'with_domain_adversarial')
-        alter_iter = 100000
+        alter_iter = 0
         SEG = 0
         GNN = 1
         init_gnn_stage = False
@@ -423,7 +423,8 @@ def train():
         #         _, _, target_bi_graph = eval_find_use_and_unuse_label(configer, net.module)
         #     else:
         #         _, _, target_bi_graph = eval_find_use_and_unuse_label(configer, net)
-            
+        # print(target_bi_graph)
+        return
         GNN_INIT = configer.get('train', 'graph_finetune')
         # GNN_INIT = True
         gnn_lr_schdr = WarmupPolyLrScheduler(gnn_optim, power=1.2,
@@ -434,7 +435,6 @@ def train():
             gnn_lr_schdrD = WarmupPolyLrScheduler(gnn_optimD, power=1.2,
                 max_iter=configer.get('train','gnn_iters'), warmup_iter=configer.get('lr','warmup_iters'),
                 warmup_ratio=0.1, warmup='exp', last_epoch=-1,)
-        
         
         
 
@@ -472,52 +472,54 @@ def train():
                     # net.module.unify_prototype.requires_grad = True
                         
             else:
-                with torch.no_grad():
+                # with torch.no_grad():
 
-                    # unify_prototype, ori_bi_graphs = graph_net.get_optimal_matching(graph_node_features, True)
+                #     unify_prototype, ori_bi_graphs = graph_net.get_optimal_matching(graph_node_features, True)
 
-                    # # print(torch.norm(unify_prototype[0][0], p=2))
-                    # unify_prototype = unify_prototype.detach()
-                    # new_bi_graphs = []
-                    # if len(ori_bi_graphs) == 2*n_datasets:
-                    #     for j in range(0, len(ori_bi_graphs), 2):
-                    #         new_bi_graphs.append(ori_bi_graphs[j+1].detach())
-                    # else:
-                    #     new_bi_graphs = [bigh.detach() for bigh in ori_bi_graphs]
-                    # fix_graph = True
-                    # adv_out = None
-                    # # _, ori_bi_graphs, _, _ = graph_net(graph_node_features)
-                    # # bi_graphs = []
-                    # # if len(ori_bi_graphs) == 2*n_datasets:
-                    # #     for j in range(0, len(ori_bi_graphs), 2):
-                    # #         bi_graphs.append(ori_bi_graphs[j+1].detach())
-                    # # else:
-                    # #     bi_graphs = [bigh.detach() for bigh in ori_bi_graphs]
+                #     # print(torch.norm(unify_prototype[0][0], p=2))
+                #     unify_prototype = unify_prototype.detach()
+                #     new_bi_graphs = []
+                #     if len(ori_bi_graphs) == 2*n_datasets:
+                #         for j in range(0, len(ori_bi_graphs), 2):
+                #             new_bi_graphs.append(ori_bi_graphs[j+1].detach())
+                #     else:
+                #         new_bi_graphs = [bigh.detach() for bigh in ori_bi_graphs]
+                #     fix_graph = True
+                #     adv_out = None
+                #     # _, ori_bi_graphs, _, _ = graph_net(graph_node_features)
+                #     # bi_graphs = []
+                #     # if len(ori_bi_graphs) == 2*n_datasets:
+                #     #     for j in range(0, len(ori_bi_graphs), 2):
+                #     #         bi_graphs.append(ori_bi_graphs[j+1].detach())
+                #     # else:
+                #     #     bi_graphs = [bigh.detach() for bigh in ori_bi_graphs]
 
 
-                    # init_gnn_stage = False
+                #     init_gnn_stage = False
 
-                    # net.set_unify_prototype(unify_prototype, True)
-                    # net.set_bipartite_graphs(new_bi_graphs)
+                #     net.set_unify_prototype(unify_prototype, True)
+                #     net.set_bipartite_graphs(new_bi_graphs)
                 # print_bipartite(configer, n_datasets, net.bipartite_graphs)
-                    net.unify_prototype.requires_grad = True
+                net.unify_prototype.requires_grad = True
             
-        
-        optim = set_optimizer(net, configer, configer.get('lr', 'seg_lr_start'))
+        if is_distributed():
+            optim = set_optimizer(net.module, configer, configer.get('lr', 'seg_lr_start'))
+        else:
+            optim = set_optimizer(net, configer, configer.get('lr', 'seg_lr_start'))
         
         lr_schdr = WarmupPolyLrScheduler(optim, power=1.2,
             max_iter=configer.get('train','seg_iters'), warmup_iter=configer.get('lr','warmup_iters'),
             warmup_ratio=0.1, warmup='exp', last_epoch=-1,)
         
-        # if configer.get('train', 'finetune'):
-        #     state = torch.load(configer.get('train', 'finetune_from'))
-        #     # net.load_state_dict(torch.load(configer.get('train', 'finetune_from'), map_location='cpu'), strict=False)
-        #     if 'optimizer_state_dict' in state.keys():
-        #         optim.load_state_dict(state['optimizer_state_dict'])
-        #     if 'scheduler_state_dict' in state.keys():
-        #         lr_schdr.load_state_dict(state['scheduler_state_dict'])
+        if train_seg_or_gnn==SEG and configer.get('train', 'finetune'):
+            state = torch.load(configer.get('train', 'finetune_from'))
+            # net.load_state_dict(torch.load(configer.get('train', 'finetune_from'), map_location='cpu'), strict=False)
+            if 'optimizer_state_dict' in state.keys():
+                optim.load_state_dict(state['optimizer_state_dict'])
+            if 'scheduler_state_dict' in state.keys():
+                lr_schdr.load_state_dict(state['scheduler_state_dict'])
         
-        if configer.get('train', 'graph_finetune'):
+        if train_seg_or_gnn==GNN and configer.get('train', 'graph_finetune'):
             state = torch.load(configer.get('train', 'graph_finetune_from'))
             # net.load_state_dict(torch.load(configer.get('train', 'finetune_from'), map_location='cpu'), strict=False)
             if 'optimizer_state_dict' in state.keys():
@@ -527,7 +529,7 @@ def train():
         
         total_max_iter = configer.get('lr', 'max_iter')
         configer.update(['iter'], 0)
-        starti = 100000
+        starti = 450000
         dls = getDataLoaderCVCUDA(configer, device_id, cuda_ctx, stage=1)
         for i in range(starti, configer.get('lr','max_iter') + starti):
             configer.plus_one('iter')
@@ -851,7 +853,8 @@ def train():
                     
                     # eval_model_func = eval_model_unlabel
                     # eval_model_func = eval_find_use_and_unuse_label
-                    eval_model_func = eval_model_cvcuda
+                    # eval_model_func = eval_model_cvcuda
+                    eval_model_func = eval_model_contrast
 
                 if train_seg_or_gnn == SEG:
                     optim.zero_grad()
@@ -864,16 +867,19 @@ def train():
                 if is_distributed():
                     # if eval_model_func == eval_find_use_and_unuse_label:
                     if train_seg_or_gnn == GNN:
-                        heads, mious, target_bi_graph = eval_find_use_and_unuse_label_CVCUDA(configer, net.module, device_id, cuda_ctx)
+                        heads, mious, target_bi_graph = eval_find_use_and_unuse_label(configer, net.module)
                     # else:
-                    heads, mious = eval_model_func(configer, net.module, device_id, cuda_ctx)
+                    # heads, mious = eval_model_func(configer, net.module, device_id, cuda_ctx)
+                    heads, mious = eval_model_func(configer, net.module)
                 else:
                     # if eval_model_func == eval_find_use_and_unuse_label:
                     if train_seg_or_gnn == GNN:
-                        heads, mious, target_bi_graph = eval_find_use_and_unuse_label_CVCUDA(configer, net, device_id, cuda_ctx)
+                        heads, mious, target_bi_graph = eval_find_use_and_unuse_label(configer, net)
                     # else:
-                    heads, mious = eval_model_func(configer, net, device_id, cuda_ctx)
+                    # heads, mious = eval_model_func(configer, net, device_id, cuda_ctx)
+                    heads, mious = eval_model_func(configer, net)
                     
+                torch.cuda.empty_cache()
                 # writer.add_scalars("mious",{"Cityscapes":mious[CITY_ID],"Camvid":mious[CAM_ID]},configer.get("iter")+1)
                 # writer.export_scalars_to_json(osp.join(configer.get('res_save_pth'), str(time())+'_writer.json'))
                 logger.info(tabulate([mious, ], headers=heads, tablefmt='orgtbl'))

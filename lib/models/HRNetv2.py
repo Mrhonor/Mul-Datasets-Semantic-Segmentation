@@ -602,6 +602,15 @@ class HRNet_W48_GNN(nn.Module):
         self.unify_prototype = nn.Parameter(torch.zeros(self.max_num_unify_class, self.output_feat_dim),
                                 requires_grad=True)
         trunc_normal_(self.unify_prototype, std=0.02)
+        
+        self.with_datasets_aux = self.configer.get('loss', 'with_datasets_aux')
+        if self.with_datasets_aux:
+            self.aux_prototype = nn.ParameterList([])
+            for i in range(0, self.n_datasets):
+                self.aux_prototype.append(nn.Parameter(torch.zeros(self.datasets_cats[i], self.output_feat_dim),
+                                        requires_grad=True))
+                trunc_normal_(self.aux_prototype[i], std=0.02)
+
             
         self.init_weights()    
         # self.get_encode_lb_vec()
@@ -622,6 +631,15 @@ class HRNet_W48_GNN(nn.Module):
         if self.aux_mode == 'train':
             if self.training:
                 logits = torch.einsum('bchw, nc -> bnhw', emb, self.unify_prototype)
+                if self.with_datasets_aux:
+                    cur_cat = 0
+                    aux_logits = []
+                    for i in range(self.n_datasets):
+                        aux_logits.append(torch.einsum('bchw, nc -> bnhw', emb, self.aux_prototype[i]))
+                        cur_cat += self.datasets_cats[i]
+                        
+                    return {'seg':logits, 'aux':aux_logits}
+                
                 return {'seg':logits}
             else:
                 return {'seg':emb}
@@ -744,8 +762,18 @@ class HRNet_W48_GNN(nn.Module):
             
         
     def set_unify_prototype(self, unify_prototype, grad=False):
-        self.unify_prototype.data = unify_prototype
-        self.unify_prototype.requires_grad=grad
+        if self.with_datasets_aux:
+            self.unify_prototype.data = unify_prototype[self.total_cats:]
+            self.unify_prototype.requires_grad=grad
+            cur_cat = 0
+            for i in range(self.n_datasets):
+                self.aux_prototype[i].data = unify_prototype[cur_cat:cur_cat+self.datasets_cats[i]]
+                cur_cat += self.datasets_cats[i]
+                self.aux_prototype[i].requires_grad=grad
+        else:
+            self.unify_prototype.data = unify_prototype
+            self.unify_prototype.requires_grad=grad
+
         
     def get_encode_lb_vec(self):
         text_feature_vecs = []

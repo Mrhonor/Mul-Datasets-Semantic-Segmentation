@@ -10,6 +10,7 @@ from .HRNetv2 import HRNet_W48_CONTRAST, HRNet_W48, HRNet_W48_CLIP, HRNet_W48_GN
 from .graph_attention_network import GAT, Learnable_Topology_GAT, Learnable_Topology_BGNN, Self_Attention_GNN, Learnable_Topology_BGAT
 from .ltbgnn_unlabel import Learnable_Topology_BGNN_unlabel
 from .ltbgnn_direct_learn import Learnable_Topology_BGNN_adj
+from .ltbgnn_direct_learn_tg import Learnable_Topology_BGNN_adj_tg
 from .semseg import SemsegModel, SemsegModel_mulbn
 
 model_factory = {
@@ -33,4 +34,5 @@ model_factory = {
     'snp_rn18': SemsegModel,
     'snp_rn18_mulbn': SemsegModel_mulbn,
     'learnable_topology_BGNN_adj': Learnable_Topology_BGNN_adj,
+    'learnable_topology_BGNN_adj_tg': Learnable_Topology_BGNN_adj_tg,
 }

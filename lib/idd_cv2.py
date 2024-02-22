@@ -16,7 +16,7 @@ from PIL import Image
 
 import lib.transform_cv2 as T
 from lib.base_dataset import BaseDataset, BaseDatasetIm
-from lib.cvCudaDataset import ImageBatchDecoderPyTorch, ImageBatchPNGDecoderPyTorch
+from lib.cvCudaDataset import ImageBatchDecoderPyTorch, ImageBatchPNGDecoderPyTorch, ImageBatchPNGDecoderPyTorchDist
 
 
 # labels_info = [
@@ -275,7 +275,7 @@ class IddIm(BaseDataset):
     #         #     cv2.waitKey(0)
     #     return mask
 
-class IddCVCUDA(ImageBatchPNGDecoderPyTorch):
+class IddCVCUDA(ImageBatchPNGDecoderPyTorchDist):
     '''
     '''
     def __init__(self, dataroot, annpath, batch_size, device_id, cuda_ctx, mode='train'):

@@ -334,7 +334,10 @@ class SemsegModel(nn.Module):
                 return {'seg':logits}
             else:
                 return {'seg':features}
+        elif self.aux_mode == 'train_head':
+            return {'seg':features}
         elif self.aux_mode == 'eval':
+            # return features
             # logits = torch.einsum('bchw, nc -> bnhw', emb, self.unify_prototype[cur_cat:cur_cat+self.datasets_cats[dataset]])   
             logits = torch.einsum('bchw, nc -> bnhw', features, self.unify_prototype)
             # return logits
@@ -367,7 +370,8 @@ class SemsegModel(nn.Module):
             one_hot = temp[max_index]
             remap_logits = torch.einsum('bhwc, nc -> bnhw', one_hot, self.bipartite_graphs[dataset])
             return remap_logits
-
+        elif self.aux_mode == 'train_tg':
+            return {'seg':features}
         else:
             logits = torch.einsum('bchw, nc -> bnhw', features, self.unify_prototype)
             # logits = torch.einsum('bchw, nc -> bnhw', logits, self.bipartite_graphs[dataset])
@@ -414,13 +418,16 @@ class SemsegModel(nn.Module):
         return self.criterion(logits, labels, batch=batch, additional=additional)
 
     def random_init_params(self):
-        params = [self.backbone.random_init_params()]
-        if self.unify_prototype.require_grad:
-            return params.append(self.unify_prototype)        
+        params = self.backbone.random_init_params()
+        if self.unify_prototype.requires_grad:
+            params.extend(self.unify_prototype)        
+        if self.with_datasets_aux:
+            if self.aux_prototype[0].requires_grad:
+                params.extend(self.aux_prototype)
         # self.logits.parameters(), 
         # if hasattr(self, 'border_logits'):
         #     params += [self.border_logits.parameters()]
-        return chain(*(params))
+        return params
 
     def fine_tune_params(self):
         return self.backbone.fine_tune_params()
@@ -447,7 +454,7 @@ class SemsegModel(nn.Module):
         if len(bi_graphs) == 2 * self.n_datasets:
             for i in range(0, self.n_datasets):
                 self.bipartite_graphs[i] = nn.Parameter(
-                    bi_graphs[2*i+1], requires_grad=False
+                    bi_graphs[2*i], requires_grad=False
                     )
         else:
             # print("bi_graphs len:", len(bi_graphs))
@@ -469,6 +476,13 @@ class SemsegModel(nn.Module):
         else:
             self.unify_prototype.data = unify_prototype
             self.unify_prototype.requires_grad=grad
+        
+    def set_aux_grad(self, grad=False):
+
+        for i in range(self.n_datasets):
+
+            self.aux_prototype[i].requires_grad=grad
+
 
     def get_optim_params(self):
         fine_tune_factor = 4

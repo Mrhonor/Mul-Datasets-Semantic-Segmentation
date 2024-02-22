@@ -34,7 +34,7 @@
     "ema_graph": false,
     "ema_graph_rate": 0.999,
     "GumbelSoftmax": false,
-    "init_by_eval": false,
+    "init_by_eval": true,
     "init_adj_path": "res/init_adj_7_datasets.pt"
   },
   "dataset1": {
@@ -137,20 +137,20 @@
     "weight_decay": 1e-5,
     "warmup_iters": 5000,
     "fix_param_iters": 0,
-    "max_iter": 0,
-    "init_iter": 60000
+    "max_iter": 80000,
+    "init_iter": 0
   },
   "train": {
     "scales": [0.5, 1.0, 1.5],
     "cropsize": [768, 768],
     "finetune": true,
-    "finetune_from": "res/celoss/pretrain_model_40000.pth",
+    "finetune_from": "res/celoss/snp_pretrain_model_50000.pth",
     "graph_finetune": false,
     "graph_finetune_from": "res/celoss/tg_graph_model_80000.pth",
-    "seg_iters": 200000,
-    "gnn_iters": 80000,
-    "finetune_stage1_iters": 0,
-    "finetune_stage2_iters": 0,
+    "seg_iters": 20000,
+    "gnn_iters": 20000,
+    "finetune_stage1_iters": 20000,
+    "finetune_stage2_iters": 100000,
     "joint_train": true
   },
   "val": {

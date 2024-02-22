@@ -9,6 +9,9 @@ import scipy.sparse as sp
 from munkres import Munkres
 import ot
 import random
+import threading
+
+
 
 class GCN(nn.Module):
     def __init__(self, infeat, outfeat):
@@ -177,10 +180,10 @@ class UnifyPrototype(nn.Module):
         
         return UnifyPrototypeFunction.apply(x, self.weight, datasets_id, M)
 
-class Learnable_Topology_BGNN_adj(nn.Module):
+class Learnable_Topology_BGNN_adj_tg(nn.Module):
     def __init__(self, configer):
         """Dense version of GAT."""
-        super(Learnable_Topology_BGNN_adj, self).__init__()
+        super(Learnable_Topology_BGNN_adj_tg, self).__init__()
         
         self.configer = configer
         self.nfeat = self.configer.get('GNN', 'nfeat')
@@ -219,16 +222,16 @@ class Learnable_Topology_BGNN_adj(nn.Module):
 
         if self.GNN_type == 'GCN':
             self.GCN_layer1 = GCN(self.nfeat_out, self.nfeat_out)
-            self.GCN_layer2 = GCN(self.nfeat_out, self.nfeat_out)
-            self.GCN_layer3 = GCN(self.nfeat_out, self.nfeat_out)
-            self.GCN_layer4 = GCN(self.nfeat_out, self.nfeat_out)
+            self.GCN_layer2 = GCN(self.nfeat_out, int(self.nfeat_out/2))
+            self.GCN_layer3 = GCN(int(self.nfeat_out/2), int(self.nfeat_out/2))
+            self.GCN_layer4 = GCN(int(self.nfeat_out/2), int(self.nfeat_out/4))
         elif self.GNN_type == 'GSAGE':
             self.GCN_layer1 = GSAGE(self.nfeat_out, self.nfeat_out)
-            self.GCN_layer2 = GSAGE(self.nfeat_out, self.nfeat_out)
-            self.GCN_layer3 = GSAGE(self.nfeat_out, self.nfeat_out)   
-            self.GCN_layer4 = GSAGE(self.nfeat_out, self.nfeat_out)   
+            self.GCN_layer2 = GSAGE(self.nfeat_out, int(self.nfeat_out/2))
+            self.GCN_layer3 = GSAGE(int(self.nfeat_out/2), int(self.nfeat_out/2))   
+            self.GCN_layer4 = GSAGE(int(self.nfeat_out/2), int(self.nfeat_out/4))   
         
-        self.linear1 = nn.Linear(self.nfeat_out, self.output_feat_dim)
+        self.linear1 = nn.Linear(int(self.nfeat_out/4), self.output_feat_dim)
         
         self.linear2 = nn.Linear(self.output_feat_dim, self.adj_feat_dim) 
         ## datasets Node features
@@ -362,7 +365,11 @@ class Learnable_Topology_BGNN_adj(nn.Module):
         
         if self.adj_matrix.requires_grad:
             if self.uot_update == 0:
+                # if self.uot_bi is None:
                 self.uot_bi = self.sep_bipartite_graphs_by_uot(adj.detach())
+                # else:
+                #     self.thread_clac_uot(adj.detach())
+
                 self.uot_update = 100
             else:
                 self.uot_update -= 1
@@ -379,7 +386,7 @@ class Learnable_Topology_BGNN_adj(nn.Module):
             #     F.gumbel_softmax(logits, tau=1, hard=False, eps=1e-20, dim=-1)
             # else:
             
-            if self.output_max_adj:
+            if not self.init_stage and self.output_max_adj:
                 # 找到每列的最大值
             # if self.GumbelSoftmax:
             #     cur_iter = (self.configer.get('iter') - self.configer.get('lr', 'init_iter')) % (self.configer.get('train', 'seg_iters') + self.configer.get('train', 'gnn_iters'))
@@ -421,7 +428,10 @@ class Learnable_Topology_BGNN_adj(nn.Module):
             # self.unify_node_features.requires_grad = False
             # for param in self.linear_before.parameters():
             #     param.requires_grad = False
-            
+
+    def thread_clac_uot(self, adj):
+        t = threading.Thread(target=self.sep_bipartite_graphs_by_uot, args=(adj,), daemon=True)
+        t.start()
        
     def pretrain_bipartite_graphs(self, is_cuda):
         self.bipartite_graphs = []
@@ -781,6 +791,7 @@ class Learnable_Topology_BGNN_adj(nn.Module):
         #     self.bipartite_graphs.append(temp_bipartite_graphs[cur_cat:cur_cat+self.dataset_cats[s_id], :])
         #     cur_cat += self.dataset_cats[s_id]
         
+        self.uot_bi = bipartite_graphs
         return bipartite_graphs 
 
     def get_params(self):

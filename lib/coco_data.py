@@ -13,7 +13,7 @@ import numpy as np
 
 import lib.transform_cv2 as T
 from lib.base_dataset import BaseDataset, BaseDatasetIm
-from lib.cvCudaDataset import ImageBatchDecoderPyTorch
+from lib.cvCudaDataset import ImageBatchDecoderPyTorch, ImageBatchPNGDecoderPyTorch, ImageBatchPNGDecoderPyTorchDist
 
 
 labels_info = [
@@ -359,7 +359,7 @@ class Coco_data_mseg(BaseDataset):
         #     std=(0.2112, 0.2148, 0.2115),
         # )
 
-class Coco_dataCVCUDA(ImageBatchDecoderPyTorch):
+class Coco_dataCVCUDA(ImageBatchPNGDecoderPyTorchDist):
     '''
     '''
     def __init__(self, dataroot, annpath, batch_size, device_id, cuda_ctx, mode='train'):
