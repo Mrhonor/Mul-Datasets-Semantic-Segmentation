@@ -28,7 +28,7 @@ from random import shuffle
 from nvidia.dali.pipeline import Pipeline
 import nvidia.dali.types as types
 import nvidia.dali.fn as fn
-from lib.base_dataset import ExternalInputIterator
+from lib.base_dataset import ExternalInputIterator, ExternalInputIteratorMul
 from nvidia.dali import pipeline_def
 import lib.cityscapes_cv2 as cityscapes_cv2
 import lib.ADE20K as ADE20K
@@ -489,7 +489,7 @@ def get_city_loader(configer, aux_mode='eval', distributed=True):
 
 def ExternalSourcePipeline(batch_size, num_threads, device_id, external_data, lb_map=None, mode='train', scales=(0.5, 1.), size=(768, 768), p=0.5, brightness=0.4, contrast=0.4, saturation=0.4):
     
-    pipe = Pipeline(batch_size, num_threads, device_id)
+    pipe = Pipeline(batch_size, num_threads, device_id, prefetch_queue_depth=4)
     crop_h, crop_w = size
     if not brightness is None and brightness >= 0:
         brightness = [max(1-brightness, 0), 1+brightness]
@@ -505,8 +505,8 @@ def ExternalSourcePipeline(batch_size, num_threads, device_id, external_data, lb
     SCALE = 1 / 255.
     with pipe:
         jpegs, labels = fn.external_source(source=external_data, num_outputs=2, dtype=types.UINT8)
-        images = fn.decoders.image(jpegs, device="gpu")
-        labels = fn.decoders.image(labels, device="gpu", output_type=types.GRAY)
+        images = fn.decoders.image(jpegs, device="mixed")
+        labels = fn.decoders.image(labels, device="mixed", output_type=types.GRAY)
         # images = fn.random_resized_crop()
         # for i in range(len(images)):
         # print(fn.peek_image_shape(labels))
@@ -606,6 +606,132 @@ def get_DALI_data_loader(configer, aux_mode='eval', stage=None):
         dl = [PyTorchIterator(pipe, last_batch_padded=True, last_batch_policy=LastBatchPolicy.PARTIAL) for pipe in pipes]
 
     return dl
+
+def ExternalSourcePipelineMul(batch_size, num_threads, device_id, external_data, mode='train', scales=(0.5, 1.), size=(768, 768), p=0.5, brightness=0.4, contrast=0.4, saturation=0.4):
+    
+    pipe = Pipeline(batch_size, num_threads, device_id, prefetch_queue_depth=4)
+    crop_h, crop_w = size
+    if not brightness is None and brightness >= 0:
+        brightness = [max(1-brightness, 0), 1+brightness]
+    if not contrast is None and contrast >= 0:
+        contrast = [max(1-contrast, 0), 1+contrast]
+    if not saturation is None and saturation >= 0:
+        saturation = [max(1-saturation, 0), 1+saturation]
+
+    # mean=[0.3257, 0.3690, 0.3223] # city, rgb
+    # std=[0.2112, 0.2148, 0.2115]
+    MEAN = np.asarray([0.3257, 0.3690, 0.3223])[None, None, :]
+    STD = np.asarray([0.2112, 0.2148, 0.2115])[None, None, :]
+    SCALE = 1 / 255.
+    with pipe:
+        jpegs, labels = fn.external_source(source=external_data, num_outputs=2, dtype=types.UINT8)
+        images = fn.decoders.image(jpegs, device="mixed")
+        labels = fn.decoders.image(labels, device="mixed", output_type=types.GRAY)
+        # images = fn.random_resized_crop()
+        # for i in range(len(images)):
+        # print(fn.peek_image_shape(labels))
+        # shape = fn.peek_image_shape(labels)
+        # images = images.gpu()
+        # labels = labels.gpu()
+        if mode == 'train':
+            images = fn.random_resized_crop(images, interp_type=types.INTERP_LINEAR, size=size, seed=1234)
+            labels = fn.random_resized_crop(labels, antialias=False, interp_type=types.INTERP_NN, size=size, seed=1234)
+
+            brightness_rate = fn.random.uniform(range=(min(brightness), max(brightness)))
+            contrast_rate = fn.random.uniform(range=(min(contrast), max(contrast)))
+            saturation_rate = fn.random.uniform(range=(min(saturation), max(saturation)))
+            images = fn.brightness_contrast(images, brightness=brightness_rate, contrast_center=74, contrast=contrast_rate)
+            images = fn.saturation(images, saturation=saturation_rate)
+
+        # images = fn.cast(images, dtype=types.FLOAT)
+        # images = fn.normalize(images, scale=1/255)
+        # images = fn.normalize(images, axes=[0,1], mean=mean, stddev=std)
+        images = fn.normalize(
+            images,
+            mean=MEAN / SCALE,
+            stddev=STD,
+            scale=SCALE,
+            dtype=types.FLOAT,
+        )
+        
+        # if lb_map is not None: 
+        # print(lb_map)
+        # labels = fn.lookup_table(labels, keys=list(range(len(lb_map))), values=list(lb_map), default_value=255)
+        labels = fn.cast(labels, dtype=types.UINT8)
+        pipe.set_outputs(images, labels)
+    return pipe
+
+def get_DALI_data_loaderMul(configer, aux_mode='eval', stage=None):
+    mode = aux_mode
+    n_datasets = configer.get('n_datasets')
+    max_iter = configer.get('lr', 'max_iter')
+    
+    if mode == 'train':
+        scales = configer.get('train', 'scales')
+        cropsize = configer.get('train', 'cropsize')
+        
+        if stage != None:
+            annpath = [configer.get('dataset'+str(i), 'train_im_anns').replace('.txt', f'_{stage}.txt') for i in range(1, n_datasets+1)]
+            print(annpath)
+            batchsize = [configer.get('dataset'+str(i), 'ims_per_gpu') for i in range(1, n_datasets+1)]
+        else:
+            annpath = [configer.get('dataset'+str(i), 'train_im_anns') for i in range(1, n_datasets+1)]
+            batchsize = [configer.get('dataset'+str(i), 'ims_per_gpu') for i in range(1, n_datasets+1)]
+        imroot = [configer.get('dataset'+str(i), 'im_root') for i in range(1, n_datasets+1)]
+        data_reader = [configer.get('dataset'+str(i), 'dataset_name') for i in range(1, n_datasets+1)]
+        
+        shuffle = True
+        drop_last = True
+    elif mode == 'eval':
+        
+        batchsize = [configer.get('dataset'+str(i), 'eval_ims_per_gpu') for i in range(1, n_datasets+1)]
+        annpath = [configer.get('dataset'+str(i), 'val_im_anns') for i in range(1, n_datasets+1)]
+        imroot = [configer.get('dataset'+str(i), 'im_root') for i in range(1, n_datasets+1)]
+        data_reader = [configer.get('dataset'+str(i), 'dataset_name') for i in range(1, n_datasets+1)]
+        
+        shuffle = False
+        drop_last = False
+    elif mode == 'ret_path':
+        
+        batchsize = [1 for i in range(1, n_datasets+1)]
+        if stage != None:
+            annpath = [configer.get('dataset'+str(i), 'train_im_anns').replace('.txt', f'_{stage}.txt') for i in range(1, n_datasets+1)]
+            print(annpath)
+        else:
+            annpath = [configer.get('dataset'+str(i), 'train_im_anns') for i in range(1, n_datasets+1)]
+            
+        imroot = [configer.get('dataset'+str(i), 'im_root') for i in range(1, n_datasets+1)]
+        data_reader = [configer.get('dataset'+str(i), 'dataset_name') for i in range(1, n_datasets+1)]
+        
+        shuffle = False
+        drop_last = False
+        
+
+    ds = ExternalInputIteratorMul(batchsize, imroot, annpath, mode=mode)
+         
+    total_bs = 0
+    for bs in batchsize:
+        total_bs += bs
+    pipe = ExternalSourcePipelineMul(batch_size=total_bs, num_threads=64, device_id=0, external_data=ds, mode=mode)
+    lb_maps = []
+    for i, data_name in enumerate(data_reader):
+        label_info = eval(data_name).labels_info
+        lb_map = np.arange(256).astype(np.uint8)
+       
+        for el in label_info:
+            lb_map[el['id']] = el['trainId']
+        
+        lb_maps.append(lb_map)
+        
+        
+
+    if mode == 'train':
+        dl = PyTorchIterator(pipe, last_batch_padded=True, last_batch_policy=LastBatchPolicy.DROP) 
+    else:
+        dl = PyTorchIterator(pipe, last_batch_padded=True, last_batch_policy=LastBatchPolicy.PARTIAL)
+
+    return dl, lb_maps
+
 
 if __name__ == "__main__":
 

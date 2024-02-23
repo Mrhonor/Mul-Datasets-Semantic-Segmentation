@@ -23,6 +23,35 @@ from nvidia.dali.pipeline import Pipeline
 import nvidia.dali.fn as fn
 from nvidia.dali.plugin.pytorch import LastBatchPolicy
 from nvidia.dali.plugin.pytorch import DALIGenericIterator
+import threading
+
+class IMLbReaderThread(threading.Thread):
+    def __init__(self, im_lb_path):
+        super(IMLbReaderThread, self).__init__()
+        self.im_lb_path = im_lb_path
+        self.im_lb = []
+        # self.lb_map=lb_map
+        # self.trans_func = trans_func
+        
+
+    def run(self):
+        # 在这里执行图像读取操作
+        for im_lb_p in self.im_lb_path:
+            imp, lbp = im_lb_p
+            im = np.fromfile(imp, dtype=np.uint8)
+            lb = np.fromfile(lbp, dtype=np.uint8)
+            # if not self.lb_map is None:
+            #     lb = self.lb_map[lb]
+            
+            # im = cv2.imread(imp)[:, :, ::-1]
+            # im_lb = dict(im=im, lb=lb)
+            # if not self.trans_func is None:
+            #     im_lb = self.trans_func(im_lb)
+            #     im = im_lb['im']
+            #     lb = im_lb['lb']
+            self.im_lb.append([im, lb])
+
+
 
 class BaseDataset(Dataset):
     '''
@@ -174,26 +203,22 @@ class ExternalInputIterator(object):
             self.__iter__()
             raise StopIteration
 
-        batch_images = []
-        batch_labels = []
+        # batch_images = []
+        # batch_labels = []
 
         leave_num = self.n - self.i
         current_batch_size = min(self.batch_size, leave_num) # 保证最后一个 batch 不溢出
+        imp, lbp = [], []
         for _ in range(current_batch_size):
             tmp_index = self.all_indexs[self.i]
             # p_id = self.list_of_pids[tmp_index]
-            imp = self.img_paths[tmp_index]
-            lbp = self.lb_paths[tmp_index]
-
-            # # images = images_dict["images"] # 取 n 个
-            # images = list(map(self.image_open, imp)) # 分别读取为 numpy，也可以是 batch
-            # # 这一块都比较像，但是不作 transform 处理
-            # label = list(map(self.image_open, lbp)) #images_dict["label"]
-
-            batch_images.append(np.fromfile(imp, dtype=np.uint8))
-            batch_labels.append(np.fromfile(lbp, dtype=np.uint8))
+            imp.append(self.img_paths[tmp_index])
+            lbp.append(self.lb_paths[tmp_index])
 
             self.i += 1
+
+        batch_images, batch_labels = self.get_image_label(imp, lbp)
+        # batch_labels.append(np.fromfile(lbp, dtype=np.uint8))
 
         # batch_data = []
         # for ins_i in range(self.num_instances):
@@ -204,12 +229,41 @@ class ExternalInputIterator(object):
         # 其实这块也可以通过 tensor 的 permute 实现？我之前没有注意，大家有兴趣可以试试
 
         return batch_images, batch_labels
+    
+    def get_image_label(self, impth, lbpth):
+        threads = []
+        for i in range(0, len(impth), 2):
+            if i+1 < len(impth):
+                im_lb_path = [[impth[i], lbpth[i]], [impth[i+1], lbpth[i+1]]]
+            else:
+                im_lb_path = [[impth[i], lbpth[i]]]
+            threads.append(IMLbReaderThread(im_lb_path))
+
+        # 启动线程
+        for thread in threads:
+            thread.start()
+
+        # 等待所有线程完成
+        for thread in threads:
+            thread.join()
+        
+        ims = []
+        lbs = []
+        for thread in threads:
+            im_lbs = thread.im_lb
+            for im_lb in im_lbs:
+                im, lb = im_lb
+                ims.append(im)
+                lbs.append(lb)
+
+        return ims, lbs
 
     # next = __next__
     # len = __len__
 class ExternalInputIteratorMul(object):
     def __init__(self, batch_size, dataroot, annpath, mode='train'):
         # 这一块其实与 dateset 都比较像
+        self.n_datasets = len(batch_size)
         self.batch_size = batch_size
         # self.num_instances = num_instances
         self.shuffled = False
@@ -220,6 +274,8 @@ class ExternalInputIteratorMul(object):
 
         self.lb_map = None
         self.img_paths, self.lb_paths = [], []
+        self.len = 0
+        self.n = []
         for root, anp in zip(dataroot, annpath):
             with open(anp, 'r') as fr:
                 pairs = fr.read().splitlines()
@@ -232,23 +288,27 @@ class ExternalInputIteratorMul(object):
             assert len(self.img_path) == len(self.lb_path)
             self.img_paths.append(self.img_path)
             self.lb_paths.append(self.lb_path)
-            
-        self.len = len(self.img_paths)
+            self.len += len(self.img_path)
+            self.n.append(len(self.img_path))
+    
+        # self.len = len(self.img_paths)
 
         # self.list_of_pids = list(images_dict.keys())
-        self._num_classes = len(self.img_paths) #len(self.list_of_pids)
-        self.all_indexs = list(range(self._num_classes))
-        self.n = self.__len__()
+        # self._num_classes = len(self.img_paths) #len(self.list_of_pids)
+        self.all_indexs = [list(range(len(imp))) for imp in self.img_paths]
+        
+        self.i = [0 for _ in self.img_paths]
 
 
     def __iter__(self):
-        self.i = 0
+        self.i = [0 for _ in self.img_paths]
         if self.shuffled:
-            shuffle(self.all_indexs)
+            for i in range(len(self.all_indexs)):
+                shuffle(self.all_indexs[i]) 
         return self
 
     def __len__(self):
-        return len(self.all_indexs)
+        return self.len #len(self.all_indexs)
 
     @staticmethod
     def image_open(path):
@@ -256,40 +316,71 @@ class ExternalInputIteratorMul(object):
 
     def __next__(self):
         # 如果溢出了，就终止
-        if self.i >= self.n:
-            self.__iter__()
-            raise StopIteration
-
         batch_images = []
         batch_labels = []
+        for idx in range(self.n_datasets):
+            
+                # raise StopIteration
+            # leave_num = self.n[idx] - self.i[idx]
+            # current_batch_size = min(self.batch_size, leave_num) # 保证最后一个 batch 不溢出
+            for _ in range(self.batch_size[idx]):
+                if self.i[idx] >= self.n[idx]:
+                    # self.__iter__()
+                    self.i[idx] = 0
+                    if self.shuffled:
+                        shuffle(self.all_indexs[idx])
+                tmp_index = self.all_indexs[idx][self.i[idx]]
+                # p_id = self.list_of_pids[tmp_index]
+                imp = self.img_paths[idx][tmp_index]
+                lbp = self.lb_paths[idx][tmp_index]
+                batch_images.append(imp)
+                batch_labels.append(lbp)
 
-        leave_num = self.n - self.i
-        current_batch_size = min(self.batch_size, leave_num) # 保证最后一个 batch 不溢出
-        for _ in range(current_batch_size):
-            tmp_index = self.all_indexs[self.i]
-            # p_id = self.list_of_pids[tmp_index]
-            imp = self.img_paths[tmp_index]
-            lbp = self.lb_paths[tmp_index]
+                self.i[idx] += 1
 
-            # # images = images_dict["images"] # 取 n 个
-            # images = list(map(self.image_open, imp)) # 分别读取为 numpy，也可以是 batch
-            # # 这一块都比较像，但是不作 transform 处理
-            # label = list(map(self.image_open, lbp)) #images_dict["label"]
-
-            batch_images.append(np.fromfile(imp, dtype=np.uint8))
-            batch_labels.append(np.fromfile(lbp, dtype=np.uint8))
-
-            self.i += 1
-
-        # batch_data = []
-        # for ins_i in range(self.num_instances):
-        #     elem = []
-        #     for batch_idx in range(current_batch_size):
-        #         elem.append(batch_images[batch_idx][ins_i])
-        #     batch_data.append(elem)
-        # 其实这块也可以通过 tensor 的 permute 实现？我之前没有注意，大家有兴趣可以试试
-
+            # batch_data = []
+            # for ins_i in range(self.num_instances):
+            #     elem = []
+            #     for batch_idx in range(current_batch_size):
+            #         elem.append(batch_images[batch_idx][ins_i])
+            #     batch_data.append(elem)
+            # 其实这块也可以通过 tensor 的 permute 
+        batch_images, batch_labels = self.get_image_label(batch_images, batch_labels)
         return batch_images, batch_labels
+
+    def get_image_label(self, impth, lbpth):
+        threads = []
+        # for i in range(0, len(impth), 2):
+        #     if i+1 < len(impth):
+        #         im_lb_path = [[impth[i], lbpth[i]], [impth[i+1], lbpth[i+1]]]
+        #     else:
+        #         im_lb_path = [[impth[i], lbpth[i]]]
+        #     threads.append(IMLbReaderThread(im_lb_path))
+        for i in range(0, len(impth)):
+            # if i+1 < len(impth):
+            #     im_lb_path = [[impth[i], lbpth[i]], [impth[i+1], lbpth[i+1]]]
+            # else:
+            im_lb_path = [[impth[i], lbpth[i]]]
+            threads.append(IMLbReaderThread(im_lb_path))
+        # 启动线程
+        for thread in threads:
+            thread.start()
+
+        # 等待所有线程完成
+        for thread in threads:
+            thread.join()
+        
+        ims = []
+        lbs = []
+        for thread in threads:
+            im_lbs = thread.im_lb
+            for im_lb in im_lbs:
+                im, lb = im_lb
+                ims.append(im)
+                lbs.append(lb)
+
+        return ims, lbs
+
 
 
 if __name__ == "__main__":

@@ -18,7 +18,7 @@ from lib.base_dataset import BaseDataset, BaseDatasetIm
 from lib.cvCudaDataset import ImageBatchDecoderPyTorch, ImageBatchPNGDecoderPyTorch, ImageBatchPNGDecoderPyTorchDist
 
 
-labels_info = [
+temp_labels_info = [
 {"name": "Bird", "id": 0, "color": [165, 42, 42], "trainId": 0},
 {"name": "Ground Animal", "id": 1, "color": [0, 192, 0], "trainId": 1},
 {"name": "Ambiguous Barrier", "id": 2, "color": [250, 170, 31], "trainId": 255},
@@ -212,6 +212,7 @@ labels_info_v12 = [
 {'name': 'Ego Vehicle', 'id': 64, 'color': [120, 10, 10], 'trainId': 63},
 {'name': 'Unlabeled', 'id': 65, 'color': [0, 0, 0], 'trainId': 255},
 ]
+labels_info = labels_info_v12
 mseg_labels_info = [{'name': 'Bird', 'id': 0, 'color': [165, 42, 42], 'trainId': 0},
 {'name': 'Ground Animal', 'id': 1, 'color': [0, 192, 0], 'trainId': 1},
 {'name': 'Curb', 'id': 2, 'color': [196, 196, 196], 'trainId': 9},
